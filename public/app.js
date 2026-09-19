@@ -63,12 +63,19 @@ function explorerUrl(chain, type, value) {
 }
 
 function xpubAddressTypeFor(value) {
-  const prefix = String(value || "").trim().slice(0, 4).toLowerCase();
+  const prefix = normalizeExtendedPublicKey(value).slice(0, 4).toLowerCase();
   return prefix === "ypub" ? "p2sh-p2wpkh" : prefix === "zpub" ? "p2wpkh" : null;
 }
 
+function normalizeExtendedPublicKey(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[\s\u00a0\u200b-\u200d\ufeff]/g, "")
+    .replace(/^["'`\u201c\u201d]+|["'`\u201c\u201d]+$/g, "");
+}
+
 function isExtendedPublicKey(value) {
-  return /^(?:xpub|ypub|zpub)/i.test(String(value || "").trim());
+  return /^(?:xpub|ypub|zpub)/i.test(normalizeExtendedPublicKey(value));
 }
 
 function renderChainControls() {
@@ -503,7 +510,7 @@ function updateWalletFields() {
   el("wallet-identifier-label").textContent = xpub ? "Bitcoin-xPub" : "Öffentliche Wallet-Adresse";
   el("wallet-address").placeholder = xpub ? "xpub6…" : info.addressPlaceholder || "Öffentliche Adresse";
   el("address-hint").textContent = xpub
-    ? "xPub, yPub und zPub werden erkannt. Empfangs- und Wechselgeldadressen werden bis zum Gap-Limit abgeleitet."
+    ? "xPub, yPub und zPub werden erkannt. Leerzeichen und Zeilenumbrüche aus dem Einfügen werden automatisch entfernt."
     : info.addressHint || `Öffentliche ${info.name}-Adresse eingeben.`;
 }
 
@@ -515,7 +522,10 @@ function bindEvents() {
   el("wallet-chain").addEventListener("change", updateWalletFields);
   el("wallet-source-type").addEventListener("change", updateWalletFields);
   el("wallet-address").addEventListener("input", () => {
-    if (el("wallet-chain").value !== "BTC" || !isExtendedPublicKey(el("wallet-address").value)) return;
+    const identifier = el("wallet-address");
+    const normalized = normalizeExtendedPublicKey(identifier.value);
+    if (el("wallet-chain").value !== "BTC" || !isExtendedPublicKey(normalized)) return;
+    if (identifier.value !== normalized) identifier.value = normalized;
     el("wallet-source-type").value = "xpub";
     updateWalletFields();
   });
@@ -552,7 +562,8 @@ function bindEvents() {
     formError.hidden = true;
     try {
       setButtonBusy(save, true, "Speichert …");
-      const identifier = String(form.get("address") || "").trim();
+      const rawIdentifier = String(form.get("address") || "");
+      const identifier = isExtendedPublicKey(rawIdentifier) ? normalizeExtendedPublicKey(rawIdentifier) : rawIdentifier.trim();
       const detectedXpub = isExtendedPublicKey(identifier);
       const wallet = await api("/api/wallets", {
         method: "POST",

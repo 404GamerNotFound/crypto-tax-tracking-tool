@@ -29,6 +29,12 @@ test("erkennt yPub und zPub und verwendet ihr passendes Adressformat", () => {
   assert.match(deriveXpubAddress(zpub, 0, 0, "p2wpkh"), /^bc1q/);
 });
 
+test("entfernt Einfüge-Leerzeichen und erklärt ungültige Base58-Zeichen", () => {
+  const pasted = `“${xpub.slice(0, 30)}\n ${xpub.slice(30)}\u200b”`;
+  assert.equal(parseXpub(pasted).neutered().toBase58(), xpub);
+  assert.throws(() => parseXpub(`${xpub.slice(0, 20)}0${xpub.slice(21)}`), /ungültiges Zeichen/i);
+});
+
 test("akzeptiert keine privaten oder nicht-mainnet extended keys", () => {
   assert.throws(() => parseXpub("xprv9s21ZrQH143K3"), /privaten Schlüssel/i);
 });

@@ -2,7 +2,13 @@ const express = require("express");
 const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
-const { XPUB_ADDRESS_TYPES, deriveXpubAddress, inspectXpub, isExtendedPublicKey } = require("./lib/bitcoin-xpub");
+const {
+  XPUB_ADDRESS_TYPES,
+  deriveXpubAddress,
+  inspectXpub,
+  isExtendedPublicKey,
+  normalizeExtendedPublicKey,
+} = require("./lib/bitcoin-xpub");
 const { CHAIN_CONFIG, cleanLabel, isValidAddress } = require("./lib/validation");
 const { isConfirmedStakingPayout, trustedPayoutAliases } = require("./lib/tezos-staking");
 const { normalizeTronNativeTransfer } = require("./lib/tron");
@@ -799,12 +805,14 @@ app.post("/api/wallets", (request, response, next) => {
   try {
     const chain = String(request.body?.chain || "").toUpperCase();
     let sourceType = String(request.body?.sourceType || "address").toLowerCase();
-    const address = cleanLabel(request.body?.address, 120);
+    const rawAddress = String(request.body?.address || "");
+    let address = cleanLabel(rawAddress, 120);
     const label = cleanLabel(request.body?.label, 80);
     let xpubAddressType = String(request.body?.xpubAddressType || "p2wpkh").toLowerCase();
     if (!CHAIN_CONFIG[chain]) throw makeError("Bitte eine unterstützte Blockchain auswählen.");
-    if (chain === "BTC" && sourceType === "address" && isExtendedPublicKey(address)) {
-      sourceType = "xpub";
+    if (chain === "BTC" && (sourceType === "xpub" || isExtendedPublicKey(rawAddress))) {
+      address = normalizeExtendedPublicKey(rawAddress);
+      if (sourceType === "address" && isExtendedPublicKey(address)) sourceType = "xpub";
     }
     if (!['address', 'xpub'].includes(sourceType)) throw makeError("Nicht unterstützte Wallet-Art.");
     if (sourceType === "xpub") {
