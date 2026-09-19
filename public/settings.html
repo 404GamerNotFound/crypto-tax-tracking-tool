@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
     <title>CryptoBuch · Einstellungen</title>
-    <link rel="stylesheet" href="/styles.css?v=20260919-2" />
+    <link rel="stylesheet" href="/styles.css?v=20260919-3" />
   </head>
   <body>
     <div class="shell settings-shell">
@@ -14,14 +14,18 @@
           <span class="brand-mark" aria-hidden="true">₿</span>
           <span>CryptoBuch</span>
         </a>
-        <a class="topbar-link" href="/">← Portfolio</a>
+        <nav class="topbar-nav" aria-label="Hauptnavigation">
+          <a class="topbar-link" href="/">Dashboard</a>
+          <a class="topbar-link" href="/wallets.html">Wallets</a>
+          <a class="topbar-link is-active" href="/settings.html">Einstellungen</a>
+        </nav>
       </header>
 
       <main class="settings-main">
         <section class="settings-intro" aria-labelledby="settings-title">
           <p class="eyebrow">LOKALE KONFIGURATION</p>
           <h1 id="settings-title">Einstellungen<br /><em>für deinen Import.</em></h1>
-          <p>Änderungen gelten beim nächsten Synchronisieren und werden lokal in der CryptoBuch-Datenbank gespeichert. Ein hinterlegter TronGrid-Key wird nicht wieder an den Browser zurückgegeben.</p>
+          <p>Änderungen gelten beim nächsten Synchronisieren und werden lokal in der CryptoBuch-Datenbank gespeichert. Hinterlegte TronGrid-Keys und Blockfrost Project-IDs werden nicht wieder an den Browser zurückgegeben.</p>
         </section>
 
         <form id="settings-form" class="settings-form">
@@ -114,13 +118,37 @@
             </label>
           </section>
 
+          <section class="settings-card" aria-labelledby="cardano-title">
+            <div class="settings-heading">
+              <div>
+                <p class="eyebrow">CARDANO</p>
+                <h2 id="cardano-title">Blockfrost</h2>
+              </div>
+              <span class="settings-mark">05</span>
+            </div>
+            <label>
+              <span>Blockfrost-API-Basisadresse</span>
+              <input id="blockfrost-api" name="blockfrostBaseUrl" type="url" inputmode="url" required />
+              <small>Standard: Cardano Mainnet. Eine Project-ID ist für den Blockchain-Import erforderlich.</small>
+            </label>
+            <label>
+              <span>Blockfrost Project-ID</span>
+              <input id="blockfrost-project-id" name="blockfrostProjectId" type="password" autocomplete="new-password" placeholder="Nur eingeben, um die vorhandene Project-ID zu ersetzen" />
+              <small id="blockfrost-project-id-status">Status wird geladen …</small>
+            </label>
+            <label class="check-setting">
+              <input id="clear-blockfrost-project-id" name="clearBlockfrostProjectId" type="checkbox" />
+              <span>Gespeicherte Blockfrost Project-ID entfernen</span>
+            </label>
+          </section>
+
           <section class="settings-card" aria-labelledby="price-title">
             <div class="settings-heading">
               <div>
                 <p class="eyebrow">MARKTDATEN</p>
                 <h2 id="price-title">Preisdaten</h2>
               </div>
-              <span class="settings-mark">05</span>
+              <span class="settings-mark">06</span>
             </div>
             <label>
               <span>CoinGecko-API-Basisadresse</span>
@@ -143,6 +171,6 @@
       </main>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/settings.js?v=20260919-2" defer></script>
+    <script src="/settings.js?v=20260919-3" defer></script>
   </body>
 </html>

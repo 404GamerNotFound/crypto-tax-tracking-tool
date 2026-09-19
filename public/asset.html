@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Coin-Auswertung und Transaktionen in CryptoBuch" />
+    <title>CryptoBuch · Coin</title>
+    <link rel="stylesheet" href="/styles.css?v=20260919-3" />
+  </head>
+  <body>
+    <div class="shell asset-page-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="CryptoBuch Dashboard">
+          <span class="brand-mark" aria-hidden="true">₿</span>
+          <span>CryptoBuch</span>
+        </a>
+        <nav class="topbar-nav" aria-label="Hauptnavigation">
+          <a class="topbar-link" href="/">Dashboard</a>
+          <a class="topbar-link" href="/wallets.html">Wallets</a>
+          <a class="topbar-link" href="/settings.html">Einstellungen</a>
+        </nav>
+        <div class="topbar-status" id="price-status" aria-live="polite">Daten werden geladen …</div>
+      </header>
+
+      <main class="asset-main">
+        <section class="asset-hero" aria-labelledby="asset-title">
+          <a class="back-link" href="/">← Dashboard</a>
+          <div class="asset-hero-heading">
+            <span id="asset-icon" class="asset-hero-icon" aria-hidden="true">₿</span>
+            <div>
+              <p class="eyebrow">COIN-DETAILANSICHT</p>
+              <h1 id="asset-title">Bitcoin</h1>
+              <p id="asset-subtitle">Transaktionen, Käufe und Erträge dieser Kryptowährung.</p>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <a class="button button-secondary" href="/wallets.html">Wallet hinzufügen</a>
+            <button class="button button-primary" id="refresh-chain">Coin aktualisieren</button>
+          </div>
+        </section>
+
+        <section id="asset-metrics" class="asset-metrics" aria-label="Coin-Auswertung"></section>
+        <aside class="analytics-note asset-analytics-note">
+          <strong>Kaufgewinn auf Basis deiner Zuordnungen</strong>
+          <p>Eingänge mit Zweck <em>Kauf</em> bilden Anschaffungs-Chargen. Ausgänge mit Zweck <em>Verkauf</em> reduzieren sie nach FIFO. Nicht markierte Ausgänge und Transfers beeinflussen den ausgewiesenen Kaufgewinn nicht.</p>
+        </aside>
+
+        <section class="transactions-panel asset-transactions-panel" aria-labelledby="transactions-heading">
+          <div class="section-heading transactions-title">
+            <div>
+              <p class="eyebrow">BUCHUNGSJOURNAL</p>
+              <h2 id="transactions-heading">Transaktionen</h2>
+            </div>
+            <button class="icon-button" id="reload-portfolio" aria-label="Ansicht neu laden" title="Ansicht neu laden">↻</button>
+          </div>
+          <div class="toolbar">
+            <label class="search-control">
+              <span class="visually-hidden">Transaktionen durchsuchen</span>
+              <span aria-hidden="true">⌕</span>
+              <input id="transaction-search" type="search" placeholder="Hash, Wallet oder Zweck suchen" autocomplete="off" />
+            </label>
+            <label class="select-control">
+              <span class="visually-hidden">Richtung filtern</span>
+              <select id="direction-filter">
+                <option value="">Ein- &amp; Ausgänge</option>
+                <option value="in">Eingänge</option>
+                <option value="out">Ausgänge</option>
+                <option value="self">Eigene Transfers</option>
+              </select>
+            </label>
+          </div>
+          <div class="bulk-bar" id="bulk-bar" hidden>
+            <strong><span id="selected-count">0</span> ausgewählt</strong>
+            <label class="purpose-editor compact">
+              <span class="visually-hidden">Zweck für Auswahl</span>
+              <select id="bulk-purpose"></select>
+            </label>
+            <button class="button button-dark button-small" id="apply-bulk-purpose">Zweck übernehmen</button>
+            <button class="text-button" id="clear-selection">Auswahl aufheben</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="checkbox-cell"><input id="select-all" type="checkbox" aria-label="Alle sichtbaren Transaktionen auswählen" /></th>
+                  <th>Vorgang</th>
+                  <th>Wallet</th>
+                  <th>Betrag</th>
+                  <th>Preis jetzt</th>
+                  <th>Preis Transaktionsdatum</th>
+                  <th>Herkunft / Zweck</th>
+                </tr>
+              </thead>
+              <tbody id="transaction-list"></tbody>
+            </table>
+            <div id="transactions-empty" class="transactions-empty" hidden>
+              <span class="empty-icon">⌁</span>
+              <strong>Keine Transaktionen gefunden</strong>
+              <p>Synchronisiere eine Wallet oder passe die Filter an.</p>
+            </div>
+          </div>
+          <details class="history-help">
+            <summary>Historische Daten &amp; Preise</summary>
+            <div>
+              <p><strong>Transaktionszeit:</strong> Sie stammt aus dem jeweiligen bestätigten Blockchain-Block. Historische EUR-Kurse werden bei Tezos über TzKT und bei den anderen Netzwerken über CoinGecko ergänzt und lokal zwischengespeichert.</p>
+              <p>Steht hier <em>k. A.</em>, war die Preisquelle beim Import nicht erreichbar. Eine erneute Synchronisierung versucht den fehlenden Tageskurs erneut zu laden.</p>
+            </div>
+          </details>
+        </section>
+      </main>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/asset.js?v=20260919-3" defer></script>
+  </body>
+</html>

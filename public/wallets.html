@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Wallet-Verwaltung für CryptoBuch" />
+    <title>CryptoBuch · Wallets</title>
+    <link rel="stylesheet" href="/styles.css?v=20260919-3" />
+  </head>
+  <body>
+    <div class="shell wallet-page-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="CryptoBuch Dashboard">
+          <span class="brand-mark" aria-hidden="true">₿</span>
+          <span>CryptoBuch</span>
+        </a>
+        <nav class="topbar-nav" aria-label="Hauptnavigation">
+          <a class="topbar-link" href="/">Dashboard</a>
+          <a class="topbar-link is-active" href="/wallets.html">Wallets</a>
+          <a class="topbar-link" href="/settings.html">Einstellungen</a>
+        </nav>
+        <div class="topbar-status" id="wallet-status" aria-live="polite">Wallets werden geladen …</div>
+      </header>
+
+      <main class="wallets-main">
+        <section class="page-hero compact-hero" aria-labelledby="wallets-title">
+          <div>
+            <p class="eyebrow">DATENQUELLEN</p>
+            <h1 id="wallets-title">Deine <em>Wallets.</em></h1>
+            <p>Verwalte öffentliche Adressen und Bitcoin-xPubs getrennt vom Portfolio. Jede Wallet lässt sich einzeln synchronisieren oder entfernen.</p>
+          </div>
+          <div class="hero-actions">
+            <button class="button button-primary" id="open-wallet-modal">+ Wallet hinzufügen</button>
+            <button class="button button-secondary" id="refresh-all">Alles aktualisieren</button>
+          </div>
+        </section>
+
+        <section class="wallets-page-panel" aria-labelledby="wallet-list-title">
+          <div class="section-heading page-section-heading">
+            <div>
+              <p class="eyebrow">QUELLEN</p>
+              <h2 id="wallet-list-title">Eingerichtete Wallets</h2>
+            </div>
+            <span class="count-badge" id="wallet-count">0</span>
+          </div>
+          <div class="wallets-page-list" id="wallet-list"></div>
+          <div id="wallet-empty" class="wallet-empty wallet-page-empty" hidden>
+            <span class="empty-icon">◇</span>
+            <strong>Noch keine Wallet</strong>
+            <p>Füge eine öffentliche Adresse oder einen Bitcoin-xPub hinzu.</p>
+            <button class="button button-primary" id="open-wallet-empty">Wallet anlegen</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="wallet-modal" aria-labelledby="wallet-modal-title">
+      <form id="wallet-form">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">PORTFOLIO ERWEITERN</p>
+            <h2 id="wallet-modal-title">Wallet hinzufügen</h2>
+          </div>
+          <button class="modal-close" type="button" id="close-wallet-modal" aria-label="Dialog schließen">×</button>
+        </div>
+        <p class="modal-copy">Es werden ausschließlich öffentliche Adressen gespeichert. Private Keys oder Seed-Phrases gehören niemals hierher.</p>
+        <div class="form-grid">
+          <label>
+            <span>Blockchain</span>
+            <select name="chain" id="wallet-chain" required></select>
+          </label>
+          <label>
+            <span>Name <small>optional</small></span>
+            <input name="label" maxlength="80" placeholder="z. B. Ledger" />
+          </label>
+        </div>
+        <div class="form-grid" id="bitcoin-source-fields">
+          <label>
+            <span>Bitcoin-Quelle</span>
+            <select name="sourceType" id="wallet-source-type">
+              <option value="address">Einzelne Adresse</option>
+              <option value="xpub">xPub, yPub oder zPub – alle Adressen</option>
+            </select>
+          </label>
+          <label id="xpub-format-wrap" hidden>
+            <span>Adressformat</span>
+            <select name="xpubAddressType" id="xpub-address-type">
+              <option value="p2wpkh">Native SegWit · bc1…</option>
+              <option value="p2sh-p2wpkh">Nested SegWit · 3…</option>
+              <option value="p2pkh">Legacy · 1…</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          <span id="wallet-identifier-label">Öffentliche Wallet-Adresse</span>
+          <input name="address" id="wallet-address" maxlength="120" required spellcheck="false" autocomplete="off" placeholder="bc1… oder tz1…" />
+          <small id="address-hint">Bitcoin: Legacy-, SegWit- und Taproot-Adressen werden unterstützt.</small>
+        </label>
+        <p class="xpub-notice" id="xpub-notice" hidden><strong>Datenschutz-Hinweis:</strong> Ein xPub ist öffentlich, kann aber die gesamte Bitcoin-Adresshistorie dieser Wallet sichtbar machen. Füge niemals eine Seed-Phrase oder einen xPrv ein.</p>
+        <p class="form-error" id="wallet-form-error" role="alert" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="button button-secondary" id="cancel-wallet">Abbrechen</button>
+          <button type="submit" class="button button-primary" id="save-wallet">Wallet speichern &amp; synchronisieren</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/wallets.js?v=20260919-3" defer></script>
+  </body>
+</html>

@@ -25,6 +25,7 @@ function render(settings) {
   el("bitcoin-explorer").value = settings.bitcoinExplorerBaseUrl;
   el("tzkt-api").value = settings.tzktApiBaseUrl;
   el("trongrid-api").value = settings.tronGridBaseUrl;
+  el("blockfrost-api").value = settings.blockfrostBaseUrl;
   el("coingecko-api").value = settings.coinGeckoBaseUrl;
   el("xpub-gap").value = settings.xpubGapLimit;
   el("xpub-maximum").value = settings.xpubMaxDerivationsPerBranch;
@@ -32,6 +33,9 @@ function render(settings) {
   el("trongrid-key-status").textContent = settings.tronGridApiKeyConfigured
     ? "Ein API-Key ist gespeichert. Leer lassen, um ihn beizubehalten."
     : "Kein API-Key gespeichert. Ohne Key gelten die öffentlichen Rate Limits.";
+  el("blockfrost-project-id-status").textContent = settings.blockfrostProjectIdConfigured
+    ? "Eine Project-ID ist gespeichert. Leer lassen, um sie beizubehalten."
+    : "Keine Project-ID gespeichert. Cardano-Wallets können noch nicht synchronisiert werden.";
 }
 
 function setSaving(button, saving) {
@@ -64,16 +68,21 @@ el("settings-form").addEventListener("submit", async (event) => {
         bitcoinExplorerBaseUrl: form.get("bitcoinExplorerBaseUrl"),
         tzktApiBaseUrl: form.get("tzktApiBaseUrl"),
         tronGridBaseUrl: form.get("tronGridBaseUrl"),
+        blockfrostBaseUrl: form.get("blockfrostBaseUrl"),
         coinGeckoBaseUrl: form.get("coinGeckoBaseUrl"),
         xpubGapLimit: form.get("xpubGapLimit"),
         xpubMaxDerivationsPerBranch: form.get("xpubMaxDerivationsPerBranch"),
         xtzStakingPayoutAliases: form.get("xtzStakingPayoutAliases"),
         tronGridApiKey: form.get("tronGridApiKey"),
         clearTronGridApiKey: form.get("clearTronGridApiKey") === "on",
+        blockfrostProjectId: form.get("blockfrostProjectId"),
+        clearBlockfrostProjectId: form.get("clearBlockfrostProjectId") === "on",
       }),
     });
     el("trongrid-key").value = "";
     el("clear-trongrid-key").checked = false;
+    el("blockfrost-project-id").value = "";
+    el("clear-blockfrost-project-id").checked = false;
     render(settings);
     toast("Einstellungen gespeichert. Sie gelten beim nächsten Synchronisieren.");
   } catch (requestError) {

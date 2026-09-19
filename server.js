@@ -12,6 +12,7 @@ const {
 const { CHAIN_CONFIG, cleanLabel, isValidAddress } = require("./lib/validation");
 const { isConfirmedStakingPayout, trustedPayoutAliases } = require("./lib/tezos-staking");
 const { normalizeTronNativeTransfer } = require("./lib/tron");
+const { normalizeCardanoTransaction } = require("./lib/cardano");
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const number = Number(value);
@@ -28,8 +29,10 @@ const SETTINGS_DEFAULTS = Object.freeze({
   bitcoinExplorerBaseUrl: (process.env.BITCOIN_EXPLORER_BASE_URL || "https://blockstream.info/api").replace(/\/$/, ""),
   tzktApiBaseUrl: (process.env.TZKT_API_BASE_URL || "https://api.tzkt.io/v1").replace(/\/$/, ""),
   tronGridBaseUrl: (process.env.TRONGRID_BASE_URL || "https://api.trongrid.io").replace(/\/$/, ""),
+  blockfrostBaseUrl: (process.env.BLOCKFROST_BASE_URL || "https://cardano-mainnet.blockfrost.io/api/v0").replace(/\/$/, ""),
   coinGeckoBaseUrl: (process.env.COINGECKO_API_BASE_URL || "https://api.coingecko.com/api/v3").replace(/\/$/, ""),
   tronGridApiKey: String(process.env.TRONGRID_API_KEY || "").trim(),
+  blockfrostProjectId: String(process.env.BLOCKFROST_PROJECT_ID || "").trim(),
   xpubGapLimit: DEFAULT_XPUB_GAP_LIMIT,
   xpubMaxDerivationsPerBranch: boundedInteger(process.env.XPUB_MAX_DERIVATIONS_PER_BRANCH, 200, DEFAULT_XPUB_GAP_LIMIT, 1000),
   xtzStakingPayoutAliases: String(process.env.XTZ_STAKING_PAYOUT_ALIASES || "Stake.fish Payouts").trim(),
@@ -53,7 +56,7 @@ db.exec(`
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS wallets (
     id INTEGER PRIMARY KEY,
-    chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX')),
+    chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX', 'ADA')),
     address TEXT NOT NULL,
     label TEXT NOT NULL DEFAULT '',
     source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub')),
@@ -113,9 +116,9 @@ db.exec(`
   PRAGMA optimize;
 `);
 
-function migrateWalletSchemaForTron() {
+function migrateWalletSchemaForChains() {
   const walletSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'wallets'").get()?.sql || "";
-  if (walletSql.includes("'TRX'")) return;
+  if (walletSql.includes("'ADA'")) return;
   const walletColumns = new Set(db.prepare("PRAGMA table_info(wallets)").all().map((column) => column.name));
   const sourceType = walletColumns.has("source_type") ? "source_type" : "'address'";
   const xpubAddressType = walletColumns.has("xpub_address_type") ? "xpub_address_type" : "NULL";
@@ -123,9 +126,9 @@ function migrateWalletSchemaForTron() {
   db.exec(`
     PRAGMA foreign_keys = OFF;
     BEGIN;
-    CREATE TABLE wallets_trx_migration (
+    CREATE TABLE wallets_chain_migration (
       id INTEGER PRIMARY KEY,
-      chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX')),
+      chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX', 'ADA')),
       address TEXT NOT NULL,
       label TEXT NOT NULL DEFAULT '',
       source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub')),
@@ -134,18 +137,18 @@ function migrateWalletSchemaForTron() {
       last_synced_at TEXT,
       UNIQUE(chain, address)
     );
-    INSERT INTO wallets_trx_migration (id, chain, address, label, source_type, xpub_address_type, created_at, last_synced_at)
+    INSERT INTO wallets_chain_migration (id, chain, address, label, source_type, xpub_address_type, created_at, last_synced_at)
     SELECT id, chain, address, label,
       COALESCE(${sourceType}, 'address'), ${xpubAddressType}, created_at, last_synced_at
     FROM wallets;
     DROP TABLE wallets;
-    ALTER TABLE wallets_trx_migration RENAME TO wallets;
+    ALTER TABLE wallets_chain_migration RENAME TO wallets;
     COMMIT;
     PRAGMA foreign_keys = ON;
   `);
 }
 
-migrateWalletSchemaForTron();
+migrateWalletSchemaForChains();
 
 // Existing installations predate automatic purpose assignment. Preserve manual
 // entries, while allowing unclassified legacy rows to be enriched on re-sync.
@@ -217,8 +220,10 @@ function runtimeSettings() {
     bitcoinExplorerBaseUrl: values.bitcoinExplorerBaseUrl || SETTINGS_DEFAULTS.bitcoinExplorerBaseUrl,
     tzktApiBaseUrl: values.tzktApiBaseUrl || SETTINGS_DEFAULTS.tzktApiBaseUrl,
     tronGridBaseUrl: values.tronGridBaseUrl || SETTINGS_DEFAULTS.tronGridBaseUrl,
+    blockfrostBaseUrl: values.blockfrostBaseUrl || SETTINGS_DEFAULTS.blockfrostBaseUrl,
     coinGeckoBaseUrl: values.coinGeckoBaseUrl || SETTINGS_DEFAULTS.coinGeckoBaseUrl,
     tronGridApiKey: values.tronGridApiKey || "",
+    blockfrostProjectId: values.blockfrostProjectId || "",
     xpubGapLimit,
     xpubMaxDerivationsPerBranch: boundedInteger(values.xpubMaxDerivationsPerBranch, SETTINGS_DEFAULTS.xpubMaxDerivationsPerBranch, xpubGapLimit, 1000),
     xtzStakingPayoutAliases: values.xtzStakingPayoutAliases || "",
@@ -234,8 +239,10 @@ function settingsResponse() {
     bitcoinExplorerBaseUrl: settings.bitcoinExplorerBaseUrl,
     tzktApiBaseUrl: settings.tzktApiBaseUrl,
     tronGridBaseUrl: settings.tronGridBaseUrl,
+    blockfrostBaseUrl: settings.blockfrostBaseUrl,
     coinGeckoBaseUrl: settings.coinGeckoBaseUrl,
     tronGridApiKeyConfigured: Boolean(settings.tronGridApiKey),
+    blockfrostProjectIdConfigured: Boolean(settings.blockfrostProjectId),
     xpubGapLimit: settings.xpubGapLimit,
     xpubMaxDerivationsPerBranch: settings.xpubMaxDerivationsPerBranch,
     xtzStakingPayoutAliases: settings.xtzStakingPayoutAliases,
@@ -263,13 +270,16 @@ function updateSettings(input) {
     bitcoinExplorerBaseUrl: cleanServiceUrl(input.bitcoinExplorerBaseUrl, "Die Bitcoin-Explorer-URL"),
     tzktApiBaseUrl: cleanServiceUrl(input.tzktApiBaseUrl, "Die TzKT-URL"),
     tronGridBaseUrl: cleanServiceUrl(input.tronGridBaseUrl, "Die TronGrid-URL"),
+    blockfrostBaseUrl: cleanServiceUrl(input.blockfrostBaseUrl, "Die Blockfrost-URL"),
     coinGeckoBaseUrl: cleanServiceUrl(input.coinGeckoBaseUrl, "Die CoinGecko-URL"),
     xpubGapLimit,
     xpubMaxDerivationsPerBranch,
     xtzStakingPayoutAliases: cleanAliases(input.xtzStakingPayoutAliases),
     tronGridApiKey: input.clearTronGridApiKey ? "" : String(input.tronGridApiKey || "").trim() || current.tronGridApiKey,
+    blockfrostProjectId: input.clearBlockfrostProjectId ? "" : String(input.blockfrostProjectId || "").trim() || current.blockfrostProjectId,
   };
   if (next.tronGridApiKey.length > 300) throw makeError("Der TronGrid-API-Key ist zu lang.");
+  if (next.blockfrostProjectId.length > 300) throw makeError("Die Blockfrost Project-ID ist zu lang.");
 
   const upsert = db.prepare(`
     INSERT INTO app_settings (setting_key, setting_value, updated_at)
@@ -328,6 +338,9 @@ async function fetchJson(url, additionalHeaders = {}) {
   if (!response.ok) {
     if (response.status === 429) {
       throw makeError("Die Blockchain-Datenquelle begrenzt Anfragen. Bitte kurz warten und die Synchronisierung erneut starten.", 429);
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw makeError("Die Blockchain-Datenquelle hat den Zugriff abgelehnt. Bitte API-Key beziehungsweise Project-ID in den Einstellungen prüfen.", 502);
     }
     throw makeError(`Die Blockchain-Datenquelle ist momentan nicht verfügbar (HTTP ${response.status}).`, 502);
   }
@@ -562,6 +575,40 @@ async function fetchTronTransactions(address, settings) {
   return settings.maxTransactionsPerSync ? output.slice(0, settings.maxTransactionsPerSync) : output;
 }
 
+async function fetchCardanoTransactions(address, settings) {
+  if (!settings.blockfrostProjectId) {
+    throw makeError("Für Cardano wird eine Blockfrost Project-ID benötigt. Bitte unter Einstellungen → Cardano hinterlegen.");
+  }
+  const references = [];
+  const pageSize = 100;
+  const headers = { project_id: settings.blockfrostProjectId };
+  let page = 1;
+
+  while (true) {
+    if (settings.maxTransactionsPerSync && references.length >= settings.maxTransactionsPerSync) break;
+    const query = new URLSearchParams({ count: String(pageSize), page: String(page), order: "desc" });
+    const batch = await fetchJson(
+      `${settings.blockfrostBaseUrl}/addresses/${encodeURIComponent(address)}/txs?${query.toString()}`,
+      headers,
+    );
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    references.push(...batch);
+    if (batch.length < pageSize) break;
+    page += 1;
+  }
+
+  const limited = settings.maxTransactionsPerSync ? references.slice(0, settings.maxTransactionsPerSync) : references;
+  const transactions = [];
+  for (const reference of limited) {
+    const hash = reference.tx_hash || reference.hash;
+    if (!hash) continue;
+    const transaction = await fetchJson(`${settings.blockfrostBaseUrl}/txs/${encodeURIComponent(hash)}/utxos`, headers);
+    if (!transaction.block_time && reference.block_time) transaction.block_time = reference.block_time;
+    transactions.push(transaction);
+  }
+  return transactions;
+}
+
 function normalizeBitcoinTransaction(transaction, addresses) {
   const isWalletAddress = (address) => Boolean(address && addresses.has(address));
   const inputAmount = transaction.vin.reduce(
@@ -644,6 +691,12 @@ const CHAIN_ADAPTERS = {
       return { rawTransactions: await fetchTronTransactions(wallet.address, settings), context: wallet.address, xpubCapped: false };
     },
     normalize: normalizeTronNativeTransfer,
+  },
+  ADA: {
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchCardanoTransactions(wallet.address, settings), context: wallet.address, xpubCapped: false };
+    },
+    normalize: normalizeCardanoTransaction,
   },
 };
 

@@ -18,6 +18,10 @@ services:
       # aber für größere Portfolios wegen der öffentlichen Rate Limits empfohlen.
       TRONGRID_BASE_URL: ${TRONGRID_BASE_URL:-https://api.trongrid.io}
       TRONGRID_API_KEY: ${TRONGRID_API_KEY:-}
+      # Blockfrost liefert die Cardano-Transaktionshistorie. Die Project-ID ist
+      # beim ersten Start optional, wird für Cardano-Wallets aber benötigt.
+      BLOCKFROST_BASE_URL: ${BLOCKFROST_BASE_URL:-https://cardano-mainnet.blockfrost.io/api/v0}
+      BLOCKFROST_PROJECT_ID: ${BLOCKFROST_PROJECT_ID:-}
       COINGECKO_API_BASE_URL: ${COINGECKO_API_BASE_URL:-https://api.coingecko.com/api/v3}
       # Exakt so benannte, vertrauenswürdige TzKT-Payout-Konten werden automatisch als Staking markiert.
       XTZ_STAKING_PAYOUT_ALIASES: ${XTZ_STAKING_PAYOUT_ALIASES:-Stake.fish Payouts}

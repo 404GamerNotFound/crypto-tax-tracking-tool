@@ -19,6 +19,12 @@ test("validiert typische TRON-Adressen", () => {
   assert.equal(isValidAddress("TRX", "TzuKurz"), false);
 });
 
+test("validiert Cardano-Mainnet-Zahlungsadressen", () => {
+  const address = `addr1${"q".repeat(98)}`;
+  assert.equal(isValidAddress("ADA", address), true);
+  assert.equal(isValidAddress("ADA", "addr_test1qwerty"), false);
+});
+
 test("bereinigt Beschriftungen", () => {
   assert.equal(cleanLabel("  Meine   Wallet  "), "Meine Wallet");
 });
