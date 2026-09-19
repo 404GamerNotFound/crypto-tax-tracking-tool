@@ -446,6 +446,21 @@ app.post("/api/wallets/:id/sync", async (request, response, next) => {
   }
 });
 
+// Static route first: otherwise Express interprets "bulk" as the :id parameter.
+app.patch("/api/transactions/bulk", (request, response, next) => {
+  try {
+    const purpose = cleanPurpose(request.body?.purpose);
+    const ids = Array.isArray(request.body?.ids) ? [...new Set(request.body.ids.map(asPositiveId).filter(Boolean))] : [];
+    if (ids.length === 0) throw makeError("Bitte mindestens eine Transaktion auswählen.");
+    if (ids.length > 1000) throw makeError("Maximal 1.000 Transaktionen gleichzeitig bearbeiten.");
+    const placeholders = ids.map(() => "?").join(", ");
+    const result = db.prepare(`UPDATE transactions SET purpose = ?, updated_at = datetime('now') WHERE id IN (${placeholders})`).run(purpose, ...ids);
+    response.json({ updated: result.changes, purpose });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.patch("/api/transactions/:id", (request, response, next) => {
   try {
     const id = asPositiveId(request.params.id);
@@ -454,20 +469,6 @@ app.patch("/api/transactions/:id", (request, response, next) => {
     const updated = db.prepare("UPDATE transactions SET purpose = ?, updated_at = datetime('now') WHERE id = ?").run(purpose, id);
     if (!updated.changes) throw makeError("Transaktion nicht gefunden.", 404);
     response.json({ id, purpose });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.patch("/api/transactions/bulk", (request, response, next) => {
-  try {
-    const ids = Array.isArray(request.body?.ids) ? [...new Set(request.body.ids.map(asPositiveId).filter(Boolean))] : [];
-    const purpose = cleanPurpose(request.body?.purpose);
-    if (ids.length === 0) throw makeError("Bitte mindestens eine Transaktion auswählen.");
-    if (ids.length > 1000) throw makeError("Maximal 1.000 Transaktionen gleichzeitig bearbeiten.");
-    const placeholders = ids.map(() => "?").join(", ");
-    const result = db.prepare(`UPDATE transactions SET purpose = ?, updated_at = datetime('now') WHERE id IN (${placeholders})`).run(purpose, ...ids);
-    response.json({ updated: result.changes, purpose });
   } catch (error) {
     next(error);
   }
