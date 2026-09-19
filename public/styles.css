@@ -109,6 +109,13 @@ td:first-of-type + td { display: flex; align-items: center; gap: 8px; min-width:
 .amount.out { color: #9f4b35; }
 .price-cell { font-family: "DM Mono", monospace; font-size: 11px; white-space: nowrap; }
 .purpose-select { min-height: 30px; max-width: 150px; font-size: 11px; background-color: #fffefa; }
+.auto-purpose-note { color: var(--green); font-weight: 600; }
+.history-help { border-top: 1px solid var(--line); background: #fafbf6; color: var(--muted); font-size: 11px; }
+.history-help summary { padding: 13px 24px; color: var(--green); cursor: pointer; font-weight: 600; }
+.history-help > div { padding: 0 24px 12px; max-width: 950px; line-height: 1.5; }
+.history-help p { margin: 0 0 8px; }
+.history-help strong { color: var(--ink); }
+.history-help a { color: var(--green); }
 .data-note { margin: 0; padding: 13px 24px; color: var(--muted); border-top: 1px solid var(--line); font-size: 10px; }
 .data-note a { color: var(--green); }
 dialog { border: 0; padding: 0; width: min(570px, calc(100% - 32px)); color: var(--ink); background: var(--cream); border-radius: 10px; box-shadow: 0 25px 90px rgba(0,0,0,.3); }

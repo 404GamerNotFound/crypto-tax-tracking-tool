@@ -3,12 +3,14 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 const { CHAIN_CONFIG, cleanLabel, isValidAddress } = require("./lib/validation");
+const { isConfirmedStakingPayout, trustedPayoutAliases } = require("./lib/tezos-staking");
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DB_PATH = path.join(DATA_DIR, "cryptobuch.sqlite");
 const MAX_TRANSACTIONS_PER_SYNC = Math.max(0, Number(process.env.MAX_TRANSACTIONS_PER_SYNC || 0));
 const BITCOIN_EXPLORER_BASE_URL = (process.env.BITCOIN_EXPLORER_BASE_URL || "https://blockstream.info/api").replace(/\/$/, "");
+const XTZ_STAKING_PAYOUT_ALIASES = trustedPayoutAliases(process.env.XTZ_STAKING_PAYOUT_ALIASES || "Stake.fish Payouts");
 const COIN_IDS = { BTC: "bitcoin", XTZ: "tezos" };
 const PURPOSE_PRESETS = [
   "Kauf",
@@ -49,6 +51,7 @@ db.exec(`
     counterparty TEXT,
     price_transaction_eur REAL,
     purpose TEXT,
+    purpose_origin TEXT NOT NULL DEFAULT 'unspecified' CHECK (purpose_origin IN ('unspecified', 'auto', 'manual')),
     raw_json TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -67,6 +70,14 @@ db.exec(`
     ON transactions(purpose) WHERE purpose IS NOT NULL;
   PRAGMA optimize;
 `);
+
+// Existing installations predate automatic purpose assignment. Preserve manual
+// entries, while allowing unclassified legacy rows to be enriched on re-sync.
+const transactionColumnNames = new Set(db.prepare("PRAGMA table_info(transactions)").all().map((column) => column.name));
+if (!transactionColumnNames.has("purpose_origin")) {
+  db.exec("ALTER TABLE transactions ADD COLUMN purpose_origin TEXT NOT NULL DEFAULT 'unspecified'");
+  db.prepare("UPDATE transactions SET purpose_origin = 'manual' WHERE purpose IS NOT NULL").run();
+}
 
 const app = express();
 app.disable("x-powered-by");
@@ -102,6 +113,11 @@ function isoFromUnix(seconds) {
 
 function isoDay(date) {
   return new Date(date).toISOString().slice(0, 10);
+}
+
+function positiveNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
 }
 
 async function fetchJson(url) {
@@ -172,33 +188,51 @@ async function hydrateHistoricalPrices(chain, timestamps) {
   }
   if (missing.length === 0) return result;
 
-  const from = Math.floor(new Date(`${missing[0]}T00:00:00.000Z`).getTime() / 1000) - 86400;
-  const to = Math.floor(new Date(`${missing.at(-1)}T23:59:59.999Z`).getTime() / 1000) + 86400;
+  // The public chart endpoint can omit dates from very large time spans. Query
+  // only compact, date-driven windows so old portfolio records are backfilled.
+  const ranges = [];
+  const maxRangeMs = 330 * 86400000;
+  let range = [];
+  let rangeStart = 0;
+  for (const date of missing) {
+    const at = new Date(`${date}T00:00:00.000Z`).getTime();
+    if (range.length && at - rangeStart > maxRangeMs) {
+      ranges.push(range);
+      range = [];
+    }
+    if (range.length === 0) rangeStart = at;
+    range.push(date);
+  }
+  if (range.length) ranges.push(range);
 
-  try {
-    const payload = await fetchJson(
-      `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart/range?vs_currency=eur&from=${from}&to=${to}`,
-    );
-    const samples = Array.isArray(payload.prices) ? payload.prices : [];
-    for (const date of missing) {
-      const target = new Date(`${date}T12:00:00.000Z`).getTime();
-      let closest = null;
-      let distance = Number.POSITIVE_INFINITY;
-      for (const [at, price] of samples) {
-        const nextDistance = Math.abs(Number(at) - target);
-        if (nextDistance < distance) {
-          closest = Number(price);
-          distance = nextDistance;
+  for (const requestedDates of ranges) {
+    const from = Math.floor(new Date(`${requestedDates[0]}T00:00:00.000Z`).getTime() / 1000) - 86400;
+    const to = Math.floor(new Date(`${requestedDates.at(-1)}T23:59:59.999Z`).getTime() / 1000) + 86400;
+    try {
+      const payload = await fetchJson(
+        `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart/range?vs_currency=eur&from=${from}&to=${to}`,
+      );
+      const samples = Array.isArray(payload.prices) ? payload.prices : [];
+      for (const date of requestedDates) {
+        const target = new Date(`${date}T12:00:00.000Z`).getTime();
+        let closest = null;
+        let distance = Number.POSITIVE_INFINITY;
+        for (const [at, price] of samples) {
+          const nextDistance = Math.abs(Number(at) - target);
+          if (nextDistance < distance) {
+            closest = Number(price);
+            distance = nextDistance;
+          }
+        }
+        // Daily samples are accepted only if they are close enough to the requested day.
+        if (Number.isFinite(closest) && closest > 0 && distance <= 3 * 86400000) {
+          saveHistoricalPrice(coinId, date, closest);
+          result.set(date, closest);
         }
       }
-      // Daily samples are accepted only if they are close enough to the requested day.
-      if (Number.isFinite(closest) && closest > 0 && distance <= 3 * 86400000) {
-        saveHistoricalPrice(coinId, date, closest);
-        result.set(date, closest);
-      }
+    } catch (_) {
+      // Historic price is optional metadata. The transaction itself remains usable.
     }
-  } catch (_) {
-    // Historic price is optional metadata. The transaction itself remains usable.
   }
   return result;
 }
@@ -240,6 +274,9 @@ async function fetchTezosTransactions(address) {
       "sort.desc": "id",
       limit: String(limit),
       offset: String(offset),
+      // TzKT derives this EUR value at the block timestamp, avoiding a broad
+      // secondary price lookup for every Tezos transaction.
+      quote: "eur",
     });
     const page = await fetchJson(`https://api.tzkt.io/v1/operations/transactions?${query.toString()}`);
     if (!Array.isArray(page) || page.length === 0) break;
@@ -293,6 +330,8 @@ function normalizeTezosTransaction(transaction, address) {
     amount: decimal(Number(transaction.amount || 0) / 1000000, 6),
     fee: direction === "out" ? decimal(feeMutez / 1000000, 6) : 0,
     counterparty: direction === "in" ? sender : target,
+    historicalPrice: positiveNumber(transaction.quote?.eur),
+    autoPurpose: isConfirmedStakingPayout(transaction, address, XTZ_STAKING_PAYOUT_ALIASES) ? "Staking Rewards" : null,
     rawJson: JSON.stringify(transaction),
   };
 }
@@ -310,14 +349,19 @@ async function syncWallet(wallet) {
   const transactions = rawTransactions.map((item) => wallet.chain === "BTC"
     ? normalizeBitcoinTransaction(item, wallet.address)
     : normalizeTezosTransaction(item, wallet.address));
-  const pricesByDate = await hydrateHistoricalPrices(wallet.chain, transactions.map((transaction) => transaction.timestamp));
+  const pricesByDate = await hydrateHistoricalPrices(
+    wallet.chain,
+    transactions.filter((transaction) => !positiveNumber(transaction.historicalPrice)).map((transaction) => transaction.timestamp),
+  );
 
-  const existingPrice = db.prepare("SELECT price_transaction_eur FROM transactions WHERE wallet_id = ? AND external_id = ?");
+  const existingTransaction = db.prepare(
+    "SELECT price_transaction_eur, purpose, purpose_origin FROM transactions WHERE wallet_id = ? AND external_id = ?",
+  );
   const upsert = db.prepare(`
     INSERT INTO transactions (
       wallet_id, external_id, hash, timestamp, direction, asset, amount, fee, counterparty,
-      price_transaction_eur, raw_json, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      price_transaction_eur, purpose, purpose_origin, raw_json, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(wallet_id, external_id) DO UPDATE SET
       hash = excluded.hash,
       timestamp = excluded.timestamp,
@@ -327,6 +371,16 @@ async function syncWallet(wallet) {
       fee = excluded.fee,
       counterparty = excluded.counterparty,
       price_transaction_eur = COALESCE(excluded.price_transaction_eur, transactions.price_transaction_eur),
+      purpose = CASE
+        WHEN transactions.purpose_origin = 'manual' THEN transactions.purpose
+        WHEN excluded.purpose IS NOT NULL THEN excluded.purpose
+        ELSE transactions.purpose
+      END,
+      purpose_origin = CASE
+        WHEN transactions.purpose_origin = 'manual' THEN 'manual'
+        WHEN excluded.purpose IS NOT NULL THEN 'auto'
+        ELSE transactions.purpose_origin
+      END,
       raw_json = excluded.raw_json,
       updated_at = datetime('now')
   `);
@@ -335,8 +389,10 @@ async function syncWallet(wallet) {
   db.exec("BEGIN");
   try {
     for (const transaction of transactions) {
-      const existing = existingPrice.get(wallet.id, transaction.externalId);
-      const historicPrice = existing?.price_transaction_eur ?? (transaction.timestamp ? pricesByDate.get(isoDay(transaction.timestamp)) || null : null);
+      const existing = existingTransaction.get(wallet.id, transaction.externalId);
+      const historicPrice = positiveNumber(transaction.historicalPrice)
+        ?? positiveNumber(existing?.price_transaction_eur)
+        ?? (transaction.timestamp ? positiveNumber(pricesByDate.get(isoDay(transaction.timestamp))) : null);
       upsert.run(
         wallet.id,
         transaction.externalId,
@@ -348,6 +404,8 @@ async function syncWallet(wallet) {
         transaction.fee,
         transaction.counterparty,
         historicPrice,
+        transaction.autoPurpose,
+        transaction.autoPurpose ? "auto" : "unspecified",
         transaction.rawJson,
       );
       imported += 1;
@@ -452,10 +510,10 @@ app.patch("/api/transactions/bulk", (request, response, next) => {
     const purpose = cleanPurpose(request.body?.purpose);
     const ids = Array.isArray(request.body?.ids) ? [...new Set(request.body.ids.map(asPositiveId).filter(Boolean))] : [];
     if (ids.length === 0) throw makeError("Bitte mindestens eine Transaktion auswählen.");
-    if (ids.length > 1000) throw makeError("Maximal 1.000 Transaktionen gleichzeitig bearbeiten.");
+    if (ids.length > 2500) throw makeError("Maximal 2.500 Transaktionen gleichzeitig bearbeiten.");
     const placeholders = ids.map(() => "?").join(", ");
-    const result = db.prepare(`UPDATE transactions SET purpose = ?, updated_at = datetime('now') WHERE id IN (${placeholders})`).run(purpose, ...ids);
-    response.json({ updated: result.changes, purpose });
+    const result = db.prepare(`UPDATE transactions SET purpose = ?, purpose_origin = 'manual', updated_at = datetime('now') WHERE id IN (${placeholders})`).run(purpose, ...ids);
+    response.json({ updated: result.changes, purpose, purpose_origin: "manual" });
   } catch (error) {
     next(error);
   }
@@ -466,9 +524,9 @@ app.patch("/api/transactions/:id", (request, response, next) => {
     const id = asPositiveId(request.params.id);
     const purpose = cleanPurpose(request.body?.purpose);
     if (!id) throw makeError("Ungültige Transaktions-ID.");
-    const updated = db.prepare("UPDATE transactions SET purpose = ?, updated_at = datetime('now') WHERE id = ?").run(purpose, id);
+    const updated = db.prepare("UPDATE transactions SET purpose = ?, purpose_origin = 'manual', updated_at = datetime('now') WHERE id = ?").run(purpose, id);
     if (!updated.changes) throw makeError("Transaktion nicht gefunden.", 404);
-    response.json({ id, purpose });
+    response.json({ id, purpose, purpose_origin: "manual" });
   } catch (error) {
     next(error);
   }

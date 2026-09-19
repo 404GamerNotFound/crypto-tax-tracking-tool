@@ -11,6 +11,8 @@ services:
       MAX_TRANSACTIONS_PER_SYNC: ${MAX_TRANSACTIONS_PER_SYNC:-0}
       # Optionaler eigener Esplora-kompatibler Endpunkt; standardmäßig Blockstream.
       BITCOIN_EXPLORER_BASE_URL: ${BITCOIN_EXPLORER_BASE_URL:-https://blockstream.info/api}
+      # Exakt so benannte, vertrauenswürdige TzKT-Payout-Konten werden automatisch als Staking markiert.
+      XTZ_STAKING_PAYOUT_ALIASES: ${XTZ_STAKING_PAYOUT_ALIASES:-Stake.fish Payouts}
     volumes:
       - cryptobuch_data:/data
     restart: unless-stopped

@@ -10,8 +10,12 @@ const price = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
 const compactNumber = (maximumFractionDigits) => new Intl.NumberFormat("de-DE", { maximumFractionDigits });
 
+function hasPrice(value) {
+  return value !== null && value !== "" && Number.isFinite(Number(value)) && Number(value) > 0;
+}
+
 function formatPrice(value) {
-  return Number.isFinite(Number(value)) ? price.format(Number(value)) : "k. A.";
+  return hasPrice(value) ? price.format(Number(value)) : "k. A.";
 }
 
 function formatAmount(value, asset) {
@@ -180,7 +184,7 @@ function renderTransactions() {
     const now = document.createElement("td");
     now.className = "price-cell";
     now.textContent = formatPrice(transaction.price_now_eur);
-    const currentValue = Number(transaction.price_now_eur) * Number(transaction.amount);
+    const currentValue = hasPrice(transaction.price_now_eur) ? Number(transaction.price_now_eur) * Number(transaction.amount) : null;
     const nowSub = document.createElement("small");
     nowSub.textContent = Number.isFinite(currentValue) ? `Wert: ${currency.format(currentValue)}` : "";
     now.append(nowSub);
@@ -188,9 +192,13 @@ function renderTransactions() {
     const historic = document.createElement("td");
     historic.className = "price-cell";
     historic.textContent = formatPrice(transaction.price_transaction_eur);
-    const historicValue = Number(transaction.price_transaction_eur) * Number(transaction.amount);
+    const historicValue = hasPrice(transaction.price_transaction_eur)
+      ? Number(transaction.price_transaction_eur) * Number(transaction.amount)
+      : null;
     const historicSub = document.createElement("small");
-    historicSub.textContent = Number.isFinite(historicValue) ? `Wert: ${currency.format(historicValue)}` : "Nicht verfügbar";
+    historicSub.textContent = Number.isFinite(historicValue)
+      ? `${transaction.chain === "XTZ" ? "TzKT-Kurs" : "CoinGecko-Tageskurs"} · ${currency.format(historicValue)}`
+      : "Nicht verfügbar";
     historic.append(historicSub);
 
     const purposeCell = document.createElement("td");
@@ -211,6 +219,12 @@ function renderTransactions() {
       setTransactionPurpose(transaction.id, customPurpose.trim());
     });
     purposeCell.append(select);
+    if (transaction.purpose_origin === "auto") {
+      const autoNote = document.createElement("small");
+      autoNote.className = "auto-purpose-note";
+      autoNote.textContent = "automatisch · TzKT-Payout";
+      purposeCell.append(autoNote);
+    }
     row.append(checkCell, operation, wallet, amount, now, historic, purposeCell);
     body.append(row);
   }
@@ -326,9 +340,12 @@ async function deleteWallet(wallet) {
 
 async function setTransactionPurpose(id, purpose) {
   try {
-    await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ purpose }) });
+    const result = await api(`/api/transactions/${id}`, { method: "PATCH", body: JSON.stringify({ purpose }) });
     const transaction = state.portfolio.transactions.find((item) => item.id === id);
-    if (transaction) transaction.purpose = purpose || null;
+    if (transaction) {
+      transaction.purpose = result.purpose;
+      transaction.purpose_origin = result.purpose_origin;
+    }
     renderTransactions();
     toast(purpose ? `Zweck „${purpose}“ gespeichert.` : "Zweck entfernt.");
   } catch (error) {
@@ -351,7 +368,10 @@ async function applyBulkPurpose() {
     setButtonBusy(button, true, "Speichert …");
     const result = await api("/api/transactions/bulk", { method: "PATCH", body: JSON.stringify({ ids, purpose }) });
     for (const transaction of state.portfolio.transactions) {
-      if (state.selected.has(transaction.id)) transaction.purpose = result.purpose;
+      if (state.selected.has(transaction.id)) {
+        transaction.purpose = result.purpose;
+        transaction.purpose_origin = result.purpose_origin;
+      }
     }
     state.selected.clear();
     renderTransactions();
