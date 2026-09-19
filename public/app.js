@@ -1,4 +1,4 @@
-const state = { portfolio: null };
+const state = { portfolio: null, market: null };
 const el = (id) => document.getElementById(id);
 const currency = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
@@ -18,6 +18,19 @@ function formatAmount(value, assetId) {
 
 function formatCurrency(value) {
   return hasNumber(value) ? currency.format(Number(value)) : "k. A.";
+}
+
+function formatMarketPrice(value) {
+  if (!hasNumber(value)) return "k. A.";
+  const price = Number(value);
+  const digits = price >= 100 ? 2 : price >= 1 ? 3 : price >= 0.01 ? 4 : 6;
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: digits }).format(price);
+}
+
+function formatMarketCap(value) {
+  return hasNumber(value)
+    ? new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", notation: "compact", maximumFractionDigits: 1 }).format(Number(value))
+    : "k. A.";
 }
 
 function toast(message, kind = "success") {
@@ -107,6 +120,61 @@ function render() {
   el("dashboard-empty").hidden = hasWallets;
 }
 
+function renderMarketCatalog() {
+  const market = state.market;
+  const catalog = el("market-catalog");
+  catalog.replaceChildren();
+  const assets = market?.assets || [];
+  const timestamp = market?.updatedAt ? new Date(market.updatedAt) : null;
+  el("market-status").textContent = market?.warning
+    ? "Preisabfrage momentan nicht verfügbar"
+    : timestamp ? `Marktstand ${dateTime.format(timestamp)}` : "Aktuelle Marktdaten nicht verfügbar";
+  el("market-empty").hidden = assets.length > 0;
+
+  for (const asset of assets) {
+    const item = document.createElement("article");
+    item.className = "market-item";
+    const rank = document.createElement("span");
+    rank.className = "market-rank";
+    rank.textContent = `#${asset.rank}`;
+    const icon = document.createElement("span");
+    icon.className = `chain-icon market-icon ${asset.import.chain?.toLowerCase() || "market"}`;
+    icon.textContent = asset.icon;
+    const identity = document.createElement("div");
+    identity.className = "market-identity";
+    const name = document.createElement("strong");
+    name.textContent = asset.name;
+    const symbol = document.createElement("span");
+    symbol.textContent = asset.symbol;
+    identity.append(name, symbol);
+    const price = document.createElement("div");
+    price.className = "market-price";
+    const value = document.createElement("strong");
+    value.textContent = formatMarketPrice(asset.priceEur);
+    const change = document.createElement("span");
+    const dailyChange = Number(asset.change24h);
+    change.textContent = Number.isFinite(dailyChange) ? `24 h ${dailyChange >= 0 ? "+" : ""}${dailyChange.toLocaleString("de-DE", { maximumFractionDigits: 2 })} %` : "24 h k. A.";
+    change.className = Number.isFinite(dailyChange) ? (dailyChange >= 0 ? "positive" : "negative") : "";
+    price.append(value, change);
+    const meta = document.createElement("div");
+    meta.className = "market-meta";
+    const cap = document.createElement("span");
+    cap.textContent = `Marktkapitalisierung ${formatMarketCap(asset.marketCapEur)}`;
+    const availability = asset.import.chain ? document.createElement("a") : document.createElement("span");
+    availability.className = `market-availability ${asset.import.type}`;
+    availability.textContent = asset.import.label;
+    if (asset.import.chain) {
+      availability.href = `/wallets.html?chain=${encodeURIComponent(asset.import.chain)}`;
+      availability.title = asset.import.detail;
+    } else {
+      availability.title = asset.import.detail;
+    }
+    meta.append(cap, availability);
+    item.append(rank, icon, identity, price, meta);
+    catalog.append(item);
+  }
+}
+
 async function loadPortfolio({ quiet = false } = {}) {
   try {
     if (!quiet) el("price-status").textContent = "Ansicht wird geladen …";
@@ -116,6 +184,15 @@ async function loadPortfolio({ quiet = false } = {}) {
     toast(error.message, "error");
     el("price-status").textContent = "Daten momentan nicht verfügbar";
   }
+}
+
+async function loadMarketCatalog() {
+  try {
+    state.market = await api("/api/market/top-30");
+  } catch (error) {
+    state.market = { assets: [], warning: error.message };
+  }
+  renderMarketCatalog();
 }
 
 async function syncAll() {
@@ -142,3 +219,4 @@ async function syncAll() {
 
 el("refresh-all").addEventListener("click", syncAll);
 loadPortfolio();
+loadMarketCatalog();

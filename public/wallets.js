@@ -109,7 +109,8 @@ function render() {
   el("wallet-empty").hidden = wallets.length > 0;
 
   const select = el("wallet-chain");
-  const current = select.value;
+  const requested = String(new URLSearchParams(window.location.search).get("chain") || "").toUpperCase();
+  const current = select.value || requested;
   select.replaceChildren();
   for (const [key, chain] of Object.entries(state.portfolio?.chains || {})) select.add(new Option(`${chain.name} (${chain.asset})`, key));
   select.value = [...select.options].some((option) => option.value === current) ? current : select.options[0]?.value || "";

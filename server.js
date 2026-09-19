@@ -14,6 +14,7 @@ const { isConfirmedStakingPayout, trustedPayoutAliases } = require("./lib/tezos-
 const { normalizeTronNativeTransfer } = require("./lib/tron");
 const { normalizeCardanoTransaction } = require("./lib/cardano");
 const { normalizeEthereumTransaction, normalizeErc20Transfer } = require("./lib/ethereum");
+const { buildTopMarketCatalog } = require("./lib/market-catalog");
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const number = Number(value);
@@ -181,6 +182,7 @@ app.use(express.json({ limit: "64kb" }));
 
 let currentPriceCache = { expiresAt: 0, data: {} };
 let tokenPriceCache = { expiresAt: 0, data: {} };
+let topMarketCache = { expiresAt: 0, data: null };
 
 function asPositiveId(value) {
   const id = Number(value);
@@ -317,6 +319,7 @@ function updateSettings(input) {
   }
   currentPriceCache = { expiresAt: 0, data: {} };
   tokenPriceCache = { expiresAt: 0, data: {} };
+  topMarketCache = { expiresAt: 0, data: null };
   return settingsResponse();
 }
 
@@ -388,6 +391,38 @@ async function getCurrentPrices() {
       updatedAt: null,
       warning: error.message,
     };
+  }
+}
+
+async function getTopMarketCatalog() {
+  if (topMarketCache.expiresAt > Date.now() && topMarketCache.data) return topMarketCache.data;
+
+  try {
+    const settings = runtimeSettings();
+    const url = new URL(`${settings.coinGeckoBaseUrl}/coins/markets`);
+    url.search = new URLSearchParams({
+      vs_currency: "eur",
+      order: "market_cap_desc",
+      per_page: "30",
+      page: "1",
+      sparkline: "false",
+      price_change_percentage: "24h",
+    }).toString();
+    const rows = await fetchJson(url.toString());
+    const assets = buildTopMarketCatalog(rows, CHAIN_CONFIG);
+    if (assets.length === 0) throw makeError("CoinGecko lieferte keine Marktdaten.", 502);
+    const timestamps = assets
+      .map((asset) => Date.parse(asset.lastUpdated || ""))
+      .filter(Number.isFinite);
+    const data = {
+      assets,
+      updatedAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : null,
+      warning: null,
+    };
+    topMarketCache = { data, expiresAt: Date.now() + 5 * 60 * 1000 };
+    return data;
+  } catch (error) {
+    return { assets: [], updatedAt: null, warning: error.message };
   }
 }
 
@@ -1163,6 +1198,14 @@ async function portfolioResponse() {
 app.get("/api/portfolio", async (_request, response, next) => {
   try {
     response.json(await portfolioResponse());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/market/top-30", async (_request, response, next) => {
+  try {
+    response.json(await getTopMarketCatalog());
   } catch (error) {
     next(error);
   }

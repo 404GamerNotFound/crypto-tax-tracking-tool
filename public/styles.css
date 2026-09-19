@@ -230,6 +230,35 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
 .analytics-note p { margin: 4px 0 0; }
 .analytics-note em { color: var(--green-dark); font-style: normal; font-weight: 600; }
 
+.market-section { margin: 42px 0 26px; padding-top: 34px; border-top: 1px solid var(--line); }
+.market-section-heading { align-items: flex-end; margin-bottom: 9px; }
+.market-intro { max-width: 720px; margin: 0 0 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.market-catalog { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--cream); }
+.market-item { min-height: 126px; padding: 15px; display: grid; grid-template-columns: auto 31px minmax(0, 1fr); grid-template-areas: "rank icon identity" "rank price price" "rank meta meta"; column-gap: 10px; row-gap: 8px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--cream); }
+.market-item:nth-child(3n) { border-right: 0; }
+.market-item:nth-last-child(-n + 3) { border-bottom: 0; }
+.market-rank { grid-area: rank; color: var(--muted); font: 500 9px "DM Mono", monospace; }
+.market-icon { grid-area: icon; width: 31px; height: 31px; font-size: 14px; }
+.market-icon.market { background: #77837c; font-family: "DM Sans", sans-serif; }
+.market-identity { grid-area: identity; min-width: 0; display: grid; align-content: center; gap: 2px; }
+.market-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.market-identity span { color: var(--muted); font: 10px "DM Mono", monospace; }
+.market-price { grid-area: price; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.market-price strong { font-family: "DM Mono", monospace; font-size: 12px; font-weight: 500; }
+.market-price span { font: 10px "DM Mono", monospace; white-space: nowrap; }
+.market-price .positive { color: var(--green-dark); }
+.market-price .negative { color: #a24b41; }
+.market-meta { grid-area: meta; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font: 9px "DM Mono", monospace; }
+.market-meta > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.market-availability { flex: 0 0 auto; max-width: 148px; overflow: hidden; padding: 3px 5px; border-radius: 3px; text-overflow: ellipsis; white-space: nowrap; font: 500 8px "DM Sans", sans-serif; text-decoration: none; }
+.market-availability.native { color: var(--green-dark); background: #dff0e5; }
+.market-availability.erc20 { color: #3b526b; background: #e7edf4; }
+.market-availability.market { color: #69746d; background: #eef0eb; }
+a.market-availability:hover { text-decoration: underline; }
+.market-empty { padding: 25px 17px; border: 1px dashed var(--line); border-radius: 9px; color: var(--muted); background: var(--cream); font-size: 12px; }
+.market-empty strong { color: var(--ink); }
+.market-empty p { margin: 4px 0 0; }
+
 .wallet-page-shell { max-width: 1210px; }
 .wallets-main, .asset-main { padding: 56px 0 44px; }
 .page-hero { display: flex; justify-content: space-between; align-items: flex-end; gap: 30px; margin-bottom: 34px; }
@@ -278,6 +307,11 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
   .wallet-list { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
   .wallet-empty { padding-top: 25px; }
   .asset-metrics { grid-template-columns: repeat(3, minmax(190px, 1fr)); }
+  .market-catalog { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .market-item:nth-child(3n) { border-right: 1px solid var(--line); }
+  .market-item:nth-child(2n) { border-right: 0; }
+  .market-item:nth-last-child(-n + 3) { border-bottom: 1px solid var(--line); }
+  .market-item:nth-last-child(-n + 2) { border-bottom: 0; }
   .wallet-page-item { grid-template-columns: minmax(0, 1fr) auto; }
   .wallet-page-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
@@ -324,6 +358,10 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
   .asset-hero-icon { width: 52px; height: 52px; font-size: 30px; }
   .asset-metrics { grid-template-columns: repeat(2, minmax(175px, 1fr)); padding-bottom: 3px; }
   .asset-metric { min-height: 120px; }
+  .market-section { margin-top: 32px; padding-top: 27px; }
+  .market-catalog { grid-template-columns: 1fr; }
+  .market-item, .market-item:nth-child(3n), .market-item:nth-child(2n), .market-item:nth-last-child(-n + 3) { border-right: 0; border-bottom: 1px solid var(--line); }
+  .market-item:last-child { border-bottom: 0; }
 }
 @media (max-width: 440px) {
   .summary-grid { gap: 8px; }
