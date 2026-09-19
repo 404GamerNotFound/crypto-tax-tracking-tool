@@ -173,11 +173,29 @@
             <input name="label" maxlength="80" placeholder="z. B. Ledger" />
           </label>
         </div>
+        <div class="form-grid" id="bitcoin-source-fields">
+          <label>
+            <span>Bitcoin-Quelle</span>
+            <select name="sourceType" id="wallet-source-type">
+              <option value="address">Einzelne Adresse</option>
+              <option value="xpub">xPub – alle abgeleiteten Adressen</option>
+            </select>
+          </label>
+          <label id="xpub-format-wrap" hidden>
+            <span>Adressformat</span>
+            <select name="xpubAddressType" id="xpub-address-type">
+              <option value="p2wpkh">Native SegWit · bc1…</option>
+              <option value="p2sh-p2wpkh">Nested SegWit · 3…</option>
+              <option value="p2pkh">Legacy · 1…</option>
+            </select>
+          </label>
+        </div>
         <label>
-          <span>Öffentliche Wallet-Adresse</span>
-          <input name="address" id="wallet-address" maxlength="100" required spellcheck="false" autocomplete="off" placeholder="bc1… oder tz1…" />
+          <span id="wallet-identifier-label">Öffentliche Wallet-Adresse</span>
+          <input name="address" id="wallet-address" maxlength="120" required spellcheck="false" autocomplete="off" placeholder="bc1… oder tz1…" />
           <small id="address-hint">Bitcoin: Legacy-, SegWit- und Taproot-Adressen werden unterstützt.</small>
         </label>
+        <p class="xpub-notice" id="xpub-notice" hidden><strong>Datenschutz-Hinweis:</strong> Ein xPub ist öffentlich, kann aber die gesamte Bitcoin-Adresshistorie dieser Wallet sichtbar machen. Füge niemals eine Seed-Phrase oder einen xPrv ein.</p>
         <p class="form-error" id="wallet-form-error" role="alert" hidden></p>
         <div class="modal-actions">
           <button type="button" class="button button-secondary" id="cancel-wallet">Abbrechen</button>

@@ -2,6 +2,7 @@ const express = require("express");
 const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
+const { XPUB_ADDRESS_TYPES, deriveXpubAddress, parseXpub } = require("./lib/bitcoin-xpub");
 const { CHAIN_CONFIG, cleanLabel, isValidAddress } = require("./lib/validation");
 const { isConfirmedStakingPayout, trustedPayoutAliases } = require("./lib/tezos-staking");
 
@@ -10,6 +11,8 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DB_PATH = path.join(DATA_DIR, "cryptobuch.sqlite");
 const MAX_TRANSACTIONS_PER_SYNC = Math.max(0, Number(process.env.MAX_TRANSACTIONS_PER_SYNC || 0));
 const BITCOIN_EXPLORER_BASE_URL = (process.env.BITCOIN_EXPLORER_BASE_URL || "https://blockstream.info/api").replace(/\/$/, "");
+const XPUB_GAP_LIMIT = Math.min(50, Math.max(1, Number(process.env.XPUB_GAP_LIMIT || 20)));
+const XPUB_MAX_DERIVATIONS_PER_BRANCH = Math.max(XPUB_GAP_LIMIT, Math.min(1000, Number(process.env.XPUB_MAX_DERIVATIONS_PER_BRANCH || 200)));
 const XTZ_STAKING_PAYOUT_ALIASES = trustedPayoutAliases(process.env.XTZ_STAKING_PAYOUT_ALIASES || "Stake.fish Payouts");
 const COIN_IDS = { BTC: "bitcoin", XTZ: "tezos" };
 const PURPOSE_PRESETS = [
@@ -34,6 +37,8 @@ db.exec(`
     chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ')),
     address TEXT NOT NULL,
     label TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub')),
+    xpub_address_type TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_synced_at TEXT,
     UNIQUE(chain, address)
@@ -64,15 +69,32 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (coin_id, price_date)
   );
+  CREATE TABLE IF NOT EXISTS wallet_addresses (
+    id INTEGER PRIMARY KEY,
+    wallet_id INTEGER NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    address TEXT NOT NULL,
+    branch INTEGER NOT NULL CHECK (branch IN (0, 1)),
+    derivation_index INTEGER NOT NULL,
+    is_used INTEGER NOT NULL DEFAULT 0,
+    last_checked_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(wallet_id, address),
+    UNIQUE(wallet_id, branch, derivation_index)
+  );
   CREATE INDEX IF NOT EXISTS idx_transactions_wallet_timestamp
     ON transactions(wallet_id, timestamp DESC);
   CREATE INDEX IF NOT EXISTS idx_transactions_purpose
     ON transactions(purpose) WHERE purpose IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_wallet_addresses_wallet_branch_index
+    ON wallet_addresses(wallet_id, branch, derivation_index);
   PRAGMA optimize;
 `);
 
 // Existing installations predate automatic purpose assignment. Preserve manual
 // entries, while allowing unclassified legacy rows to be enriched on re-sync.
+const walletColumnNames = new Set(db.prepare("PRAGMA table_info(wallets)").all().map((column) => column.name));
+if (!walletColumnNames.has("source_type")) db.exec("ALTER TABLE wallets ADD COLUMN source_type TEXT NOT NULL DEFAULT 'address'");
+if (!walletColumnNames.has("xpub_address_type")) db.exec("ALTER TABLE wallets ADD COLUMN xpub_address_type TEXT");
+
 const transactionColumnNames = new Set(db.prepare("PRAGMA table_info(transactions)").all().map((column) => column.name));
 if (!transactionColumnNames.has("purpose_origin")) {
   db.exec("ALTER TABLE transactions ADD COLUMN purpose_origin TEXT NOT NULL DEFAULT 'unspecified'");
@@ -237,7 +259,15 @@ async function hydrateHistoricalPrices(chain, timestamps) {
   return result;
 }
 
-async function fetchBitcoinTransactions(address) {
+function hasBitcoinAddressActivity(summary) {
+  return Number(summary.chain_stats?.tx_count || 0) + Number(summary.mempool_stats?.tx_count || 0) > 0;
+}
+
+function pause(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function fetchBitcoinTransactions(address, maxTransactions = MAX_TRANSACTIONS_PER_SYNC) {
   const base = `${BITCOIN_EXPLORER_BASE_URL}/address/${encodeURIComponent(address)}`;
   const output = [];
   const seen = new Set();
@@ -253,14 +283,57 @@ async function fetchBitcoinTransactions(address) {
   add(await fetchJson(`${base}/txs/mempool`));
   let lastSeenTxid = null;
   while (true) {
-    if (MAX_TRANSACTIONS_PER_SYNC && output.length >= MAX_TRANSACTIONS_PER_SYNC) break;
+    if (maxTransactions && output.length >= maxTransactions) break;
     const page = await fetchJson(`${base}/txs/chain${lastSeenTxid ? `/${lastSeenTxid}` : ""}`);
     if (!Array.isArray(page) || page.length === 0) break;
     add(page);
     if (page.length < 25) break;
     lastSeenTxid = page.at(-1).txid;
   }
-  return MAX_TRANSACTIONS_PER_SYNC ? output.slice(0, MAX_TRANSACTIONS_PER_SYNC) : output;
+  return maxTransactions ? output.slice(0, maxTransactions) : output;
+}
+
+async function discoverXpubAddresses(wallet) {
+  const discovered = [];
+  const saveAddress = db.prepare(`
+    INSERT INTO wallet_addresses (wallet_id, address, branch, derivation_index, is_used, last_checked_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(wallet_id, address) DO UPDATE SET
+      is_used = excluded.is_used,
+      last_checked_at = datetime('now')
+  `);
+  let capped = false;
+
+  for (const branch of [0, 1]) {
+    let unusedInARow = 0;
+    for (let index = 0; index < XPUB_MAX_DERIVATIONS_PER_BRANCH && unusedInARow < XPUB_GAP_LIMIT; index += 1) {
+      const address = deriveXpubAddress(wallet.address, branch, index, wallet.xpub_address_type);
+      const summary = await fetchJson(`${BITCOIN_EXPLORER_BASE_URL}/address/${encodeURIComponent(address)}`);
+      const isUsed = hasBitcoinAddressActivity(summary);
+      saveAddress.run(wallet.id, address, branch, index, isUsed ? 1 : 0);
+      if (isUsed) {
+        discovered.push(address);
+        unusedInARow = 0;
+      } else {
+        unusedInARow += 1;
+      }
+      // The public Esplora service is intentionally queried gently during an xPub scan.
+      if (unusedInARow < XPUB_GAP_LIMIT) await pause(120);
+    }
+    if (unusedInARow < XPUB_GAP_LIMIT) capped = true;
+  }
+  return { addresses: discovered, capped };
+}
+
+async function fetchBitcoinTransactionsForAddresses(addresses) {
+  const transactions = new Map();
+  for (const address of addresses) {
+    const remaining = MAX_TRANSACTIONS_PER_SYNC ? MAX_TRANSACTIONS_PER_SYNC - transactions.size : 0;
+    if (MAX_TRANSACTIONS_PER_SYNC && remaining <= 0) break;
+    const items = await fetchBitcoinTransactions(address, remaining);
+    for (const transaction of items) transactions.set(transaction.txid, transaction);
+  }
+  return [...transactions.values()];
 }
 
 async function fetchTezosTransactions(address) {
@@ -287,19 +360,20 @@ async function fetchTezosTransactions(address) {
   return MAX_TRANSACTIONS_PER_SYNC ? output.slice(0, MAX_TRANSACTIONS_PER_SYNC) : output;
 }
 
-function normalizeBitcoinTransaction(transaction, address) {
+function normalizeBitcoinTransaction(transaction, addresses) {
+  const isWalletAddress = (address) => Boolean(address && addresses.has(address));
   const inputAmount = transaction.vin.reduce(
-    (sum, input) => sum + (input.prevout?.scriptpubkey_address === address ? Number(input.prevout.value || 0) : 0),
+    (sum, input) => sum + (isWalletAddress(input.prevout?.scriptpubkey_address) ? Number(input.prevout.value || 0) : 0),
     0,
   );
   const outputAmount = transaction.vout.reduce(
-    (sum, output) => sum + (output.scriptpubkey_address === address ? Number(output.value || 0) : 0),
+    (sum, output) => sum + (isWalletAddress(output.scriptpubkey_address) ? Number(output.value || 0) : 0),
     0,
   );
   const net = outputAmount - inputAmount;
   const direction = net > 0 ? "in" : net < 0 ? "out" : "self";
-  const otherOutput = transaction.vout.find((output) => output.scriptpubkey_address && output.scriptpubkey_address !== address);
-  const otherInput = transaction.vin.find((input) => input.prevout?.scriptpubkey_address && input.prevout.scriptpubkey_address !== address);
+  const otherOutput = transaction.vout.find((output) => output.scriptpubkey_address && !isWalletAddress(output.scriptpubkey_address));
+  const otherInput = transaction.vin.find((input) => input.prevout?.scriptpubkey_address && !isWalletAddress(input.prevout.scriptpubkey_address));
 
   return {
     externalId: transaction.txid,
@@ -310,6 +384,8 @@ function normalizeBitcoinTransaction(transaction, address) {
     amount: decimal(Math.abs(net) / 100000000),
     fee: direction === "out" ? decimal(Number(transaction.fee || 0) / 100000000) : 0,
     counterparty: direction === "in" ? otherInput?.prevout?.scriptpubkey_address || null : otherOutput?.scriptpubkey_address || null,
+    historicalPrice: null,
+    autoPurpose: null,
     rawJson: JSON.stringify(transaction),
   };
 }
@@ -343,11 +419,24 @@ function getWallet(id) {
 }
 
 async function syncWallet(wallet) {
-  const rawTransactions = wallet.chain === "BTC"
-    ? await fetchBitcoinTransactions(wallet.address)
-    : await fetchTezosTransactions(wallet.address);
+  let rawTransactions;
+  let bitcoinAddresses;
+  let xpubCapped = false;
+  if (wallet.chain === "BTC") {
+    if (wallet.source_type === "xpub") {
+      const discovery = await discoverXpubAddresses(wallet);
+      bitcoinAddresses = new Set(discovery.addresses);
+      xpubCapped = discovery.capped;
+      rawTransactions = await fetchBitcoinTransactionsForAddresses(discovery.addresses);
+    } else {
+      bitcoinAddresses = new Set([wallet.address]);
+      rawTransactions = await fetchBitcoinTransactions(wallet.address);
+    }
+  } else {
+    rawTransactions = await fetchTezosTransactions(wallet.address);
+  }
   const transactions = rawTransactions.map((item) => wallet.chain === "BTC"
-    ? normalizeBitcoinTransaction(item, wallet.address)
+    ? normalizeBitcoinTransaction(item, bitcoinAddresses)
     : normalizeTezosTransaction(item, wallet.address));
   const pricesByDate = await hydrateHistoricalPrices(
     wallet.chain,
@@ -416,13 +505,17 @@ async function syncWallet(wallet) {
     db.exec("ROLLBACK");
     throw error;
   }
-  return { imported, limited: Boolean(MAX_TRANSACTIONS_PER_SYNC && rawTransactions.length >= MAX_TRANSACTIONS_PER_SYNC) };
+  return {
+    imported,
+    limited: Boolean(MAX_TRANSACTIONS_PER_SYNC && rawTransactions.length >= MAX_TRANSACTIONS_PER_SYNC),
+    xpubCapped,
+  };
 }
 
 async function portfolioResponse() {
   const wallets = db.prepare("SELECT * FROM wallets ORDER BY created_at DESC").all();
   const transactions = db.prepare(`
-    SELECT t.*, w.chain, w.address, w.label AS wallet_label
+    SELECT t.*, w.chain, w.address, w.source_type, w.label AS wallet_label
     FROM transactions t
     JOIN wallets w ON w.id = t.wallet_id
     ORDER BY CASE WHEN t.timestamp IS NULL THEN 0 ELSE 1 END, t.timestamp DESC, t.id DESC
@@ -464,12 +557,27 @@ app.get("/api/portfolio", async (_request, response, next) => {
 app.post("/api/wallets", (request, response, next) => {
   try {
     const chain = String(request.body?.chain || "").toUpperCase();
-    const address = cleanLabel(request.body?.address, 100);
+    const sourceType = String(request.body?.sourceType || "address").toLowerCase();
+    const address = cleanLabel(request.body?.address, 120);
     const label = cleanLabel(request.body?.label, 80);
+    const xpubAddressType = String(request.body?.xpubAddressType || "p2wpkh").toLowerCase();
     if (!CHAIN_CONFIG[chain]) throw makeError("Bitte Bitcoin oder Tezos auswählen.");
-    if (!isValidAddress(chain, address)) throw makeError(`Die ${CHAIN_CONFIG[chain].name}-Adresse hat kein unterstütztes Format.`);
+    if (!['address', 'xpub'].includes(sourceType)) throw makeError("Nicht unterstützte Wallet-Art.");
+    if (sourceType === "xpub") {
+      if (chain !== "BTC") throw makeError("xPub wird nur für Bitcoin unterstützt.");
+      if (!XPUB_ADDRESS_TYPES.has(xpubAddressType)) throw makeError("Bitte ein unterstütztes Bitcoin-Adressformat auswählen.");
+      try {
+        parseXpub(address);
+      } catch (error) {
+        throw makeError(error.message);
+      }
+    } else if (!isValidAddress(chain, address)) {
+      throw makeError(`Die ${CHAIN_CONFIG[chain].name}-Adresse hat kein unterstütztes Format.`);
+    }
 
-    const result = db.prepare("INSERT INTO wallets (chain, address, label) VALUES (?, ?, ?)").run(chain, address, label);
+    const result = db.prepare(
+      "INSERT INTO wallets (chain, address, label, source_type, xpub_address_type) VALUES (?, ?, ?, ?, ?)",
+    ).run(chain, address, label, sourceType, sourceType === "xpub" ? xpubAddressType : null);
     const wallet = getWallet(Number(result.lastInsertRowid));
     response.status(201).json(wallet);
   } catch (error) {

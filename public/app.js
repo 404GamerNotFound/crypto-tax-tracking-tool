@@ -66,7 +66,9 @@ function renderSummary() {
 }
 
 function walletName(wallet) {
-  return wallet.label || `${wallet.chain === "BTC" ? "Bitcoin" : "Tezos"}-Wallet`;
+  if (wallet.label) return wallet.label;
+  if (wallet.source_type === "xpub") return "Bitcoin xPub";
+  return `${wallet.chain === "BTC" ? "Bitcoin" : "Tezos"}-Wallet`;
 }
 
 function renderWallets() {
@@ -86,11 +88,16 @@ function renderWallets() {
     details.className = "wallet-details";
     const title = document.createElement("strong");
     title.textContent = walletName(wallet);
-    const address = document.createElement("a");
-    address.href = wallet.chain === "BTC" ? `https://blockstream.info/address/${encodeURIComponent(wallet.address)}` : `https://tzkt.io/${encodeURIComponent(wallet.address)}`;
-    address.target = "_blank";
-    address.rel = "noreferrer";
-    address.textContent = shorten(wallet.address, 9, 7);
+    const address = document.createElement(wallet.source_type === "xpub" ? "span" : "a");
+    if (wallet.source_type === "xpub") {
+      address.className = "wallet-identifier";
+      address.textContent = `xPub · ${shorten(wallet.address, 9, 7)}`;
+    } else {
+      address.href = wallet.chain === "BTC" ? `https://blockstream.info/address/${encodeURIComponent(wallet.address)}` : `https://tzkt.io/${encodeURIComponent(wallet.address)}`;
+      address.target = "_blank";
+      address.rel = "noreferrer";
+      address.textContent = shorten(wallet.address, 9, 7);
+    }
     const sync = document.createElement("small");
     sync.textContent = wallet.last_synced_at ? `Zuletzt: ${dateTime.format(new Date(`${wallet.last_synced_at}Z`))}` : "Noch nicht synchronisiert";
     details.append(title, address, sync);
@@ -171,7 +178,9 @@ function renderTransactions() {
     const walletTitle = document.createElement("strong");
     walletTitle.textContent = transaction.wallet_label || `${transaction.chain === "BTC" ? "Bitcoin" : "Tezos"}-Wallet`;
     const walletMeta = document.createElement("small");
-    walletMeta.textContent = `${transaction.chain} · ${shorten(transaction.address, 6, 5)}`;
+    walletMeta.textContent = transaction.source_type === "xpub"
+      ? `${transaction.chain} · xPub-Wallet`
+      : `${transaction.chain} · ${shorten(transaction.address, 6, 5)}`;
     wallet.append(walletTitle, walletMeta);
 
     const amount = document.createElement("td");
@@ -298,7 +307,8 @@ async function syncWallet(id, button) {
     setButtonBusy(button, true, "…");
     const result = await api(`/api/wallets/${id}/sync`, { method: "POST" });
     await loadPortfolio({ quiet: true });
-    toast(`${result.imported.toLocaleString("de-DE")} Transaktionen synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}.`);
+    const xpubScanNotice = result.xpubCapped ? " Die xPub-Suche erreichte ihr Sicherheitslimit; erhöhe es bei Bedarf in der Server-Konfiguration." : "";
+    toast(`${result.imported.toLocaleString("de-DE")} Transaktionen synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}.${xpubScanNotice}`);
   } catch (error) {
     toast(error.message, "error");
   } finally {
@@ -385,6 +395,7 @@ async function applyBulkPurpose() {
 
 function openWalletModal() {
   el("wallet-form-error").hidden = true;
+  updateWalletFields();
   el("wallet-modal").showModal();
   setTimeout(() => el("wallet-address").focus(), 0);
 }
@@ -392,14 +403,24 @@ function openWalletModal() {
 function closeWalletModal() {
   el("wallet-modal").close();
   el("wallet-form").reset();
+  updateWalletFields();
 }
 
-function updateAddressHint() {
+function updateWalletFields() {
   const bitcoin = el("wallet-chain").value === "BTC";
-  el("wallet-address").placeholder = bitcoin ? "bc1… oder 1…" : "tz1… oder KT1…";
-  el("address-hint").textContent = bitcoin
-    ? "Bitcoin: Legacy-, SegWit- und Taproot-Adressen werden unterstützt."
-    : "Tezos: tz1-, tz2-, tz3- und KT1-Adressen werden unterstützt.";
+  const sourceType = el("wallet-source-type");
+  if (!bitcoin) sourceType.value = "address";
+  const xpub = bitcoin && sourceType.value === "xpub";
+  el("bitcoin-source-fields").hidden = !bitcoin;
+  el("xpub-format-wrap").hidden = !xpub;
+  el("xpub-notice").hidden = !xpub;
+  el("wallet-identifier-label").textContent = xpub ? "Bitcoin-xPub" : "Öffentliche Wallet-Adresse";
+  el("wallet-address").placeholder = xpub ? "xpub6…" : bitcoin ? "bc1… oder 1…" : "tz1… oder KT1…";
+  el("address-hint").textContent = xpub
+    ? "Es werden Empfangs- und Wechselgeldadressen bis zum Gap-Limit abgeleitet. Wähle das Format der exportierten Wallet."
+    : bitcoin
+      ? "Bitcoin: Legacy-, SegWit- und Taproot-Adressen werden unterstützt."
+      : "Tezos: tz1-, tz2-, tz3- und KT1-Adressen werden unterstützt.";
 }
 
 function bindEvents() {
@@ -407,7 +428,8 @@ function bindEvents() {
   el("open-wallet-empty").addEventListener("click", openWalletModal);
   el("close-wallet-modal").addEventListener("click", closeWalletModal);
   el("cancel-wallet").addEventListener("click", closeWalletModal);
-  el("wallet-chain").addEventListener("change", updateAddressHint);
+  el("wallet-chain").addEventListener("change", updateWalletFields);
+  el("wallet-source-type").addEventListener("change", updateWalletFields);
   el("refresh-all").addEventListener("click", syncAll);
   el("reload-portfolio").addEventListener("click", () => loadPortfolio());
   el("transaction-search").addEventListener("input", (event) => {
@@ -443,7 +465,13 @@ function bindEvents() {
       setButtonBusy(save, true, "Speichert …");
       const wallet = await api("/api/wallets", {
         method: "POST",
-        body: JSON.stringify({ chain: form.get("chain"), label: form.get("label"), address: form.get("address") }),
+        body: JSON.stringify({
+          chain: form.get("chain"),
+          label: form.get("label"),
+          address: form.get("address"),
+          sourceType: form.get("sourceType"),
+          xpubAddressType: form.get("xpubAddressType"),
+        }),
       });
       const syncResult = await api(`/api/wallets/${wallet.id}/sync`, { method: "POST" });
       closeWalletModal();

@@ -21,6 +21,7 @@ docker compose down
 ## Funktionen
 
 - Öffentliche Bitcoin- und Tezos-Wallet-Adressen mit frei wählbarem Namen speichern
+- Bitcoin-xPubs importieren und daraus abgeleitete Empfangs- sowie Wechselgeldadressen mit BIP44-Gap-Limit erkennen
 - Vollständige Historie aus Blockstream Esplora (Bitcoin) und TzKT (Tezos) synchronisieren
 - Ein- und Ausgänge, eigene Transfers, Gebühren und Gegenadressen in einer Tabelle darstellen
 - Aktuellen EUR-Marktpreis sowie EUR-Preis zum Transaktionsdatum anzeigen; Tezos verwendet dafür den von TzKT zum Blockzeitpunkt gelieferten EUR-Kurs, Bitcoin einen CoinGecko-Tageskurs
@@ -46,6 +47,17 @@ MAX_TRANSACTIONS_PER_SYNC=1000
 ```
 
 Der Standardwert `0` lädt alle vom jeweiligen Explorer verfügbaren Transaktionen.
+
+### Bitcoin-xPub
+
+Beim Hinzufügen einer Bitcoin-Wallet kann statt einer einzelnen Adresse ein Mainnet-`xpub` auf Kontoebene importiert werden. Die Anwendung scannt daraus beide Standardzweige – Empfang (`0`) und Wechselgeld (`1`) – bis sie je Zweig 20 aufeinanderfolgende unbenutzte Adressen findet. Dieses BIP44-Gap-Limit kann bei einer Wallet mit ungewöhnlich vielen übersprungenen Adressen angepasst werden:
+
+```dotenv
+XPUB_GAP_LIMIT=20
+XPUB_MAX_DERIVATIONS_PER_BRANCH=200
+```
+
+Wähle dabei unbedingt das zum Export passende Adressformat: `bc1…` (Native SegWit), `3…` (Nested SegWit) oder `1…` (Legacy). Ein xPub ist kein privater Schlüssel, kann aber die gesamte Adress- und Transaktionshistorie einer Wallet sichtbar machen. Seed-Phrases und `xprv`-Schlüssel werden bewusst abgelehnt und dürfen niemals eingegeben werden. Ein Master-xPub ist nicht ausreichend, weil aus einem xPub keine gehärteten Kontenpfade abgeleitet werden können.
 
 Falls die öffentliche Blockstream-API Anfragen begrenzt, kann ein eigener Esplora-kompatibler Endpunkt konfiguriert werden:
 

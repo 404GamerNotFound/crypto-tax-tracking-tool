@@ -13,6 +13,9 @@ services:
       BITCOIN_EXPLORER_BASE_URL: ${BITCOIN_EXPLORER_BASE_URL:-https://blockstream.info/api}
       # Exakt so benannte, vertrauenswürdige TzKT-Payout-Konten werden automatisch als Staking markiert.
       XTZ_STAKING_PAYOUT_ALIASES: ${XTZ_STAKING_PAYOUT_ALIASES:-Stake.fish Payouts}
+      # BIP44-Scan für Bitcoin-xPubs: 20 aufeinanderfolgende unbenutzte Adressen pro Zweig.
+      XPUB_GAP_LIMIT: ${XPUB_GAP_LIMIT:-20}
+      XPUB_MAX_DERIVATIONS_PER_BRANCH: ${XPUB_MAX_DERIVATIONS_PER_BRANCH:-200}
     volumes:
       - cryptobuch_data:/data
     restart: unless-stopped

@@ -63,7 +63,7 @@ h1 em { color: var(--green); font-style: italic; }
 .chain-icon.xtz { background: var(--green); font-family: "DM Sans", sans-serif; font-size: 17px; }
 .wallet-details { min-width: 0; display: grid; gap: 2px; }
 .wallet-details strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.wallet-details a, .wallet-details small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 10px "DM Mono", monospace; }
+.wallet-details a, .wallet-details .wallet-identifier, .wallet-details small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 10px "DM Mono", monospace; }
 .wallet-details a:hover { color: var(--green); }
 .wallet-details small { color: #98a09a; font-family: "DM Sans", sans-serif; font-size: 10px; }
 .wallet-actions { display: grid; gap: 3px; }
@@ -131,6 +131,7 @@ form > label, .form-grid label { display: grid; gap: 7px; margin-bottom: 16px; f
 form label span small, form label > small { color: var(--muted); font-weight: 400; }
 form input, form select { width: 100%; min-height: 42px; border: 1px solid var(--line); border-radius: 5px; outline-color: var(--green); padding: 0 11px; color: var(--ink); background: white; font-size: 13px; }
 form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
+.xpub-notice { margin: -3px 0 16px; padding: 10px 11px; border: 1px solid #e7d7a4; border-radius: 5px; color: #695321; background: #fff8df; font-size: 11px; line-height: 1.45; }
 .form-error { margin: -2px 0 15px; padding: 9px 10px; border-radius: 5px; background: #f9ded9; color: #8b372f; font-size: 12px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; padding-top: 3px; }
 .toast { position: fixed; right: 24px; bottom: 24px; max-width: min(420px, calc(100% - 48px)); padding: 13px 16px; border-radius: 6px; color: white; background: var(--green-dark); box-shadow: var(--shadow); font-size: 13px; z-index: 5; }
