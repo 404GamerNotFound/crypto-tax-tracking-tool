@@ -1,0 +1,19 @@
+services:
+  cryptobuch:
+    build: .
+    container_name: cryptobuch
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DATA_DIR: /data
+      # 0 = alle vom Explorer bereitgestellten Transaktionen laden
+      MAX_TRANSACTIONS_PER_SYNC: ${MAX_TRANSACTIONS_PER_SYNC:-0}
+      # Optionaler eigener Esplora-kompatibler Endpunkt; standardmäßig Blockstream.
+      BITCOIN_EXPLORER_BASE_URL: ${BITCOIN_EXPLORER_BASE_URL:-https://blockstream.info/api}
+    volumes:
+      - cryptobuch_data:/data
+    restart: unless-stopped
+
+volumes:
+  cryptobuch_data:

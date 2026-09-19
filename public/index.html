@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Lokales Crypto-Portfolio für Bitcoin und Tezos" />
+    <title>CryptoBuch · Portfolio</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="CryptoBuch Startseite">
+          <span class="brand-mark" aria-hidden="true">₿</span>
+          <span>CryptoBuch</span>
+        </a>
+        <div class="topbar-status" id="price-status" aria-live="polite">Preise werden geladen …</div>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="page-title">
+          <div>
+            <p class="eyebrow">LOKALES PORTFOLIO</p>
+            <h1 id="page-title">Klarheit für jede<br /><em>On-Chain-Bewegung.</em></h1>
+            <p class="hero-copy">Wallets hinzufügen, Transaktionen synchronisieren und steuerrelevante Zwecke direkt in der Übersicht zuordnen.</p>
+          </div>
+          <div class="hero-actions">
+            <button class="button button-primary" id="open-wallet-modal">+ Wallet hinzufügen</button>
+            <button class="button button-secondary" id="refresh-all" title="Alle gespeicherten Wallets neu synchronisieren">Alles aktualisieren</button>
+          </div>
+        </section>
+
+        <section class="summary-grid" aria-label="Portfolio-Überblick">
+          <article class="summary-card total-card">
+            <span class="card-label">Portfolio-Wert</span>
+            <strong id="total-value">—</strong>
+            <span class="muted">Aktuelle Marktbewertung in EUR</span>
+          </article>
+          <article class="summary-card">
+            <span class="card-label">Bitcoin</span>
+            <strong id="btc-holding">—</strong>
+            <span class="muted" id="btc-price">—</span>
+          </article>
+          <article class="summary-card">
+            <span class="card-label">Tezos</span>
+            <strong id="xtz-holding">—</strong>
+            <span class="muted" id="xtz-price">—</span>
+          </article>
+          <article class="summary-card sync-card">
+            <span class="card-label">Erfasste Transaktionen</span>
+            <strong id="transaction-count">0</strong>
+            <span class="muted">Importiert aus der Blockchain</span>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <aside class="wallet-panel" aria-labelledby="wallet-heading">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">QUELLEN</p>
+                <h2 id="wallet-heading">Meine Wallets</h2>
+              </div>
+              <span class="count-badge" id="wallet-count">0</span>
+            </div>
+            <div id="wallet-list" class="wallet-list"></div>
+            <div id="wallet-empty" class="wallet-empty">
+              <span class="empty-icon">◇</span>
+              <strong>Noch keine Wallet</strong>
+              <p>Füge eine Bitcoin- oder Tezos-Adresse hinzu, um loszulegen.</p>
+              <button class="text-button" id="open-wallet-empty">Wallet anlegen</button>
+            </div>
+          </aside>
+
+          <section class="transactions-panel" aria-labelledby="transactions-heading">
+            <div class="section-heading transactions-title">
+              <div>
+                <p class="eyebrow">BUCHUNGSJOURNAL</p>
+                <h2 id="transactions-heading">Transaktionen</h2>
+              </div>
+              <button class="icon-button" id="reload-portfolio" aria-label="Ansicht neu laden" title="Ansicht neu laden">↻</button>
+            </div>
+
+            <div class="toolbar">
+              <label class="search-control">
+                <span class="visually-hidden">Transaktionen durchsuchen</span>
+                <span aria-hidden="true">⌕</span>
+                <input id="transaction-search" type="search" placeholder="Hash, Wallet oder Zweck suchen" autocomplete="off" />
+              </label>
+              <label class="select-control">
+                <span class="visually-hidden">Blockchain filtern</span>
+                <select id="chain-filter">
+                  <option value="">Alle Netzwerke</option>
+                  <option value="BTC">Bitcoin</option>
+                  <option value="XTZ">Tezos</option>
+                </select>
+              </label>
+              <label class="select-control">
+                <span class="visually-hidden">Richtung filtern</span>
+                <select id="direction-filter">
+                  <option value="">Ein- &amp; Ausgänge</option>
+                  <option value="in">Eingänge</option>
+                  <option value="out">Ausgänge</option>
+                  <option value="self">Eigene Transfers</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="bulk-bar" id="bulk-bar" hidden>
+              <strong><span id="selected-count">0</span> ausgewählt</strong>
+              <label class="purpose-editor compact">
+                <span class="visually-hidden">Zweck für Auswahl</span>
+                <select id="bulk-purpose"></select>
+              </label>
+              <button class="button button-dark button-small" id="apply-bulk-purpose">Zweck übernehmen</button>
+              <button class="text-button" id="clear-selection">Auswahl aufheben</button>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="checkbox-cell"><input id="select-all" type="checkbox" aria-label="Alle sichtbaren Transaktionen auswählen" /></th>
+                    <th>Vorgang</th>
+                    <th>Wallet</th>
+                    <th>Betrag</th>
+                    <th>Preis jetzt</th>
+                    <th>Preis Transaktionsdatum</th>
+                    <th>Zweck</th>
+                  </tr>
+                </thead>
+                <tbody id="transaction-list"></tbody>
+              </table>
+              <div id="transactions-empty" class="transactions-empty" hidden>
+                <span class="empty-icon">⌁</span>
+                <strong>Keine Transaktionen gefunden</strong>
+                <p>Synchronisiere eine Wallet oder passe die Filter an.</p>
+              </div>
+            </div>
+            <p class="data-note">Blockchain-Daten: <a href="https://blockstream.info/" target="_blank" rel="noreferrer">Blockstream Esplora</a> · <a href="https://tzkt.io/" target="_blank" rel="noreferrer">TzKT</a> · Preise: <a href="https://www.coingecko.com/" target="_blank" rel="noreferrer">CoinGecko</a></p>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="wallet-modal" aria-labelledby="wallet-modal-title">
+      <form id="wallet-form">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">PORTFOLIO ERWEITERN</p>
+            <h2 id="wallet-modal-title">Wallet hinzufügen</h2>
+          </div>
+          <button class="modal-close" type="button" id="close-wallet-modal" aria-label="Dialog schließen">×</button>
+        </div>
+        <p class="modal-copy">Es werden ausschließlich öffentliche Adressen gespeichert. Private Keys oder Seed-Phrases gehören niemals hierher.</p>
+        <div class="form-grid">
+          <label>
+            <span>Blockchain</span>
+            <select name="chain" id="wallet-chain" required>
+              <option value="BTC">Bitcoin (BTC)</option>
+              <option value="XTZ">Tezos (XTZ)</option>
+            </select>
+          </label>
+          <label>
+            <span>Name <small>optional</small></span>
+            <input name="label" maxlength="80" placeholder="z. B. Ledger" />
+          </label>
+        </div>
+        <label>
+          <span>Öffentliche Wallet-Adresse</span>
+          <input name="address" id="wallet-address" maxlength="100" required spellcheck="false" autocomplete="off" placeholder="bc1… oder tz1…" />
+          <small id="address-hint">Bitcoin: Legacy-, SegWit- und Taproot-Adressen werden unterstützt.</small>
+        </label>
+        <p class="form-error" id="wallet-form-error" role="alert" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="button button-secondary" id="cancel-wallet">Abbrechen</button>
+          <button type="submit" class="button button-primary" id="save-wallet">Wallet speichern &amp; synchronisieren</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
