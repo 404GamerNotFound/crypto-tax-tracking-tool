@@ -734,6 +734,84 @@ async function syncWallet(wallet) {
   };
 }
 
+function emptyAssetAnalytics(chain, currentPrice, holdingAmount) {
+  return {
+    asset: CHAIN_CONFIG[chain].asset,
+    holdingAmount,
+    holdingValueEur: currentPrice ? holdingAmount * currentPrice : null,
+    currentPriceEur: currentPrice || null,
+    purchases: {
+      count: 0,
+      acquiredAmount: 0,
+      remainingAmount: 0,
+      remainingCostEur: 0,
+      hasUnknownCost: false,
+      currentValueEur: null,
+      profitEur: null,
+    },
+    staking: {
+      count: 0,
+      amount: 0,
+      historicValueEur: 0,
+      hasUnknownHistoricValue: false,
+      currentValueEur: null,
+    },
+  };
+}
+
+function calculateAssetAnalytics(transactions, currentPrices, holdings) {
+  const analytics = Object.fromEntries(Object.entries(CHAIN_CONFIG).map(([chain, config]) => [
+    chain,
+    emptyAssetAnalytics(chain, positiveNumber(currentPrices[chain]), Number(holdings[config.asset] || 0)),
+  ]));
+  const purchaseLots = Object.fromEntries(Object.keys(CHAIN_CONFIG).map((chain) => [chain, []]));
+  const chronological = [...transactions].sort((left, right) => String(left.timestamp || "").localeCompare(String(right.timestamp || "")));
+
+  for (const transaction of chronological) {
+    const report = analytics[transaction.chain];
+    if (!report) continue;
+    const amount = Number(transaction.amount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    const historicPrice = positiveNumber(transaction.price_transaction_eur);
+
+    if (transaction.direction === "in" && transaction.purpose === "Kauf") {
+      report.purchases.count += 1;
+      report.purchases.acquiredAmount += amount;
+      purchaseLots[transaction.chain].push({ amount, costPerAsset: historicPrice });
+    }
+    if (transaction.direction === "out" && transaction.purpose === "Verkauf") {
+      let remainingToSell = amount;
+      for (const lot of purchaseLots[transaction.chain]) {
+        if (remainingToSell <= 0) break;
+        const consumed = Math.min(lot.amount, remainingToSell);
+        lot.amount -= consumed;
+        remainingToSell -= consumed;
+      }
+    }
+    if (transaction.direction === "in" && transaction.purpose === "Staking Rewards") {
+      report.staking.count += 1;
+      report.staking.amount += amount;
+      if (historicPrice) report.staking.historicValueEur += amount * historicPrice;
+      else report.staking.hasUnknownHistoricValue = true;
+    }
+  }
+
+  for (const [chain, report] of Object.entries(analytics)) {
+    for (const lot of purchaseLots[chain]) {
+      if (lot.amount <= 0) continue;
+      report.purchases.remainingAmount += lot.amount;
+      if (lot.costPerAsset) report.purchases.remainingCostEur += lot.amount * lot.costPerAsset;
+      else report.purchases.hasUnknownCost = true;
+    }
+    if (report.currentPriceEur) {
+      report.purchases.currentValueEur = report.purchases.remainingAmount * report.currentPriceEur;
+      report.staking.currentValueEur = report.staking.amount * report.currentPriceEur;
+      if (!report.purchases.hasUnknownCost) report.purchases.profitEur = report.purchases.currentValueEur - report.purchases.remainingCostEur;
+    }
+  }
+  return analytics;
+}
+
 async function portfolioResponse() {
   const wallets = db.prepare("SELECT * FROM wallets ORDER BY created_at DESC").all();
   const transactions = db.prepare(`
@@ -756,11 +834,13 @@ async function portfolioResponse() {
     (sum, [asset, amount]) => sum + amount * Number(currentPrices[asset] || 0),
     0,
   );
+  const assetAnalytics = calculateAssetAnalytics(enriched, currentPrices, holdings);
 
   return {
     wallets,
     transactions: enriched,
     holdings,
+    assetAnalytics,
     totalValueEur,
     currentPrices,
     purposePresets: PURPOSE_PRESETS,
