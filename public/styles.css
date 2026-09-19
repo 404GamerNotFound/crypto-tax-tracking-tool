@@ -42,9 +42,11 @@ h1 em { color: var(--green); font-style: italic; }
 .button-secondary:hover { background: #ecece4; }
 .button-dark { color: white; background: var(--ink); }
 .button-small { min-height: 34px; padding: 0 12px; font-size: 12px; }
-.summary-grid { display: grid; grid-template-columns: 1.35fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 48px; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(172px, 1fr)); gap: 12px; margin-bottom: 48px; }
+.asset-summary-cards { display: contents; }
 .summary-card { min-height: 158px; padding: 20px; background: var(--cream); border: 1px solid var(--line); border-radius: 9px; display: flex; flex-direction: column; justify-content: space-between; }
 .total-card { background: var(--ink); color: #f8f7ee; border-color: var(--ink); }
+.total-card { grid-column: span 2; }
 .card-label { font: 500 10px "DM Mono", monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .total-card .card-label { color: #bbd3c4; }
 .summary-card strong { font-family: "Fraunces", Georgia, serif; font-size: clamp(26px, 2.6vw, 40px); line-height: 1; letter-spacing: -.05em; font-weight: 500; }
@@ -61,6 +63,7 @@ h1 em { color: var(--green); font-style: italic; }
 .wallet-item { padding: 13px 10px; border: 1px solid var(--line); border-radius: 7px; display: grid; grid-template-columns: 31px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: #fffefa; }
 .chain-icon { height: 29px; width: 29px; display: grid; place-items: center; border-radius: 50%; color: white; font-family: Georgia, serif; font-size: 19px; font-weight: 700; background: var(--orange); }
 .chain-icon.xtz { background: var(--green); font-family: "DM Sans", sans-serif; font-size: 17px; }
+.chain-icon.trx { background: #df4d4d; font-family: "DM Sans", sans-serif; font-size: 15px; }
 .wallet-details { min-width: 0; display: grid; gap: 2px; }
 .wallet-details strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .wallet-details a, .wallet-details .wallet-identifier, .wallet-details small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 10px "DM Mono", monospace; }

@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const bitcoin = require("bitcoinjs-lib");
 const { cleanLabel, isValidAddress } = require("../lib/validation");
 
 test("validiert typische Bitcoin-Adressen", () => {
@@ -10,6 +11,12 @@ test("validiert typische Bitcoin-Adressen", () => {
 test("validiert typische Tezos-Adressen", () => {
   assert.equal(isValidAddress("XTZ", "tz1VSUr8wwNhLAzempoch5d6hLRiTh8Cjcjb"), true);
   assert.equal(isValidAddress("XTZ", "tz1invalid"), false);
+});
+
+test("validiert typische TRON-Adressen", () => {
+  const address = bitcoin.address.toBase58Check(Buffer.alloc(20, 7), 0x41);
+  assert.equal(isValidAddress("TRX", address), true);
+  assert.equal(isValidAddress("TRX", "TzuKurz"), false);
 });
 
 test("bereinigt Beschriftungen", () => {

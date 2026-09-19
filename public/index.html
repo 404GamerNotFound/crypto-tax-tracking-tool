@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Lokales Crypto-Portfolio für Bitcoin und Tezos" />
+    <meta name="description" content="Lokales Crypto-Portfolio für öffentliche Blockchain-Wallets" />
     <title>CryptoBuch · Portfolio</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -36,16 +36,7 @@
             <strong id="total-value">—</strong>
             <span class="muted">Aktuelle Marktbewertung in EUR</span>
           </article>
-          <article class="summary-card">
-            <span class="card-label">Bitcoin</span>
-            <strong id="btc-holding">—</strong>
-            <span class="muted" id="btc-price">—</span>
-          </article>
-          <article class="summary-card">
-            <span class="card-label">Tezos</span>
-            <strong id="xtz-holding">—</strong>
-            <span class="muted" id="xtz-price">—</span>
-          </article>
+          <div id="asset-summary-cards" class="asset-summary-cards"></div>
           <article class="summary-card sync-card">
             <span class="card-label">Erfasste Transaktionen</span>
             <strong id="transaction-count">0</strong>
@@ -66,7 +57,7 @@
             <div id="wallet-empty" class="wallet-empty">
               <span class="empty-icon">◇</span>
               <strong>Noch keine Wallet</strong>
-              <p>Füge eine Bitcoin- oder Tezos-Adresse hinzu, um loszulegen.</p>
+              <p>Füge eine öffentliche Wallet-Adresse hinzu, um loszulegen.</p>
               <button class="text-button" id="open-wallet-empty">Wallet anlegen</button>
             </div>
           </aside>
@@ -90,8 +81,6 @@
                 <span class="visually-hidden">Blockchain filtern</span>
                 <select id="chain-filter">
                   <option value="">Alle Netzwerke</option>
-                  <option value="BTC">Bitcoin</option>
-                  <option value="XTZ">Tezos</option>
                 </select>
               </label>
               <label class="select-control">
@@ -139,12 +128,12 @@
             <details class="history-help">
               <summary>Historische Daten &amp; Preise</summary>
               <div>
-                <p><strong>Transaktionszeit:</strong> Bitcoin kommt aus dem bestätigten Block bei <a href="https://blockstream.info/" target="_blank" rel="noreferrer">Blockstream Esplora</a>; Tezos aus dem Blockzeitstempel von <a href="https://tzkt.io/" target="_blank" rel="noreferrer">TzKT</a>.</p>
-                <p><strong>Preis zum Transaktionsdatum:</strong> Für Tezos wird der EUR-Kurs verwendet, den TzKT dem jeweiligen Block zuordnet. Für Bitcoin wird ein EUR-Tageskurs von <a href="https://www.coingecko.com/" target="_blank" rel="noreferrer">CoinGecko</a> geladen und lokal zwischengespeichert.</p>
+                <p><strong>Transaktionszeit:</strong> Bitcoin kommt aus dem bestätigten Block bei <a href="https://blockstream.info/" target="_blank" rel="noreferrer">Blockstream Esplora</a>, Tezos aus dem Blockzeitstempel von <a href="https://tzkt.io/" target="_blank" rel="noreferrer">TzKT</a> und TRON aus dem bestätigten Blockzeitstempel von <a href="https://developers.tron.network/" target="_blank" rel="noreferrer">TronGrid</a>.</p>
+                <p><strong>Preis zum Transaktionsdatum:</strong> Für Tezos wird der EUR-Kurs verwendet, den TzKT dem jeweiligen Block zuordnet. Für Bitcoin und TRON wird ein EUR-Tageskurs von <a href="https://www.coingecko.com/" target="_blank" rel="noreferrer">CoinGecko</a> geladen und lokal zwischengespeichert.</p>
                 <p>Steht hier <em>k. A.</em>, war die Transaktion unbestätigt oder die Preisquelle war beim Import nicht erreichbar. Nach einem Klick auf „Alles aktualisieren“ wird der fehlende Wert erneut angefordert.</p>
               </div>
             </details>
-            <p class="data-note">Blockchain-Daten: <a href="https://blockstream.info/" target="_blank" rel="noreferrer">Blockstream Esplora</a> · <a href="https://tzkt.io/" target="_blank" rel="noreferrer">TzKT</a> · Preise: <a href="https://www.coingecko.com/" target="_blank" rel="noreferrer">CoinGecko</a></p>
+            <p class="data-note">Blockchain-Daten: <a href="https://blockstream.info/" target="_blank" rel="noreferrer">Blockstream Esplora</a> · <a href="https://tzkt.io/" target="_blank" rel="noreferrer">TzKT</a> · <a href="https://developers.tron.network/" target="_blank" rel="noreferrer">TronGrid</a> · Preise: <a href="https://www.coingecko.com/" target="_blank" rel="noreferrer">CoinGecko</a></p>
           </section>
         </section>
       </main>
@@ -163,10 +152,7 @@
         <div class="form-grid">
           <label>
             <span>Blockchain</span>
-            <select name="chain" id="wallet-chain" required>
-              <option value="BTC">Bitcoin (BTC)</option>
-              <option value="XTZ">Tezos (XTZ)</option>
-            </select>
+            <select name="chain" id="wallet-chain" required></select>
           </label>
           <label>
             <span>Name <small>optional</small></span>

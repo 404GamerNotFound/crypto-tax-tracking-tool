@@ -19,7 +19,7 @@ function formatPrice(value) {
 }
 
 function formatAmount(value, asset) {
-  const decimals = asset === "BTC" ? 8 : 6;
+  const decimals = Object.values(state.portfolio?.chains || {}).find((chain) => chain.asset === asset)?.decimals || 6;
   return `${compactNumber(decimals).format(Number(value))} ${asset}`;
 }
 
@@ -30,6 +30,31 @@ function shorten(value, start = 7, end = 6) {
 
 function directionLabel(direction) {
   return { in: "Eingang", out: "Ausgang", self: "Eigener Transfer" }[direction] || "Unbekannt";
+}
+
+function chainInfo(chain) {
+  return state.portfolio?.chains?.[chain] || { name: chain, asset: chain, decimals: 6, icon: chain.slice(0, 1) };
+}
+
+function explorerUrl(chain, type, value) {
+  const template = chainInfo(chain).explorer?.[type];
+  return template ? template.replace("{value}", encodeURIComponent(value)) : "#";
+}
+
+function renderChainControls() {
+  const chains = Object.entries(state.portfolio?.chains || {});
+  const filter = el("chain-filter");
+  const selectedFilter = state.filters.chain;
+  filter.replaceChildren(new Option("Alle Netzwerke", ""));
+  for (const [key, chain] of chains) filter.add(new Option(`${chain.name} (${chain.asset})`, key));
+  filter.value = chains.some(([key]) => key === selectedFilter) ? selectedFilter : "";
+  state.filters.chain = filter.value;
+
+  const walletChain = el("wallet-chain");
+  const selectedWalletChain = walletChain.value || chains[0]?.[0] || "";
+  walletChain.replaceChildren();
+  for (const [key, chain] of chains) walletChain.add(new Option(`${chain.name} (${chain.asset})`, key));
+  walletChain.value = chains.some(([key]) => key === selectedWalletChain) ? selectedWalletChain : chains[0]?.[0] || "";
 }
 
 function getFilteredTransactions() {
@@ -48,18 +73,29 @@ function getFilteredTransactions() {
 }
 
 function safeExplorerUrl(transaction) {
-  const base = transaction.chain === "BTC" ? "https://blockstream.info/tx/" : "https://tzkt.io/";
-  return `${base}${encodeURIComponent(transaction.hash)}`;
+  return explorerUrl(transaction.chain, "transaction", transaction.hash);
 }
 
 function renderSummary() {
   const portfolio = state.portfolio;
   const prices = portfolio.currentPrices || {};
   el("total-value").textContent = Number.isFinite(Number(portfolio.totalValueEur)) ? currency.format(portfolio.totalValueEur) : "k. A.";
-  el("btc-holding").textContent = formatAmount(portfolio.holdings.BTC || 0, "BTC");
-  el("xtz-holding").textContent = formatAmount(portfolio.holdings.XTZ || 0, "XTZ");
-  el("btc-price").textContent = `1 BTC · ${formatPrice(prices.BTC)}`;
-  el("xtz-price").textContent = `1 XTZ · ${formatPrice(prices.XTZ)}`;
+  const assetCards = el("asset-summary-cards");
+  assetCards.replaceChildren();
+  for (const [key, chain] of Object.entries(portfolio.chains || {})) {
+    const card = document.createElement("article");
+    card.className = "summary-card";
+    const label = document.createElement("span");
+    label.className = "card-label";
+    label.textContent = chain.name;
+    const holding = document.createElement("strong");
+    holding.textContent = formatAmount(portfolio.holdings[chain.asset] || 0, chain.asset);
+    const marketPrice = document.createElement("span");
+    marketPrice.className = "muted";
+    marketPrice.textContent = `1 ${chain.asset} · ${formatPrice(prices[key])}`;
+    card.append(label, holding, marketPrice);
+    assetCards.append(card);
+  }
   el("transaction-count").textContent = portfolio.transactions.length.toLocaleString("de-DE");
   const updated = prices.updatedAt ? `Preisstand ${dateTime.format(new Date(prices.updatedAt * 1000))}` : "Aktuelle Preise nicht verfügbar";
   el("price-status").textContent = prices.warning ? "Preisabfrage momentan nicht verfügbar" : updated;
@@ -68,7 +104,7 @@ function renderSummary() {
 function walletName(wallet) {
   if (wallet.label) return wallet.label;
   if (wallet.source_type === "xpub") return "Bitcoin xPub";
-  return `${wallet.chain === "BTC" ? "Bitcoin" : "Tezos"}-Wallet`;
+  return `${chainInfo(wallet.chain).name}-Wallet`;
 }
 
 function renderWallets() {
@@ -83,7 +119,7 @@ function renderWallets() {
     item.className = "wallet-item";
     const icon = document.createElement("span");
     icon.className = `chain-icon ${wallet.chain.toLowerCase()}`;
-    icon.textContent = wallet.chain === "BTC" ? "₿" : "ꜩ";
+    icon.textContent = chainInfo(wallet.chain).icon;
     const details = document.createElement("div");
     details.className = "wallet-details";
     const title = document.createElement("strong");
@@ -93,7 +129,7 @@ function renderWallets() {
       address.className = "wallet-identifier";
       address.textContent = `xPub · ${shorten(wallet.address, 9, 7)}`;
     } else {
-      address.href = wallet.chain === "BTC" ? `https://blockstream.info/address/${encodeURIComponent(wallet.address)}` : `https://tzkt.io/${encodeURIComponent(wallet.address)}`;
+      address.href = explorerUrl(wallet.chain, "address", wallet.address);
       address.target = "_blank";
       address.rel = "noreferrer";
       address.textContent = shorten(wallet.address, 9, 7);
@@ -176,7 +212,7 @@ function renderTransactions() {
 
     const wallet = document.createElement("td");
     const walletTitle = document.createElement("strong");
-    walletTitle.textContent = transaction.wallet_label || `${transaction.chain === "BTC" ? "Bitcoin" : "Tezos"}-Wallet`;
+    walletTitle.textContent = transaction.wallet_label || `${chainInfo(transaction.chain).name}-Wallet`;
     const walletMeta = document.createElement("small");
     walletMeta.textContent = transaction.source_type === "xpub"
       ? `${transaction.chain} · xPub-Wallet`
@@ -254,6 +290,8 @@ function updateSelectionUi() {
 
 function render() {
   if (!state.portfolio) return;
+  renderChainControls();
+  updateWalletFields();
   renderSummary();
   renderWallets();
   renderTransactions();
@@ -394,6 +432,11 @@ async function applyBulkPurpose() {
 }
 
 function openWalletModal() {
+  if (!state.portfolio) {
+    toast("Netzwerke werden noch geladen …");
+    loadPortfolio();
+    return;
+  }
   el("wallet-form-error").hidden = true;
   updateWalletFields();
   el("wallet-modal").showModal();
@@ -407,7 +450,9 @@ function closeWalletModal() {
 }
 
 function updateWalletFields() {
-  const bitcoin = el("wallet-chain").value === "BTC";
+  const chain = el("wallet-chain").value;
+  const info = chainInfo(chain);
+  const bitcoin = Boolean(info.supportsXpub);
   const sourceType = el("wallet-source-type");
   if (!bitcoin) sourceType.value = "address";
   const xpub = bitcoin && sourceType.value === "xpub";
@@ -415,12 +460,10 @@ function updateWalletFields() {
   el("xpub-format-wrap").hidden = !xpub;
   el("xpub-notice").hidden = !xpub;
   el("wallet-identifier-label").textContent = xpub ? "Bitcoin-xPub" : "Öffentliche Wallet-Adresse";
-  el("wallet-address").placeholder = xpub ? "xpub6…" : bitcoin ? "bc1… oder 1…" : "tz1… oder KT1…";
+  el("wallet-address").placeholder = xpub ? "xpub6…" : info.addressPlaceholder || "Öffentliche Adresse";
   el("address-hint").textContent = xpub
     ? "Es werden Empfangs- und Wechselgeldadressen bis zum Gap-Limit abgeleitet. Wähle das Format der exportierten Wallet."
-    : bitcoin
-      ? "Bitcoin: Legacy-, SegWit- und Taproot-Adressen werden unterstützt."
-      : "Tezos: tz1-, tz2-, tz3- und KT1-Adressen werden unterstützt.";
+    : info.addressHint || `Öffentliche ${info.name}-Adresse eingeben.`;
 }
 
 function bindEvents() {

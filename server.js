@@ -5,16 +5,18 @@ const { DatabaseSync } = require("node:sqlite");
 const { XPUB_ADDRESS_TYPES, deriveXpubAddress, parseXpub } = require("./lib/bitcoin-xpub");
 const { CHAIN_CONFIG, cleanLabel, isValidAddress } = require("./lib/validation");
 const { isConfirmedStakingPayout, trustedPayoutAliases } = require("./lib/tezos-staking");
+const { normalizeTronNativeTransfer } = require("./lib/tron");
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DB_PATH = path.join(DATA_DIR, "cryptobuch.sqlite");
 const MAX_TRANSACTIONS_PER_SYNC = Math.max(0, Number(process.env.MAX_TRANSACTIONS_PER_SYNC || 0));
 const BITCOIN_EXPLORER_BASE_URL = (process.env.BITCOIN_EXPLORER_BASE_URL || "https://blockstream.info/api").replace(/\/$/, "");
+const TRONGRID_BASE_URL = (process.env.TRONGRID_BASE_URL || "https://api.trongrid.io").replace(/\/$/, "");
+const TRONGRID_API_KEY = String(process.env.TRONGRID_API_KEY || "").trim();
 const XPUB_GAP_LIMIT = Math.min(50, Math.max(1, Number(process.env.XPUB_GAP_LIMIT || 20)));
 const XPUB_MAX_DERIVATIONS_PER_BRANCH = Math.max(XPUB_GAP_LIMIT, Math.min(1000, Number(process.env.XPUB_MAX_DERIVATIONS_PER_BRANCH || 200)));
 const XTZ_STAKING_PAYOUT_ALIASES = trustedPayoutAliases(process.env.XTZ_STAKING_PAYOUT_ALIASES || "Stake.fish Payouts");
-const COIN_IDS = { BTC: "bitcoin", XTZ: "tezos" };
 const PURPOSE_PRESETS = [
   "Kauf",
   "Verkauf",
@@ -34,7 +36,7 @@ db.exec(`
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS wallets (
     id INTEGER PRIMARY KEY,
-    chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ')),
+    chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX')),
     address TEXT NOT NULL,
     label TEXT NOT NULL DEFAULT '',
     source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub')),
@@ -89,6 +91,40 @@ db.exec(`
   PRAGMA optimize;
 `);
 
+function migrateWalletSchemaForTron() {
+  const walletSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'wallets'").get()?.sql || "";
+  if (walletSql.includes("'TRX'")) return;
+  const walletColumns = new Set(db.prepare("PRAGMA table_info(wallets)").all().map((column) => column.name));
+  const sourceType = walletColumns.has("source_type") ? "source_type" : "'address'";
+  const xpubAddressType = walletColumns.has("xpub_address_type") ? "xpub_address_type" : "NULL";
+
+  db.exec(`
+    PRAGMA foreign_keys = OFF;
+    BEGIN;
+    CREATE TABLE wallets_trx_migration (
+      id INTEGER PRIMARY KEY,
+      chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX')),
+      address TEXT NOT NULL,
+      label TEXT NOT NULL DEFAULT '',
+      source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub')),
+      xpub_address_type TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_synced_at TEXT,
+      UNIQUE(chain, address)
+    );
+    INSERT INTO wallets_trx_migration (id, chain, address, label, source_type, xpub_address_type, created_at, last_synced_at)
+    SELECT id, chain, address, label,
+      COALESCE(${sourceType}, 'address'), ${xpubAddressType}, created_at, last_synced_at
+    FROM wallets;
+    DROP TABLE wallets;
+    ALTER TABLE wallets_trx_migration RENAME TO wallets;
+    COMMIT;
+    PRAGMA foreign_keys = ON;
+  `);
+}
+
+migrateWalletSchemaForTron();
+
 // Existing installations predate automatic purpose assignment. Preserve manual
 // entries, while allowing unclassified legacy rows to be enriched on re-sync.
 const walletColumnNames = new Set(db.prepare("PRAGMA table_info(wallets)").all().map((column) => column.name));
@@ -142,11 +178,11 @@ function positiveNumber(value) {
   return Number.isFinite(number) && number > 0 ? number : null;
 }
 
-async function fetchJson(url) {
+async function fetchJson(url, additionalHeaders = {}) {
   let response;
   try {
     response = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "CryptoBuch/1.0" },
+      headers: { Accept: "application/json", "User-Agent": "CryptoBuch/1.0", ...additionalHeaders },
       signal: AbortSignal.timeout(25000),
     });
   } catch (error) {
@@ -166,19 +202,20 @@ async function getCurrentPrices() {
   if (currentPriceCache.expiresAt > Date.now()) return currentPriceCache.data;
 
   try {
-    const data = await fetchJson(
-      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,tezos&vs_currencies=eur&include_last_updated_at=true",
-    );
-    const prices = {
-      BTC: Number(data.bitcoin?.eur) || null,
-      XTZ: Number(data.tezos?.eur) || null,
-      updatedAt: Math.max(Number(data.bitcoin?.last_updated_at || 0), Number(data.tezos?.last_updated_at || 0)) || null,
-    };
+    const entries = Object.entries(CHAIN_CONFIG);
+    const ids = entries.map(([, config]) => config.coinGeckoId).filter(Boolean).join(",");
+    const data = await fetchJson(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=eur&include_last_updated_at=true`);
+    const prices = Object.fromEntries(entries.map(([chain, config]) => [chain, positiveNumber(data[config.coinGeckoId]?.eur)]));
+    prices.updatedAt = Math.max(...entries.map(([, config]) => Number(data[config.coinGeckoId]?.last_updated_at || 0)), 0) || null;
     currentPriceCache = { data: prices, expiresAt: Date.now() + 5 * 60 * 1000 };
     return prices;
   } catch (error) {
     // An unavailable price service must not hide a locally stored portfolio.
-    return { BTC: null, XTZ: null, updatedAt: null, warning: error.message };
+    return {
+      ...Object.fromEntries(Object.keys(CHAIN_CONFIG).map((chain) => [chain, null])),
+      updatedAt: null,
+      warning: error.message,
+    };
   }
 }
 
@@ -197,7 +234,7 @@ function saveHistoricalPrice(coinId, date, price) {
 }
 
 async function hydrateHistoricalPrices(chain, timestamps) {
-  const coinId = COIN_IDS[chain];
+  const coinId = CHAIN_CONFIG[chain]?.coinGeckoId;
   const dates = [...new Set(timestamps.filter(Boolean).map(isoDay))].sort();
   if (!coinId || dates.length === 0) return new Map();
 
@@ -360,6 +397,34 @@ async function fetchTezosTransactions(address) {
   return MAX_TRANSACTIONS_PER_SYNC ? output.slice(0, MAX_TRANSACTIONS_PER_SYNC) : output;
 }
 
+async function fetchTronTransactions(address) {
+  const output = [];
+  let fingerprint = null;
+  const pageSize = 200;
+  const headers = TRONGRID_API_KEY ? { "TRON-PRO-API-KEY": TRONGRID_API_KEY } : {};
+
+  while (true) {
+    if (MAX_TRANSACTIONS_PER_SYNC && output.length >= MAX_TRANSACTIONS_PER_SYNC) break;
+    const query = new URLSearchParams({
+      only_confirmed: "true",
+      limit: String(pageSize),
+      order_by: "block_timestamp,desc",
+    });
+    if (fingerprint) query.set("fingerprint", fingerprint);
+    const payload = await fetchJson(
+      `${TRONGRID_BASE_URL}/v1/accounts/${encodeURIComponent(address)}/transactions?${query.toString()}`,
+      headers,
+    );
+    const page = Array.isArray(payload.data) ? payload.data : [];
+    if (page.length === 0) break;
+    output.push(...page);
+    const nextFingerprint = payload.meta?.fingerprint;
+    if (page.length < pageSize || !nextFingerprint || nextFingerprint === fingerprint) break;
+    fingerprint = nextFingerprint;
+  }
+  return MAX_TRANSACTIONS_PER_SYNC ? output.slice(0, MAX_TRANSACTIONS_PER_SYNC) : output;
+}
+
 function normalizeBitcoinTransaction(transaction, addresses) {
   const isWalletAddress = (address) => Boolean(address && addresses.has(address));
   const inputAmount = transaction.vin.reduce(
@@ -412,6 +477,39 @@ function normalizeTezosTransaction(transaction, address) {
   };
 }
 
+const CHAIN_ADAPTERS = {
+  BTC: {
+    async load(wallet) {
+      if (wallet.source_type === "xpub") {
+        const discovery = await discoverXpubAddresses(wallet);
+        return {
+          rawTransactions: await fetchBitcoinTransactionsForAddresses(discovery.addresses),
+          context: new Set(discovery.addresses),
+          xpubCapped: discovery.capped,
+        };
+      }
+      return {
+        rawTransactions: await fetchBitcoinTransactions(wallet.address),
+        context: new Set([wallet.address]),
+        xpubCapped: false,
+      };
+    },
+    normalize: normalizeBitcoinTransaction,
+  },
+  XTZ: {
+    async load(wallet) {
+      return { rawTransactions: await fetchTezosTransactions(wallet.address), context: wallet.address, xpubCapped: false };
+    },
+    normalize: normalizeTezosTransaction,
+  },
+  TRX: {
+    async load(wallet) {
+      return { rawTransactions: await fetchTronTransactions(wallet.address), context: wallet.address, xpubCapped: false };
+    },
+    normalize: normalizeTronNativeTransfer,
+  },
+};
+
 function getWallet(id) {
   const wallet = db.prepare("SELECT * FROM wallets WHERE id = ?").get(id);
   if (!wallet) throw makeError("Wallet nicht gefunden.", 404);
@@ -419,25 +517,10 @@ function getWallet(id) {
 }
 
 async function syncWallet(wallet) {
-  let rawTransactions;
-  let bitcoinAddresses;
-  let xpubCapped = false;
-  if (wallet.chain === "BTC") {
-    if (wallet.source_type === "xpub") {
-      const discovery = await discoverXpubAddresses(wallet);
-      bitcoinAddresses = new Set(discovery.addresses);
-      xpubCapped = discovery.capped;
-      rawTransactions = await fetchBitcoinTransactionsForAddresses(discovery.addresses);
-    } else {
-      bitcoinAddresses = new Set([wallet.address]);
-      rawTransactions = await fetchBitcoinTransactions(wallet.address);
-    }
-  } else {
-    rawTransactions = await fetchTezosTransactions(wallet.address);
-  }
-  const transactions = rawTransactions.map((item) => wallet.chain === "BTC"
-    ? normalizeBitcoinTransaction(item, bitcoinAddresses)
-    : normalizeTezosTransaction(item, wallet.address));
+  const adapter = CHAIN_ADAPTERS[wallet.chain];
+  if (!adapter) throw makeError("Für diese Blockchain ist keine Synchronisierung eingerichtet.");
+  const { rawTransactions, context, xpubCapped } = await adapter.load(wallet);
+  const transactions = rawTransactions.map((item) => adapter.normalize(item, context)).filter(Boolean);
   const pricesByDate = await hydrateHistoricalPrices(
     wallet.chain,
     transactions.filter((transaction) => !positiveNumber(transaction.historicalPrice)).map((transaction) => transaction.timestamp),
@@ -525,10 +608,10 @@ async function portfolioResponse() {
     ...transaction,
     price_now_eur: currentPrices[transaction.chain] || null,
   }));
-  const holdings = { BTC: 0, XTZ: 0 };
+  const holdings = Object.fromEntries(Object.values(CHAIN_CONFIG).map((chain) => [chain.asset, 0]));
   for (const transaction of enriched) {
     const sign = transaction.direction === "in" ? 1 : transaction.direction === "out" ? -1 : 0;
-    holdings[transaction.asset] += sign * Number(transaction.amount);
+    holdings[transaction.asset] = Number(holdings[transaction.asset] || 0) + sign * Number(transaction.amount);
   }
   const totalValueEur = Object.entries(holdings).reduce(
     (sum, [asset, amount]) => sum + amount * Number(currentPrices[asset] || 0),
@@ -542,7 +625,16 @@ async function portfolioResponse() {
     totalValueEur,
     currentPrices,
     purposePresets: PURPOSE_PRESETS,
-    chains: Object.fromEntries(Object.entries(CHAIN_CONFIG).map(([key, value]) => [key, { name: value.name, asset: value.asset }])),
+    chains: Object.fromEntries(Object.entries(CHAIN_CONFIG).map(([key, value]) => [key, {
+      name: value.name,
+      asset: value.asset,
+      decimals: value.decimals,
+      icon: value.icon,
+      addressPlaceholder: value.addressPlaceholder,
+      addressHint: value.addressHint,
+      supportsXpub: key === "BTC",
+      explorer: value.explorer,
+    }])),
   };
 }
 
@@ -561,7 +653,7 @@ app.post("/api/wallets", (request, response, next) => {
     const address = cleanLabel(request.body?.address, 120);
     const label = cleanLabel(request.body?.label, 80);
     const xpubAddressType = String(request.body?.xpubAddressType || "p2wpkh").toLowerCase();
-    if (!CHAIN_CONFIG[chain]) throw makeError("Bitte Bitcoin oder Tezos auswählen.");
+    if (!CHAIN_CONFIG[chain]) throw makeError("Bitte eine unterstützte Blockchain auswählen.");
     if (!['address', 'xpub'].includes(sourceType)) throw makeError("Nicht unterstützte Wallet-Art.");
     if (sourceType === "xpub") {
       if (chain !== "BTC") throw makeError("xPub wird nur für Bitcoin unterstützt.");
@@ -659,6 +751,10 @@ app.use((error, _request, response, _next) => {
   response.status(status).json({ error: status >= 500 ? "Der Vorgang konnte nicht abgeschlossen werden." : error.message });
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`CryptoBuch läuft auf http://0.0.0.0:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`CryptoBuch läuft auf http://0.0.0.0:${PORT}`);
+  });
+}
+
+module.exports = { app, db };
