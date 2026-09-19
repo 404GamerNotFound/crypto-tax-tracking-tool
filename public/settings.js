@@ -27,6 +27,15 @@ function render(settings) {
   el("trongrid-api").value = settings.tronGridBaseUrl;
   el("blockfrost-api").value = settings.blockfrostBaseUrl;
   el("etherscan-api").value = settings.etherscanApiBaseUrl;
+  el("bscscan-api").value = settings.bscScanApiBaseUrl;
+  el("snowtrace-api").value = settings.snowtraceApiBaseUrl;
+  el("solscan-api").value = settings.solscanApiBaseUrl;
+  el("xrpl-rpc").value = settings.xrplRpcUrl;
+  el("stellar-horizon").value = settings.stellarHorizonBaseUrl;
+  el("nearblocks-api").value = settings.nearBlocksApiBaseUrl;
+  el("tonapi-api").value = settings.tonApiBaseUrl;
+  el("blockchair-api").value = settings.blockchairApiBaseUrl;
+  el("blockcypher-api").value = settings.blockCypherApiBaseUrl;
   el("coingecko-api").value = settings.coinGeckoBaseUrl;
   el("xpub-gap").value = settings.xpubGapLimit;
   el("xpub-maximum").value = settings.xpubMaxDerivationsPerBranch;
@@ -40,6 +49,13 @@ function render(settings) {
   el("etherscan-key-status").textContent = settings.etherscanApiKeyConfigured
     ? "Ein API-Key ist gespeichert. Leer lassen, um ihn beizubehalten."
     : "Kein API-Key gespeichert. Ethereum-Wallets können noch nicht synchronisiert werden.";
+  el("bscscan-key-status").textContent = settings.bscScanApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. BNB-Wallets können noch nicht synchronisiert werden.";
+  el("snowtrace-key-status").textContent = settings.snowtraceApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. AVAX-Wallets können noch nicht synchronisiert werden.";
+  el("solscan-key-status").textContent = settings.solscanApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. Solana-Wallets können noch nicht synchronisiert werden.";
+  el("nearblocks-key-status").textContent = settings.nearBlocksApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. NEAR-Wallets können noch nicht synchronisiert werden.";
+  el("tonapi-key-status").textContent = settings.tonApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche TonAPI-Rate kann begrenzt sein.";
+  el("blockchair-key-status").textContent = settings.blockchairApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche Blockchair-Rate kann begrenzt sein.";
+  el("blockcypher-token-status").textContent = settings.blockCypherApiTokenConfigured ? "Ein Token ist gespeichert." : "Kein Token gespeichert; die öffentliche BlockCypher-Rate kann begrenzt sein.";
 }
 
 function setSaving(button, saving) {
@@ -74,6 +90,15 @@ el("settings-form").addEventListener("submit", async (event) => {
         tronGridBaseUrl: form.get("tronGridBaseUrl"),
         blockfrostBaseUrl: form.get("blockfrostBaseUrl"),
         etherscanApiBaseUrl: form.get("etherscanApiBaseUrl"),
+        bscScanApiBaseUrl: form.get("bscScanApiBaseUrl"),
+        snowtraceApiBaseUrl: form.get("snowtraceApiBaseUrl"),
+        solscanApiBaseUrl: form.get("solscanApiBaseUrl"),
+        xrplRpcUrl: form.get("xrplRpcUrl"),
+        stellarHorizonBaseUrl: form.get("stellarHorizonBaseUrl"),
+        nearBlocksApiBaseUrl: form.get("nearBlocksApiBaseUrl"),
+        tonApiBaseUrl: form.get("tonApiBaseUrl"),
+        blockchairApiBaseUrl: form.get("blockchairApiBaseUrl"),
+        blockCypherApiBaseUrl: form.get("blockCypherApiBaseUrl"),
         coinGeckoBaseUrl: form.get("coinGeckoBaseUrl"),
         xpubGapLimit: form.get("xpubGapLimit"),
         xpubMaxDerivationsPerBranch: form.get("xpubMaxDerivationsPerBranch"),
@@ -84,6 +109,14 @@ el("settings-form").addEventListener("submit", async (event) => {
         clearBlockfrostProjectId: form.get("clearBlockfrostProjectId") === "on",
         etherscanApiKey: form.get("etherscanApiKey"),
         clearEtherscanApiKey: form.get("clearEtherscanApiKey") === "on",
+        bscScanApiKey: form.get("bscScanApiKey"),
+        snowtraceApiKey: form.get("snowtraceApiKey"),
+        solscanApiKey: form.get("solscanApiKey"),
+        nearBlocksApiKey: form.get("nearBlocksApiKey"),
+        tonApiKey: form.get("tonApiKey"),
+        blockchairApiKey: form.get("blockchairApiKey"),
+        blockCypherApiToken: form.get("blockCypherApiToken"),
+        clearAdditionalNetworkApiKeys: form.get("clearAdditionalNetworkApiKeys") === "on",
       }),
     });
     el("trongrid-key").value = "";
@@ -92,6 +125,8 @@ el("settings-form").addEventListener("submit", async (event) => {
     el("clear-blockfrost-project-id").checked = false;
     el("etherscan-key").value = "";
     el("clear-etherscan-key").checked = false;
+    for (const id of ["bscscan-key", "snowtrace-key", "solscan-key", "nearblocks-key", "tonapi-key", "blockchair-key", "blockcypher-token"]) el(id).value = "";
+    el("clear-additional-network-keys").checked = false;
     render(settings);
     toast("Einstellungen gespeichert. Sie gelten beim nächsten Synchronisieren.");
   } catch (requestError) {

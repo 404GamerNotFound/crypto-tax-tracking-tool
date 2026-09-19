@@ -15,6 +15,15 @@ const { normalizeTronNativeTransfer } = require("./lib/tron");
 const { normalizeCardanoTransaction } = require("./lib/cardano");
 const { normalizeEthereumTransaction, normalizeErc20Transfer } = require("./lib/ethereum");
 const { buildTopMarketCatalog } = require("./lib/market-catalog");
+const {
+  normalizeEvmNativeTransfer,
+  normalizeSolscanTransfer,
+  normalizeXrpPayment,
+  normalizeStellarPayment,
+  normalizeNearTransfer,
+  normalizeTonMessage,
+  normalizeBlockchairUtxoTransaction,
+} = require("./lib/additional-chains");
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const number = Number(value);
@@ -33,10 +42,26 @@ const SETTINGS_DEFAULTS = Object.freeze({
   tronGridBaseUrl: (process.env.TRONGRID_BASE_URL || "https://api.trongrid.io").replace(/\/$/, ""),
   blockfrostBaseUrl: (process.env.BLOCKFROST_BASE_URL || "https://cardano-mainnet.blockfrost.io/api/v0").replace(/\/$/, ""),
   etherscanApiBaseUrl: (process.env.ETHERSCAN_API_BASE_URL || "https://api.etherscan.io/v2/api").replace(/\/$/, ""),
+  bscScanApiBaseUrl: (process.env.BSCSCAN_API_BASE_URL || "https://api.bscscan.com/api").replace(/\/$/, ""),
+  snowtraceApiBaseUrl: (process.env.SNOWTRACE_API_BASE_URL || "https://api.snowtrace.io/api").replace(/\/$/, ""),
+  solscanApiBaseUrl: (process.env.SOLSCAN_API_BASE_URL || "https://pro-api.solscan.io/v2.0").replace(/\/$/, ""),
+  xrplRpcUrl: (process.env.XRPL_RPC_URL || "https://xrplcluster.com/").replace(/\/$/, ""),
+  stellarHorizonBaseUrl: (process.env.STELLAR_HORIZON_BASE_URL || "https://horizon.stellar.org").replace(/\/$/, ""),
+  nearBlocksApiBaseUrl: (process.env.NEARBLOCKS_API_BASE_URL || "https://api.nearblocks.io/v1").replace(/\/$/, ""),
+  tonApiBaseUrl: (process.env.TONAPI_BASE_URL || "https://tonapi.io/v2").replace(/\/$/, ""),
+  blockchairApiBaseUrl: (process.env.BLOCKCHAIR_API_BASE_URL || "https://api.blockchair.com").replace(/\/$/, ""),
+  blockCypherApiBaseUrl: (process.env.BLOCKCYPHER_API_BASE_URL || "https://api.blockcypher.com/v1").replace(/\/$/, ""),
   coinGeckoBaseUrl: (process.env.COINGECKO_API_BASE_URL || "https://api.coingecko.com/api/v3").replace(/\/$/, ""),
   tronGridApiKey: String(process.env.TRONGRID_API_KEY || "").trim(),
   blockfrostProjectId: String(process.env.BLOCKFROST_PROJECT_ID || "").trim(),
   etherscanApiKey: String(process.env.ETHERSCAN_API_KEY || "").trim(),
+  bscScanApiKey: String(process.env.BSCSCAN_API_KEY || "").trim(),
+  snowtraceApiKey: String(process.env.SNOWTRACE_API_KEY || "").trim(),
+  solscanApiKey: String(process.env.SOLSCAN_API_KEY || "").trim(),
+  nearBlocksApiKey: String(process.env.NEARBLOCKS_API_KEY || "").trim(),
+  tonApiKey: String(process.env.TONAPI_KEY || "").trim(),
+  blockchairApiKey: String(process.env.BLOCKCHAIR_API_KEY || "").trim(),
+  blockCypherApiToken: String(process.env.BLOCKCYPHER_API_TOKEN || "").trim(),
   xpubGapLimit: DEFAULT_XPUB_GAP_LIMIT,
   xpubMaxDerivationsPerBranch: boundedInteger(process.env.XPUB_MAX_DERIVATIONS_PER_BRANCH, 200, DEFAULT_XPUB_GAP_LIMIT, 1000),
   xtzStakingPayoutAliases: String(process.env.XTZ_STAKING_PAYOUT_ALIASES || "Stake.fish Payouts").trim(),
@@ -60,7 +85,7 @@ db.exec(`
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS wallets (
     id INTEGER PRIMARY KEY,
-    chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX', 'ADA', 'ETH')),
+    chain TEXT NOT NULL,
     address TEXT NOT NULL,
     label TEXT NOT NULL DEFAULT '',
     source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub', 'stake')),
@@ -127,7 +152,7 @@ db.exec(`
 
 function migrateWalletSchemaForChains() {
   const walletSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'wallets'").get()?.sql || "";
-  if (walletSql.includes("'ETH'") && walletSql.includes("'stake'")) return;
+  if (!walletSql.includes("CHECK (chain IN")) return;
   const walletColumns = new Set(db.prepare("PRAGMA table_info(wallets)").all().map((column) => column.name));
   const sourceType = walletColumns.has("source_type") ? "source_type" : "'address'";
   const xpubAddressType = walletColumns.has("xpub_address_type") ? "xpub_address_type" : "NULL";
@@ -137,7 +162,7 @@ function migrateWalletSchemaForChains() {
     BEGIN;
     CREATE TABLE wallets_chain_migration (
       id INTEGER PRIMARY KEY,
-      chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX', 'ADA', 'ETH')),
+      chain TEXT NOT NULL,
       address TEXT NOT NULL,
       label TEXT NOT NULL DEFAULT '',
       source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub', 'stake')),
@@ -238,10 +263,26 @@ function runtimeSettings() {
     tronGridBaseUrl: values.tronGridBaseUrl || SETTINGS_DEFAULTS.tronGridBaseUrl,
     blockfrostBaseUrl: values.blockfrostBaseUrl || SETTINGS_DEFAULTS.blockfrostBaseUrl,
     etherscanApiBaseUrl: values.etherscanApiBaseUrl || SETTINGS_DEFAULTS.etherscanApiBaseUrl,
+    bscScanApiBaseUrl: values.bscScanApiBaseUrl || SETTINGS_DEFAULTS.bscScanApiBaseUrl,
+    snowtraceApiBaseUrl: values.snowtraceApiBaseUrl || SETTINGS_DEFAULTS.snowtraceApiBaseUrl,
+    solscanApiBaseUrl: values.solscanApiBaseUrl || SETTINGS_DEFAULTS.solscanApiBaseUrl,
+    xrplRpcUrl: values.xrplRpcUrl || SETTINGS_DEFAULTS.xrplRpcUrl,
+    stellarHorizonBaseUrl: values.stellarHorizonBaseUrl || SETTINGS_DEFAULTS.stellarHorizonBaseUrl,
+    nearBlocksApiBaseUrl: values.nearBlocksApiBaseUrl || SETTINGS_DEFAULTS.nearBlocksApiBaseUrl,
+    tonApiBaseUrl: values.tonApiBaseUrl || SETTINGS_DEFAULTS.tonApiBaseUrl,
+    blockchairApiBaseUrl: values.blockchairApiBaseUrl || SETTINGS_DEFAULTS.blockchairApiBaseUrl,
+    blockCypherApiBaseUrl: values.blockCypherApiBaseUrl || SETTINGS_DEFAULTS.blockCypherApiBaseUrl,
     coinGeckoBaseUrl: values.coinGeckoBaseUrl || SETTINGS_DEFAULTS.coinGeckoBaseUrl,
     tronGridApiKey: values.tronGridApiKey || "",
     blockfrostProjectId: values.blockfrostProjectId || "",
     etherscanApiKey: values.etherscanApiKey || "",
+    bscScanApiKey: values.bscScanApiKey || "",
+    snowtraceApiKey: values.snowtraceApiKey || "",
+    solscanApiKey: values.solscanApiKey || "",
+    nearBlocksApiKey: values.nearBlocksApiKey || "",
+    tonApiKey: values.tonApiKey || "",
+    blockchairApiKey: values.blockchairApiKey || "",
+    blockCypherApiToken: values.blockCypherApiToken || "",
     xpubGapLimit,
     xpubMaxDerivationsPerBranch: boundedInteger(values.xpubMaxDerivationsPerBranch, SETTINGS_DEFAULTS.xpubMaxDerivationsPerBranch, xpubGapLimit, 1000),
     xtzStakingPayoutAliases: values.xtzStakingPayoutAliases || "",
@@ -259,10 +300,26 @@ function settingsResponse() {
     tronGridBaseUrl: settings.tronGridBaseUrl,
     blockfrostBaseUrl: settings.blockfrostBaseUrl,
     etherscanApiBaseUrl: settings.etherscanApiBaseUrl,
+    bscScanApiBaseUrl: settings.bscScanApiBaseUrl,
+    snowtraceApiBaseUrl: settings.snowtraceApiBaseUrl,
+    solscanApiBaseUrl: settings.solscanApiBaseUrl,
+    xrplRpcUrl: settings.xrplRpcUrl,
+    stellarHorizonBaseUrl: settings.stellarHorizonBaseUrl,
+    nearBlocksApiBaseUrl: settings.nearBlocksApiBaseUrl,
+    tonApiBaseUrl: settings.tonApiBaseUrl,
+    blockchairApiBaseUrl: settings.blockchairApiBaseUrl,
+    blockCypherApiBaseUrl: settings.blockCypherApiBaseUrl,
     coinGeckoBaseUrl: settings.coinGeckoBaseUrl,
     tronGridApiKeyConfigured: Boolean(settings.tronGridApiKey),
     blockfrostProjectIdConfigured: Boolean(settings.blockfrostProjectId),
     etherscanApiKeyConfigured: Boolean(settings.etherscanApiKey),
+    bscScanApiKeyConfigured: Boolean(settings.bscScanApiKey),
+    snowtraceApiKeyConfigured: Boolean(settings.snowtraceApiKey),
+    solscanApiKeyConfigured: Boolean(settings.solscanApiKey),
+    nearBlocksApiKeyConfigured: Boolean(settings.nearBlocksApiKey),
+    tonApiKeyConfigured: Boolean(settings.tonApiKey),
+    blockchairApiKeyConfigured: Boolean(settings.blockchairApiKey),
+    blockCypherApiTokenConfigured: Boolean(settings.blockCypherApiToken),
     xpubGapLimit: settings.xpubGapLimit,
     xpubMaxDerivationsPerBranch: settings.xpubMaxDerivationsPerBranch,
     xtzStakingPayoutAliases: settings.xtzStakingPayoutAliases,
@@ -292,6 +349,15 @@ function updateSettings(input) {
     tronGridBaseUrl: cleanServiceUrl(input.tronGridBaseUrl, "Die TronGrid-URL"),
     blockfrostBaseUrl: cleanServiceUrl(input.blockfrostBaseUrl, "Die Blockfrost-URL"),
     etherscanApiBaseUrl: cleanServiceUrl(input.etherscanApiBaseUrl, "Die Etherscan-URL"),
+    bscScanApiBaseUrl: cleanServiceUrl(input.bscScanApiBaseUrl, "Die BscScan-URL"),
+    snowtraceApiBaseUrl: cleanServiceUrl(input.snowtraceApiBaseUrl, "Die Snowtrace-URL"),
+    solscanApiBaseUrl: cleanServiceUrl(input.solscanApiBaseUrl, "Die Solscan-URL"),
+    xrplRpcUrl: cleanServiceUrl(input.xrplRpcUrl, "Die XRPL-RPC-URL"),
+    stellarHorizonBaseUrl: cleanServiceUrl(input.stellarHorizonBaseUrl, "Die Stellar-Horizon-URL"),
+    nearBlocksApiBaseUrl: cleanServiceUrl(input.nearBlocksApiBaseUrl, "Die NearBlocks-URL"),
+    tonApiBaseUrl: cleanServiceUrl(input.tonApiBaseUrl, "Die TonAPI-URL"),
+    blockchairApiBaseUrl: cleanServiceUrl(input.blockchairApiBaseUrl, "Die Blockchair-URL"),
+    blockCypherApiBaseUrl: cleanServiceUrl(input.blockCypherApiBaseUrl, "Die BlockCypher-URL"),
     coinGeckoBaseUrl: cleanServiceUrl(input.coinGeckoBaseUrl, "Die CoinGecko-URL"),
     xpubGapLimit,
     xpubMaxDerivationsPerBranch,
@@ -299,10 +365,20 @@ function updateSettings(input) {
     tronGridApiKey: input.clearTronGridApiKey ? "" : String(input.tronGridApiKey || "").trim() || current.tronGridApiKey,
     blockfrostProjectId: input.clearBlockfrostProjectId ? "" : String(input.blockfrostProjectId || "").trim() || current.blockfrostProjectId,
     etherscanApiKey: input.clearEtherscanApiKey ? "" : String(input.etherscanApiKey || "").trim() || current.etherscanApiKey,
+    bscScanApiKey: input.clearAdditionalNetworkApiKeys ? "" : String(input.bscScanApiKey || "").trim() || current.bscScanApiKey,
+    snowtraceApiKey: input.clearAdditionalNetworkApiKeys ? "" : String(input.snowtraceApiKey || "").trim() || current.snowtraceApiKey,
+    solscanApiKey: input.clearAdditionalNetworkApiKeys ? "" : String(input.solscanApiKey || "").trim() || current.solscanApiKey,
+    nearBlocksApiKey: input.clearAdditionalNetworkApiKeys ? "" : String(input.nearBlocksApiKey || "").trim() || current.nearBlocksApiKey,
+    tonApiKey: input.clearAdditionalNetworkApiKeys ? "" : String(input.tonApiKey || "").trim() || current.tonApiKey,
+    blockchairApiKey: input.clearAdditionalNetworkApiKeys ? "" : String(input.blockchairApiKey || "").trim() || current.blockchairApiKey,
+    blockCypherApiToken: input.clearAdditionalNetworkApiKeys ? "" : String(input.blockCypherApiToken || "").trim() || current.blockCypherApiToken,
   };
   if (next.tronGridApiKey.length > 300) throw makeError("Der TronGrid-API-Key ist zu lang.");
   if (next.blockfrostProjectId.length > 300) throw makeError("Die Blockfrost Project-ID ist zu lang.");
   if (next.etherscanApiKey.length > 300) throw makeError("Der Etherscan-API-Key ist zu lang.");
+  for (const [key, value] of Object.entries(next).filter(([key]) => /(?:ApiKey|ApiToken)$/.test(key))) {
+    if (String(value).length > 300) throw makeError(`Der Wert für ${key} ist zu lang.`);
+  }
 
   const upsert = db.prepare(`
     INSERT INTO app_settings (setting_key, setting_value, updated_at)
@@ -789,6 +865,190 @@ async function fetchEtherscanRecords(address, action, settings, maxTransactions 
   return maxTransactions ? output.slice(0, maxTransactions) : output;
 }
 
+async function fetchExplorerNativeTransactions(address, { apiBaseUrl, apiKey, providerName }, settings) {
+  if (!apiKey) throw makeError(`Für ${providerName} wird ein API-Key benötigt. Bitte unter Einstellungen → Weitere Netzwerke hinterlegen.`);
+  const output = [];
+  const pageSize = 1000;
+  let page = 1;
+  while (true) {
+    if (settings.maxTransactionsPerSync && output.length >= settings.maxTransactionsPerSync) break;
+    const url = new URL(apiBaseUrl);
+    url.search = new URLSearchParams({
+      module: "account",
+      action: "txlist",
+      address,
+      startblock: "0",
+      endblock: "99999999",
+      page: String(page),
+      offset: String(pageSize),
+      sort: "desc",
+      apikey: apiKey,
+    }).toString();
+    const payload = await fetchJson(url.toString());
+    const result = Array.isArray(payload.result) ? payload.result : [];
+    if (String(payload.status) === "0" && result.length === 0) {
+      const message = `${payload.message || ""} ${typeof payload.result === "string" ? payload.result : ""}`;
+      if (/no transactions|no records/i.test(message)) break;
+      throw makeError(`${providerName} konnte die Transaktionshistorie nicht laden: ${payload.result || payload.message || "unbekannter Fehler"}.`, 502);
+    }
+    if (!Array.isArray(payload.result)) throw makeError(`${providerName} lieferte ein unerwartetes Antwortformat.`, 502);
+    output.push(...result);
+    if (result.length < pageSize) break;
+    page += 1;
+  }
+  return settings.maxTransactionsPerSync ? output.slice(0, settings.maxTransactionsPerSync) : output;
+}
+
+async function postJson(url, body, additionalHeaders = {}) {
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json", "User-Agent": "CryptoBuch/1.0", ...additionalHeaders },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(25000),
+    });
+  } catch (error) {
+    throw makeError(`Externer Dienst nicht erreichbar: ${error.message}`, 502);
+  }
+  if (!response.ok) throw makeError(`Die Blockchain-Datenquelle ist momentan nicht verfügbar (HTTP ${response.status}).`, 502);
+  return response.json();
+}
+
+async function fetchSolscanTransfers(address, settings) {
+  if (!settings.solscanApiKey) throw makeError("Für Solana wird ein Solscan-API-Key benötigt. Bitte unter Einstellungen → Weitere Netzwerke hinterlegen.");
+  const output = [];
+  let page = 1;
+  while (true) {
+    if (settings.maxTransactionsPerSync && output.length >= settings.maxTransactionsPerSync) break;
+    const url = new URL(`${settings.solscanApiBaseUrl}/account/transfer`);
+    url.search = new URLSearchParams({ address, page: String(page), page_size: "100", sort_by: "block_time", sort_order: "desc" }).toString();
+    const payload = await fetchJson(url.toString(), { token: settings.solscanApiKey });
+    const rows = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.result) ? payload.result : [];
+    output.push(...rows);
+    if (rows.length < 100) break;
+    page += 1;
+  }
+  return settings.maxTransactionsPerSync ? output.slice(0, settings.maxTransactionsPerSync) : output;
+}
+
+async function fetchXrpTransactions(address, settings) {
+  const output = [];
+  let marker = null;
+  while (true) {
+    if (settings.maxTransactionsPerSync && output.length >= settings.maxTransactionsPerSync) break;
+    const params = { account: address, ledger_index_min: -1, ledger_index_max: -1, binary: false, forward: false, limit: 200 };
+    if (marker) params.marker = marker;
+    const payload = await postJson(settings.xrplRpcUrl, { method: "account_tx", params: [params] });
+    const result = payload.result || {};
+    const rows = Array.isArray(result.transactions) ? result.transactions : [];
+    output.push(...rows);
+    marker = result.marker || null;
+    if (!marker || rows.length === 0) break;
+  }
+  return settings.maxTransactionsPerSync ? output.slice(0, settings.maxTransactionsPerSync) : output;
+}
+
+async function fetchStellarPayments(address, settings) {
+  const output = [];
+  let next = `${settings.stellarHorizonBaseUrl}/accounts/${encodeURIComponent(address)}/payments?order=desc&limit=200`;
+  while (next) {
+    if (settings.maxTransactionsPerSync && output.length >= settings.maxTransactionsPerSync) break;
+    const payload = await fetchJson(next);
+    const rows = Array.isArray(payload._embedded?.records) ? payload._embedded.records : [];
+    output.push(...rows);
+    next = payload._links?.next?.href || null;
+    if (rows.length === 0) break;
+  }
+  return settings.maxTransactionsPerSync ? output.slice(0, settings.maxTransactionsPerSync) : output;
+}
+
+async function fetchNearTransactions(address, settings) {
+  if (!settings.nearBlocksApiKey) throw makeError("Für NEAR wird ein NearBlocks-API-Key benötigt. Bitte unter Einstellungen → Weitere Netzwerke hinterlegen.");
+  const output = [];
+  let page = 1;
+  while (true) {
+    if (settings.maxTransactionsPerSync && output.length >= settings.maxTransactionsPerSync) break;
+    const url = new URL(`${settings.nearBlocksApiBaseUrl}/account/${encodeURIComponent(address)}/txns`);
+    url.search = new URLSearchParams({ page: String(page), per_page: "100", order: "desc" }).toString();
+    const payload = await fetchJson(url.toString(), { Authorization: `Bearer ${settings.nearBlocksApiKey}` });
+    const rows = Array.isArray(payload.txns) ? payload.txns : Array.isArray(payload.transactions) ? payload.transactions : [];
+    output.push(...rows);
+    if (rows.length < 100) break;
+    page += 1;
+  }
+  return settings.maxTransactionsPerSync ? output.slice(0, settings.maxTransactionsPerSync) : output;
+}
+
+async function fetchTonMessages(address, settings) {
+  const headers = settings.tonApiKey ? { Authorization: `Bearer ${settings.tonApiKey}` } : {};
+  const transactions = [];
+  const seen = new Set();
+  let beforeLt = null;
+  while (true) {
+    if (settings.maxTransactionsPerSync && transactions.length >= settings.maxTransactionsPerSync) break;
+    const remaining = settings.maxTransactionsPerSync ? settings.maxTransactionsPerSync - transactions.length : 1000;
+    const url = new URL(`${settings.tonApiBaseUrl}/blockchain/accounts/${encodeURIComponent(address)}/transactions`);
+    url.search = new URLSearchParams({ limit: String(Math.min(1000, Math.max(1, remaining))), sort_order: "desc", ...(beforeLt ? { before_lt: String(beforeLt) } : {}) }).toString();
+    const payload = await fetchJson(url.toString(), headers);
+    const page = Array.isArray(payload.transactions) ? payload.transactions : [];
+    for (const transaction of page) {
+      const id = `${transaction.hash || ""}:${transaction.lt || ""}`;
+      if (id !== ":" && !seen.has(id)) {
+        seen.add(id);
+        transactions.push(transaction);
+      }
+    }
+    const lastLt = page.at(-1)?.lt;
+    if (page.length === 0 || page.length < Math.min(1000, Math.max(1, remaining)) || !lastLt || String(lastLt) === String(beforeLt || "")) break;
+    beforeLt = lastLt;
+  }
+  const messages = [];
+  for (const transaction of transactions) {
+    const inMessage = transaction.in_msg;
+    // The endpoint is scoped to this account. Do not compare Friendly and raw
+    // TON address encodings here, because they are equivalent but textually different.
+    if (inMessage?.value) {
+      messages.push({ externalId: `${transaction.hash}:in`, hash: transaction.hash, timestamp: transaction.utime, direction: "in", value: inMessage.value, counterparty: inMessage.source, fee: 0, raw: transaction });
+    }
+    for (const [index, outMessage] of (transaction.out_msgs || []).entries()) {
+      if (!outMessage?.value) continue;
+      messages.push({ externalId: `${transaction.hash}:out:${index}`, hash: transaction.hash, timestamp: transaction.utime, direction: "out", value: outMessage.value, counterparty: outMessage.destination, fee: transaction.total_fees || transaction.fees || 0, raw: transaction });
+    }
+  }
+  return messages;
+}
+
+async function fetchBlockCypherTransactions(address, coin, settings) {
+  const url = new URL(`${settings.blockCypherApiBaseUrl}/${coin}/main/addrs/${encodeURIComponent(address)}/full`);
+  if (settings.blockCypherApiToken) url.searchParams.set("token", settings.blockCypherApiToken);
+  const payload = await fetchJson(url.toString());
+  return (payload.txs || []).map((transaction) => ({
+    transaction: { hash: transaction.hash, time: transaction.confirmed || null, fee: transaction.fees || 0 },
+    inputs: (transaction.inputs || []).map((input) => ({ recipient: input.addresses?.[0], value: input.output_value || 0 })),
+    outputs: (transaction.outputs || []).map((output) => ({ recipient: output.addresses?.[0], value: output.value || 0 })),
+  }));
+}
+
+async function fetchBlockchairTransactions(address, chain, settings) {
+  const dashboard = new URL(`${settings.blockchairApiBaseUrl}/${chain}/dashboards/address/${encodeURIComponent(address)}`);
+  if (settings.blockchairApiKey) dashboard.searchParams.set("key", settings.blockchairApiKey);
+  const summary = await fetchJson(dashboard.toString());
+  const addresses = Object.values(summary.data || {});
+  const hashes = addresses.flatMap((entry) => Array.isArray(entry.transactions) ? entry.transactions : []);
+  const unique = [...new Set(hashes)];
+  const limited = settings.maxTransactionsPerSync ? unique.slice(0, settings.maxTransactionsPerSync) : unique;
+  const rows = [];
+  for (const hash of limited) {
+    const url = new URL(`${settings.blockchairApiBaseUrl}/${chain}/dashboards/transaction/${encodeURIComponent(hash)}`);
+    if (settings.blockchairApiKey) url.searchParams.set("key", settings.blockchairApiKey);
+    const payload = await fetchJson(url.toString());
+    const transaction = Object.values(payload.data || {})[0];
+    if (transaction) rows.push(transaction);
+  }
+  return rows;
+}
+
 async function fetchEthereumTransactions(address, settings) {
   const [native, erc20] = await Promise.all([
     fetchEtherscanRecords(address, "txlist", settings),
@@ -904,6 +1164,88 @@ const CHAIN_ADAPTERS = {
     normalize(item, address) {
       return item.type === "erc20" ? normalizeErc20Transfer(item.transaction, address) : normalizeEthereumTransaction(item.transaction, address);
     },
+  },
+  BNB: {
+    async load(wallet, settings) {
+      return {
+        rawTransactions: await fetchExplorerNativeTransactions(wallet.address, {
+          apiBaseUrl: settings.bscScanApiBaseUrl,
+          apiKey: settings.bscScanApiKey,
+          providerName: "BscScan",
+        }, settings),
+        context: wallet.address,
+        xpubCapped: false,
+      };
+    },
+    normalize(transaction, address) { return normalizeEvmNativeTransfer(transaction, address, CHAIN_CONFIG.BNB); },
+  },
+  AVAX: {
+    async load(wallet, settings) {
+      return {
+        rawTransactions: await fetchExplorerNativeTransactions(wallet.address, {
+          apiBaseUrl: settings.snowtraceApiBaseUrl,
+          apiKey: settings.snowtraceApiKey,
+          providerName: "Snowtrace",
+        }, settings),
+        context: wallet.address,
+        xpubCapped: false,
+      };
+    },
+    normalize(transaction, address) { return normalizeEvmNativeTransfer(transaction, address, CHAIN_CONFIG.AVAX); },
+  },
+  SOL: {
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchSolscanTransfers(wallet.address, settings), context: wallet.address, xpubCapped: false };
+    },
+    normalize: normalizeSolscanTransfer,
+  },
+  XRP: {
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchXrpTransactions(wallet.address, settings), context: wallet.address, xpubCapped: false };
+    },
+    normalize: normalizeXrpPayment,
+  },
+  XLM: {
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchStellarPayments(wallet.address, settings), context: wallet.address, xpubCapped: false };
+    },
+    normalize: normalizeStellarPayment,
+  },
+  NEAR: {
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchNearTransactions(wallet.address, settings), context: wallet.address, xpubCapped: false };
+    },
+    normalize: normalizeNearTransfer,
+  },
+  TON: {
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchTonMessages(wallet.address, settings), context: wallet.address, xpubCapped: false };
+    },
+    normalize: normalizeTonMessage,
+  },
+  DOGE: {
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchBlockCypherTransactions(wallet.address, "doge", settings), context: wallet.address, xpubCapped: false };
+    },
+    normalize(transaction, address) { return normalizeBlockchairUtxoTransaction(transaction, address, CHAIN_CONFIG.DOGE); },
+  },
+  LTC: {
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchBlockCypherTransactions(wallet.address, "ltc", settings), context: wallet.address, xpubCapped: false };
+    },
+    normalize(transaction, address) { return normalizeBlockchairUtxoTransaction(transaction, address, CHAIN_CONFIG.LTC); },
+  },
+  BCH: {
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchBlockchairTransactions(wallet.address, "bitcoin-cash", settings), context: wallet.address, xpubCapped: false };
+    },
+    normalize(transaction, address) { return normalizeBlockchairUtxoTransaction(transaction, address, CHAIN_CONFIG.BCH); },
+  },
+  ZEC: {
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchBlockchairTransactions(wallet.address, "zcash", settings), context: wallet.address, xpubCapped: false };
+    },
+    normalize(transaction, address) { return normalizeBlockchairUtxoTransaction(transaction, address, CHAIN_CONFIG.ZEC); },
   },
 };
 

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
     <title>CryptoBuch · Einstellungen</title>
-    <link rel="stylesheet" href="/styles.css?v=20260919-7" />
+    <link rel="stylesheet" href="/styles.css?v=20260919-8" />
   </head>
   <body>
     <div class="shell settings-shell">
@@ -181,6 +181,122 @@
             </label>
           </section>
 
+          <section class="settings-card" aria-labelledby="evm-networks-title">
+            <div class="settings-heading">
+              <div>
+                <p class="eyebrow">WEITERE NETZWERKE</p>
+                <h2 id="evm-networks-title">BNB Chain &amp; Avalanche</h2>
+              </div>
+              <span class="settings-mark">08</span>
+            </div>
+            <div class="form-grid settings-grid">
+              <label>
+                <span>BscScan-API-Basisadresse</span>
+                <input id="bscscan-api" name="bscScanApiBaseUrl" type="url" inputmode="url" required />
+              </label>
+              <label>
+                <span>BscScan-API-Key</span>
+                <input id="bscscan-key" name="bscScanApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
+                <small id="bscscan-key-status">Key-Status wird geladen …</small>
+              </label>
+              <label>
+                <span>Snowtrace-API-Basisadresse</span>
+                <input id="snowtrace-api" name="snowtraceApiBaseUrl" type="url" inputmode="url" required />
+              </label>
+              <label>
+                <span>Snowtrace-API-Key</span>
+                <input id="snowtrace-key" name="snowtraceApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
+                <small id="snowtrace-key-status">Key-Status wird geladen …</small>
+              </label>
+            </div>
+            <p class="settings-inline-note">Diese beiden Explorer werden getrennt abgefragt: BscScan für native BNB- und Snowtrace für native AVAX-Transfers.</p>
+          </section>
+
+          <section class="settings-card" aria-labelledby="account-networks-title">
+            <div class="settings-heading">
+              <div>
+                <p class="eyebrow">WEITERE NETZWERKE</p>
+                <h2 id="account-networks-title">Solana, XRP, Stellar &amp; NEAR</h2>
+              </div>
+              <span class="settings-mark">09</span>
+            </div>
+            <div class="form-grid settings-grid">
+              <label>
+                <span>Solscan-API-Basisadresse</span>
+                <input id="solscan-api" name="solscanApiBaseUrl" type="url" inputmode="url" required />
+              </label>
+              <label>
+                <span>Solscan-API-Key</span>
+                <input id="solscan-key" name="solscanApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
+                <small id="solscan-key-status">Key-Status wird geladen …</small>
+              </label>
+              <label>
+                <span>XRPL-RPC-Adresse</span>
+                <input id="xrpl-rpc" name="xrplRpcUrl" type="url" inputmode="url" required />
+                <small>Öffentlicher oder eigener XRP-Ledger JSON-RPC-Endpunkt.</small>
+              </label>
+              <label>
+                <span>Stellar-Horizon-Basisadresse</span>
+                <input id="stellar-horizon" name="stellarHorizonBaseUrl" type="url" inputmode="url" required />
+              </label>
+              <label>
+                <span>NearBlocks-API-Basisadresse</span>
+                <input id="nearblocks-api" name="nearBlocksApiBaseUrl" type="url" inputmode="url" required />
+              </label>
+              <label>
+                <span>NearBlocks-API-Key</span>
+                <input id="nearblocks-key" name="nearBlocksApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
+                <small id="nearblocks-key-status">Key-Status wird geladen …</small>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-card" aria-labelledby="utxo-networks-title">
+            <div class="settings-heading">
+              <div>
+                <p class="eyebrow">WEITERE NETZWERKE</p>
+                <h2 id="utxo-networks-title">TON, UTXO &amp; Zcash</h2>
+              </div>
+              <span class="settings-mark">10</span>
+            </div>
+            <div class="form-grid settings-grid">
+              <label>
+                <span>TonAPI-Basisadresse</span>
+                <input id="tonapi-api" name="tonApiBaseUrl" type="url" inputmode="url" required />
+              </label>
+              <label>
+                <span>TonAPI-Key <small>optional</small></span>
+                <input id="tonapi-key" name="tonApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
+                <small id="tonapi-key-status">Key-Status wird geladen …</small>
+              </label>
+              <label>
+                <span>BlockCypher-API-Basisadresse</span>
+                <input id="blockcypher-api" name="blockCypherApiBaseUrl" type="url" inputmode="url" required />
+                <small>Dogecoin und Litecoin werden über getrennte Netzwerkpfade dieser Quelle geladen.</small>
+              </label>
+              <label>
+                <span>BlockCypher-Token <small>optional</small></span>
+                <input id="blockcypher-token" name="blockCypherApiToken" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Token zu ersetzen" />
+                <small id="blockcypher-token-status">Key-Status wird geladen …</small>
+              </label>
+              <label>
+                <span>Blockchair-API-Basisadresse</span>
+                <input id="blockchair-api" name="blockchairApiBaseUrl" type="url" inputmode="url" required />
+                <small>Bitcoin Cash und transparente Zcash-Adressen werden über eigene Adapter abgefragt.</small>
+              </label>
+              <label>
+                <span>Blockchair-API-Key <small>optional</small></span>
+                <input id="blockchair-key" name="blockchairApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
+                <small id="blockchair-key-status">Key-Status wird geladen …</small>
+              </label>
+            </div>
+            <p class="settings-inline-note">Zcash unterstützt bewusst ausschließlich transparente Adressen. Eine shielded Adresse oder ein Monero-View-Key wird nicht gespeichert.</p>
+            <label class="check-setting">
+              <input id="clear-additional-network-keys" name="clearAdditionalNetworkApiKeys" type="checkbox" />
+              <span>Alle gespeicherten Keys für weitere Netzwerke entfernen</span>
+            </label>
+          </section>
+
           <p id="settings-error" class="form-error" role="alert" hidden></p>
           <div class="settings-actions">
             <a class="button button-secondary" href="/">Abbrechen</a>
@@ -195,6 +311,6 @@
       </main>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/settings.js?v=20260919-7" defer></script>
+    <script src="/settings.js?v=20260919-8" defer></script>
   </body>
 </html>

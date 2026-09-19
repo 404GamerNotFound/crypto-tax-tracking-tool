@@ -195,6 +195,7 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
 .settings-note { margin-top: 28px; padding: 15px 17px; border-left: 3px solid var(--green); color: var(--muted); background: #edf5ef; font-size: 11px; line-height: 1.5; }
 .settings-note strong { color: var(--ink); }
 .settings-note p { margin: 4px 0 0; }
+.settings-inline-note { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 
 /* Dashboard, Wallet- und Coin-Detailseiten */
 .dashboard-shell { max-width: 1420px; }

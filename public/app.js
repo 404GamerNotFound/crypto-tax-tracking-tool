@@ -108,9 +108,10 @@ function render() {
     : prices.updatedAt ? `Preisstand ${dateTime.format(new Date(prices.updatedAt * 1000))}` : "Aktuelle Preise nicht verfügbar";
   const dashboard = el("asset-dashboard");
   dashboard.replaceChildren();
+  const walletChains = new Set((portfolio.wallets || []).map((wallet) => wallet.chain));
   for (const chain of Object.values(portfolio.chains || {})) {
     const asset = assetInfo(chain.asset);
-    dashboard.append(renderAssetCard(chain.asset, asset));
+    if (walletChains.has(chain.asset) || Math.abs(Number(portfolio.holdings?.[chain.asset] || 0)) > 0) dashboard.append(renderAssetCard(chain.asset, asset));
   }
   for (const [assetId, asset] of Object.entries(portfolio.assets || {})) {
     if (asset.kind === "erc20" && Math.abs(Number(portfolio.holdings?.[assetId] || 0)) > 0) dashboard.append(renderAssetCard(assetId, asset));

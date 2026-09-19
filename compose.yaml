@@ -25,6 +25,23 @@ services:
       # Etherscan API V2 liefert native ETH- sowie ERC-20-Transfers.
       ETHERSCAN_API_BASE_URL: ${ETHERSCAN_API_BASE_URL:-https://api.etherscan.io/v2/api}
       ETHERSCAN_API_KEY: ${ETHERSCAN_API_KEY:-}
+      # Weitere Netzwerke verwenden bewusst eigene Explorer-/Indexerdienste.
+      BSCSCAN_API_BASE_URL: ${BSCSCAN_API_BASE_URL:-https://api.bscscan.com/api}
+      BSCSCAN_API_KEY: ${BSCSCAN_API_KEY:-}
+      SNOWTRACE_API_BASE_URL: ${SNOWTRACE_API_BASE_URL:-https://api.snowtrace.io/api}
+      SNOWTRACE_API_KEY: ${SNOWTRACE_API_KEY:-}
+      SOLSCAN_API_BASE_URL: ${SOLSCAN_API_BASE_URL:-https://pro-api.solscan.io/v2.0}
+      SOLSCAN_API_KEY: ${SOLSCAN_API_KEY:-}
+      XRPL_RPC_URL: ${XRPL_RPC_URL:-https://xrplcluster.com/}
+      STELLAR_HORIZON_BASE_URL: ${STELLAR_HORIZON_BASE_URL:-https://horizon.stellar.org}
+      NEARBLOCKS_API_BASE_URL: ${NEARBLOCKS_API_BASE_URL:-https://api.nearblocks.io/v1}
+      NEARBLOCKS_API_KEY: ${NEARBLOCKS_API_KEY:-}
+      TONAPI_BASE_URL: ${TONAPI_BASE_URL:-https://tonapi.io/v2}
+      TONAPI_KEY: ${TONAPI_KEY:-}
+      BLOCKCYPHER_API_BASE_URL: ${BLOCKCYPHER_API_BASE_URL:-https://api.blockcypher.com/v1}
+      BLOCKCYPHER_API_TOKEN: ${BLOCKCYPHER_API_TOKEN:-}
+      BLOCKCHAIR_API_BASE_URL: ${BLOCKCHAIR_API_BASE_URL:-https://api.blockchair.com}
+      BLOCKCHAIR_API_KEY: ${BLOCKCHAIR_API_KEY:-}
       COINGECKO_API_BASE_URL: ${COINGECKO_API_BASE_URL:-https://api.coingecko.com/api/v3}
       # Exakt so benannte, vertrauenswürdige TzKT-Payout-Konten werden automatisch als Staking markiert.
       XTZ_STAKING_PAYOUT_ALIASES: ${XTZ_STAKING_PAYOUT_ALIASES:-Stake.fish Payouts}

@@ -1,6 +1,6 @@
 # CryptoBuch
 
-Ein lokal installierbares Crypto-Portfolio für öffentliche Bitcoin-, Tezos-, TRON-, Cardano- und Ethereum-Wallet-Adressen. Die Anwendung speichert keine Private Keys und keine Seed-Phrases.
+Ein lokal installierbares Crypto-Portfolio für öffentliche Wallet-Adressen der unterstützten Top-30-Netzwerke. Die Anwendung speichert keine Private Keys und keine Seed-Phrases.
 
 ## Start mit Docker
 
@@ -23,9 +23,9 @@ docker compose down
 - Eigenes Dashboard mit aktuellen Beständen, als Kauf zugeordneten Mengen, Gewinn gegenüber verbleibenden FIFO-Kaufkursen und aktuellem Staking-Ertrag je Coin
 - Dynamischer Top-30-Marktüberblick nach Marktkapitalisierung mit EUR-Preis, 24-Stunden-Entwicklung und eindeutiger Kennzeichnung der bereits synchronisierbaren Wallet-Netze beziehungsweise ERC-20-Token
 - Separate Wallet-Verwaltung sowie dynamische Coin-Detailseiten für Bitcoin, Tezos, TRON, Cardano, Ethereum und erkannte ERC-20-Token mit dem jeweiligen Buchungsjournal
-- Öffentliche Bitcoin-, Tezos-, TRON-, Cardano- und Ethereum-Wallet-Adressen mit frei wählbarem Namen speichern
+- Öffentliche Wallet-Adressen für Bitcoin, Tezos, TRON, Cardano, Ethereum, BNB Chain, Solana, XRP Ledger, Dogecoin, Stellar, Bitcoin Cash, NEAR, Litecoin, Avalanche C-Chain, TON und transparente Zcash-Adressen mit frei wählbarem Namen speichern
 - Bitcoin-xPubs importieren und daraus abgeleitete Empfangs- sowie Wechselgeldadressen mit BIP44-Gap-Limit erkennen
-- Vollständige Historie aus Blockstream Esplora (Bitcoin), TzKT (Tezos), TronGrid (bestätigte native TRX-Transfers), Blockfrost (Cardano-ADA-Transfers) und Etherscan (ETH- und ERC-20-Transfers) synchronisieren
+- Historien mit dedizierten Netzwerkadaptern synchronisieren: Blockstream Esplora (BTC), TzKT (XTZ), TronGrid (TRX), Blockfrost (ADA), Etherscan (ETH/ERC-20), BscScan (BNB), Solscan (SOL), XRPL JSON-RPC (XRP), Stellar Horizon (XLM), BlockCypher (DOGE/LTC), Blockchair (BCH/ZEC), NearBlocks (NEAR), Snowtrace (AVAX) und TonAPI (TON)
 - Ein- und Ausgänge, eigene Transfers, Gebühren und Gegenadressen in einer Tabelle darstellen
 - Aktuellen EUR-Marktpreis sowie EUR-Preis zum Transaktionsdatum anzeigen; Tezos verwendet dafür den von TzKT zum Blockzeitpunkt gelieferten EUR-Kurs, Bitcoin, TRON, Cardano, Ethereum und erkannte ERC-20-Token einen CoinGecko-Kurs
 - Transaktionen einzeln oder gesammelt mit Zwecken wie `Kauf`, `Verkauf`, `Staking Rewards` oder `Transfer` versehen – eigene Zwecke sind ebenfalls möglich
@@ -40,6 +40,8 @@ docker compose down
 - TRON-Transaktionen werden über die [TronGrid Account Transactions API](https://developers.tron.network/reference/get-transaction-info-by-account-address) abgerufen. Es werden nur bestätigte native TRX-Transfers berücksichtigt; TRC-10, TRC-20, interne Smart-Contract-Transfers und Staking sind bewusst nicht Teil dieses ersten TRON-Umfangs.
 - Cardano-Transaktionen werden über die [Blockfrost Open API](https://docs.blockfrost.io/) abgerufen. Der Import benötigt eine kostenlose oder eigene Blockfrost Project-ID und berücksichtigt die ADA-Nettobewegung einer Cardano-Zahlungsadresse. Native Tokens, Stake-Adressen und Rewards sind noch nicht enthalten.
 - Ethereum-Transaktionen werden über die [Etherscan API V2](https://docs.etherscan.io/) abgerufen. Der Adapter importiert bestätigte native ETH-Transfers und ERC-20-Transfer-Events einer Ethereum-Mainnet-Adresse. Interne Transaktionen sowie ERC-721/1155-NFTs sind nicht Teil dieses Umfangs.
+- Weitere Top-30-Netzwerke nutzen absichtlich keinen universellen Multi-Chain-Importer. Ihre Quellen und optionalen Zugangsdaten werden getrennt unter **Einstellungen → Weitere Netzwerke** verwaltet. Die Adapter beziehen aktuell native Transfers; ERC-20-Token werden bereits beim Ethereum-Import erkannt.
+- Monero kann ohne privaten View-Key nicht aus einer öffentlichen Adresse synchronisiert werden. Shielded-Zcash-Adressen, Canton und Figure HELOC haben ebenfalls keine für diesen read-only Ansatz passende, frei zugängliche Adresshistorie; sie werden deshalb nicht als voll synchronisierbare Wallet angeboten.
 - Aktuelle und historische EUR-Kurse kommen von [CoinGecko](https://www.coingecko.com/en/api). Historische Kurse werden pro Kalendertag in der lokalen Datenbank zwischengespeichert. Falls der Kursdienst zeitweise nicht erreichbar ist, bleiben Transaktionen sichtbar; für den Preis steht dann `k. A.`.
 - Die Top-30-Marktansicht bezieht ebenfalls CoinGecko-Marktdaten und wird für fünf Minuten im Speicher zwischengespeichert. Die Rangfolge ist daher stets aktuell und nicht als feste Coin-Liste im Programm hinterlegt.
 - TzKT liefert zu Tezos-Operationen neben dem Blockzeitstempel auch den zum Blockzeitpunkt errechneten EUR-Kurs. Deshalb kann die Anwendung für XTZ eine präzisere historische Zuordnung verwenden als den Tageskurs.
@@ -107,6 +109,24 @@ ETHERSCAN_API_KEY=dein_etherscan_api_key
 ```
 
 Der Import ruft für Chain-ID `1` sowohl die normalen ETH-Transaktionen als auch ERC-20-Transfer-Events ab. Token werden anhand ihrer Contract-Adresse getrennt geführt; dadurch bleiben beispielsweise gleich benannte Token unterscheidbar. Für ERC-20-Transfers wird die Gasgebühr als ETH ausgewiesen. Aktuelle und historische Tokenpreise werden, soweit CoinGecko den jeweiligen Ethereum-Contract kennt, über dessen Contract-Preisendpunkte ergänzt. Nicht gelistete oder Spam-Token bleiben sichtbar, zeigen beim Preis jedoch `k. A.`.
+
+### Weitere Top-30-Netzwerke
+
+Die Wallet-Auswahl enthält alle derzeit über öffentliche Quellen synchronisierbaren Top-30-Netzwerke. Im Marktüberblick öffnen die Badges **Wallet-Import verfügbar** direkt den passenden Wallet-Dialog. API-Keys gehören ausschließlich in die Einstellungsseite oder in die entsprechenden Portainer-Variablen; sie werden nie an den Browser ausgeliefert.
+
+| Netzwerk | Eigener Adapter | Erforderliche Konfiguration |
+| --- | --- | --- |
+| BNB Chain | BscScan | API-Key |
+| Solana | Solscan | API-Key |
+| XRP Ledger | XRPL JSON-RPC | RPC-Adresse, standardmäßig öffentlich |
+| Stellar | Horizon | Basisadresse, standardmäßig öffentlich |
+| Dogecoin, Litecoin | BlockCypher | Token optional |
+| Bitcoin Cash, transparente Zcash-Adressen | Blockchair | API-Key optional |
+| NEAR | NearBlocks | API-Key |
+| Avalanche C-Chain | Snowtrace | API-Key |
+| TON | TonAPI | API-Key optional |
+
+Beim ersten Start lassen sich die entsprechenden Variablen in Portainer setzen, zum Beispiel `SOLSCAN_API_KEY`, `BSCSCAN_API_KEY`, `SNOWTRACE_API_KEY`, `NEARBLOCKS_API_KEY` oder `TONAPI_KEY`. Bequemer ist die Konfiguration nach dem Start unter **Einstellungen**. Die öffentlichen Standardraten reichen meist für einzelne Wallets; für größere Historien sind eigene Zugangsdaten ratsam.
 
 ### Dashboard-Logik
 
