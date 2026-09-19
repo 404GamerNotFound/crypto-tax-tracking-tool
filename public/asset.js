@@ -1,5 +1,6 @@
 const params = new URLSearchParams(window.location.search);
 const requestedChain = String(params.get("chain") || "BTC").toUpperCase();
+const requestedAsset = String(params.get("asset") || "");
 const state = { portfolio: null, selected: new Set(), filters: { search: "", direction: "" } };
 const el = (id) => document.getElementById(id);
 const currency = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
@@ -22,9 +23,17 @@ function chainInfo() {
   return state.portfolio?.chains?.[requestedChain] || { name: requestedChain, asset: requestedChain, decimals: 6, icon: requestedChain.slice(0, 1) };
 }
 
-function formatAmount(value) {
-  const chain = chainInfo();
-  return `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: chain.decimals || 6 }).format(Number(value || 0))} ${chain.asset}`;
+function activeAssetId() {
+  return requestedAsset || chainInfo().asset;
+}
+
+function assetInfo(assetId = activeAssetId()) {
+  return state.portfolio?.assets?.[assetId] || { id: assetId, name: chainInfo().name, symbol: chainInfo().asset, decimals: chainInfo().decimals, chain: requestedChain, kind: "native" };
+}
+
+function formatAmount(value, assetId = activeAssetId()) {
+  const asset = assetInfo(assetId);
+  return `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: asset.decimals || 6 }).format(Number(value || 0))} ${asset.symbol}`;
 }
 
 function shorten(value, start = 10, end = 7) {
@@ -86,7 +95,7 @@ function metric(label, value, help = "", tone = "") {
 }
 
 function renderMetrics() {
-  const report = state.portfolio.assetAnalytics?.[requestedChain];
+  const report = state.portfolio.assetAnalytics?.[activeAssetId()];
   const metrics = el("asset-metrics");
   metrics.replaceChildren();
   metrics.append(
@@ -101,7 +110,7 @@ function renderMetrics() {
 function getTransactions() {
   const search = state.filters.search.toLocaleLowerCase("de-DE").trim();
   return (state.portfolio?.transactions || []).filter((transaction) => {
-    if (transaction.chain !== requestedChain) return false;
+    if (transaction.asset !== activeAssetId()) return false;
     if (state.filters.direction && transaction.direction !== state.filters.direction) return false;
     if (!search) return true;
     return [transaction.hash, transaction.wallet_label, transaction.address, transaction.purpose, transaction.counterparty]
@@ -191,9 +200,9 @@ function renderTransactions() {
 
     const amount = document.createElement("td");
     amount.className = `amount ${transaction.direction}`;
-    amount.textContent = `${transaction.direction === "in" ? "+" : transaction.direction === "out" ? "−" : ""}${formatAmount(transaction.amount)}`;
+    amount.textContent = `${transaction.direction === "in" ? "+" : transaction.direction === "out" ? "−" : ""}${formatAmount(transaction.amount, transaction.asset)}`;
     const fee = document.createElement("small");
-    fee.textContent = Number(transaction.fee) > 0 ? `Gebühr ${formatAmount(transaction.fee)}` : "";
+    fee.textContent = Number(transaction.fee) > 0 ? `Gebühr ${formatAmount(transaction.fee, transaction.fee_asset || transaction.asset)}` : "";
     amount.append(fee);
 
     const now = document.createElement("td");
@@ -277,13 +286,17 @@ async function applyBulkPurpose() {
 
 function renderPage() {
   const chain = chainInfo();
-  document.title = `CryptoBuch · ${chain.name}`;
-  el("asset-icon").textContent = chain.icon;
+  const asset = assetInfo();
+  document.title = `CryptoBuch · ${asset.name}`;
+  el("asset-icon").textContent = asset.icon;
   el("asset-icon").className = `asset-hero-icon ${requestedChain.toLowerCase()}`;
-  el("asset-title").textContent = chain.name;
-  el("asset-subtitle").textContent = `Käufe, Erträge und alle ${chain.asset}-Bewegungen in deinem Portfolio.`;
+  el("asset-title").textContent = asset.name;
+  el("asset-subtitle").textContent = asset.kind === "erc20"
+    ? `Ethereum ERC-20 · ${asset.symbol} · Transaktionen und Auswertung dieses Tokens.`
+    : `Käufe, Erträge und alle ${asset.symbol}-Bewegungen in deinem Portfolio.`;
+  const report = state.portfolio.assetAnalytics?.[activeAssetId()];
   const prices = state.portfolio.currentPrices || {};
-  el("price-status").textContent = prices.warning ? "Preisabfrage momentan nicht verfügbar" : hasPrice(prices[requestedChain]) ? `1 ${chain.asset} · ${formatPrice(prices[requestedChain])}` : "Aktueller Preis nicht verfügbar";
+  el("price-status").textContent = prices.warning ? "Preisabfrage momentan nicht verfügbar" : hasPrice(report?.currentPriceEur) ? `1 ${asset.symbol} · ${formatPrice(report.currentPriceEur)}` : "Aktueller Preis nicht verfügbar";
   renderMetrics();
   renderTransactions();
 }
@@ -292,7 +305,7 @@ async function loadPortfolio({ quiet = false } = {}) {
   try {
     if (!quiet) el("price-status").textContent = "Ansicht wird geladen …";
     state.portfolio = await api("/api/portfolio");
-    if (!state.portfolio.chains?.[requestedChain]) return window.location.replace("/");
+    if (!state.portfolio.chains?.[requestedChain] || !state.portfolio.assets?.[activeAssetId()] || state.portfolio.assets[activeAssetId()].chain !== requestedChain) return window.location.replace("/");
     renderPage();
   } catch (error) {
     toast(error.message, "error");
@@ -310,7 +323,7 @@ async function syncChain() {
     const results = [];
     for (const wallet of wallets) results.push(await api(`/api/wallets/${wallet.id}/sync`, { method: "POST" }));
     await loadPortfolio({ quiet: true });
-    toast(`${results.reduce((sum, result) => sum + result.imported, 0).toLocaleString("de-DE")} ${chainInfo().asset}-Transaktionen aktualisiert.`);
+    toast(`${results.reduce((sum, result) => sum + result.imported, 0).toLocaleString("de-DE")} ${assetInfo().symbol}-Transaktionen aktualisiert.`);
   } catch (error) {
     toast(error.message, "error");
   } finally {

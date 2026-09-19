@@ -25,6 +25,11 @@ test("validiert Cardano-Mainnet-Zahlungsadressen", () => {
   assert.equal(isValidAddress("ADA", "addr_test1qwerty"), false);
 });
 
+test("validiert Ethereum-Mainnet-Adressen", () => {
+  assert.equal(isValidAddress("ETH", "0x52908400098527886E0F7030069857D2E4169EE7"), true);
+  assert.equal(isValidAddress("ETH", "0x1234"), false);
+});
+
 test("bereinigt Beschriftungen", () => {
   assert.equal(cleanLabel("  Meine   Wallet  "), "Meine Wallet");
 });

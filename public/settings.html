@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
     <title>CryptoBuch · Einstellungen</title>
-    <link rel="stylesheet" href="/styles.css?v=20260919-3" />
+    <link rel="stylesheet" href="/styles.css?v=20260919-4" />
   </head>
   <body>
     <div class="shell settings-shell">
@@ -25,7 +25,7 @@
         <section class="settings-intro" aria-labelledby="settings-title">
           <p class="eyebrow">LOKALE KONFIGURATION</p>
           <h1 id="settings-title">Einstellungen<br /><em>für deinen Import.</em></h1>
-          <p>Änderungen gelten beim nächsten Synchronisieren und werden lokal in der CryptoBuch-Datenbank gespeichert. Hinterlegte TronGrid-Keys und Blockfrost Project-IDs werden nicht wieder an den Browser zurückgegeben.</p>
+          <p>Änderungen gelten beim nächsten Synchronisieren und werden lokal in der CryptoBuch-Datenbank gespeichert. Hinterlegte TronGrid- und Etherscan-Keys sowie Blockfrost Project-IDs werden nicht wieder an den Browser zurückgegeben.</p>
         </section>
 
         <form id="settings-form" class="settings-form">
@@ -145,10 +145,34 @@
           <section class="settings-card" aria-labelledby="price-title">
             <div class="settings-heading">
               <div>
-                <p class="eyebrow">MARKTDATEN</p>
-                <h2 id="price-title">Preisdaten</h2>
+                <p class="eyebrow">ETHEREUM</p>
+                <h2 id="price-title">Etherscan &amp; ERC-20</h2>
               </div>
               <span class="settings-mark">06</span>
+            </div>
+            <label>
+              <span>Etherscan-API-Basisadresse</span>
+              <input id="etherscan-api" name="etherscanApiBaseUrl" type="url" inputmode="url" required />
+              <small>Standard: Etherscan API V2 für Ethereum Mainnet (Chain-ID 1).</small>
+            </label>
+            <label>
+              <span>Etherscan-API-Key</span>
+              <input id="etherscan-key" name="etherscanApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
+              <small id="etherscan-key-status">Key-Status wird geladen …</small>
+            </label>
+            <label class="check-setting">
+              <input id="clear-etherscan-key" name="clearEtherscanApiKey" type="checkbox" />
+              <span>Gespeicherten Etherscan-API-Key entfernen</span>
+            </label>
+          </section>
+
+          <section class="settings-card" aria-labelledby="market-data-title">
+            <div class="settings-heading">
+              <div>
+                <p class="eyebrow">MARKTDATEN</p>
+                <h2 id="market-data-title">Preisdaten</h2>
+              </div>
+              <span class="settings-mark">07</span>
             </div>
             <label>
               <span>CoinGecko-API-Basisadresse</span>
@@ -171,6 +195,6 @@
       </main>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/settings.js?v=20260919-3" defer></script>
+    <script src="/settings.js?v=20260919-4" defer></script>
   </body>
 </html>

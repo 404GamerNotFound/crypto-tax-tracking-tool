@@ -70,6 +70,7 @@ h1 em { color: var(--green); font-style: italic; }
 .chain-icon.xtz { background: var(--green); font-family: "DM Sans", sans-serif; font-size: 17px; }
 .chain-icon.trx { background: #df4d4d; font-family: "DM Sans", sans-serif; font-size: 15px; }
 .chain-icon.ada { background: #3159a8; font-family: Georgia, serif; font-size: 20px; }
+.chain-icon.eth { background: #59677b; font-family: Georgia, serif; font-size: 17px; }
 .wallet-details { min-width: 0; display: grid; gap: 2px; }
 .wallet-details strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .wallet-details a, .wallet-details .wallet-identifier, .wallet-details small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 10px "DM Mono", monospace; }
@@ -253,6 +254,7 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
 .asset-hero-icon.xtz { background: var(--green); font: 700 31px "DM Sans", sans-serif; }
 .asset-hero-icon.trx { background: #df4d4d; font: 700 27px "DM Sans", sans-serif; }
 .asset-hero-icon.ada { background: #3159a8; font: 700 37px Georgia, serif; }
+.asset-hero-icon.eth { background: #59677b; font: 700 30px Georgia, serif; }
 .asset-hero h1 { margin: 0 0 5px; font-size: clamp(46px, 5vw, 69px); }
 .asset-hero-heading p:last-child { margin: 0; color: var(--muted); font-size: 14px; }
 .asset-metrics { display: grid; grid-template-columns: repeat(5, minmax(180px, 1fr)); gap: 10px; margin-bottom: 20px; overflow-x: auto; }

@@ -26,6 +26,7 @@ function render(settings) {
   el("tzkt-api").value = settings.tzktApiBaseUrl;
   el("trongrid-api").value = settings.tronGridBaseUrl;
   el("blockfrost-api").value = settings.blockfrostBaseUrl;
+  el("etherscan-api").value = settings.etherscanApiBaseUrl;
   el("coingecko-api").value = settings.coinGeckoBaseUrl;
   el("xpub-gap").value = settings.xpubGapLimit;
   el("xpub-maximum").value = settings.xpubMaxDerivationsPerBranch;
@@ -36,6 +37,9 @@ function render(settings) {
   el("blockfrost-project-id-status").textContent = settings.blockfrostProjectIdConfigured
     ? "Eine Project-ID ist gespeichert. Leer lassen, um sie beizubehalten."
     : "Keine Project-ID gespeichert. Cardano-Wallets können noch nicht synchronisiert werden.";
+  el("etherscan-key-status").textContent = settings.etherscanApiKeyConfigured
+    ? "Ein API-Key ist gespeichert. Leer lassen, um ihn beizubehalten."
+    : "Kein API-Key gespeichert. Ethereum-Wallets können noch nicht synchronisiert werden.";
 }
 
 function setSaving(button, saving) {
@@ -69,6 +73,7 @@ el("settings-form").addEventListener("submit", async (event) => {
         tzktApiBaseUrl: form.get("tzktApiBaseUrl"),
         tronGridBaseUrl: form.get("tronGridBaseUrl"),
         blockfrostBaseUrl: form.get("blockfrostBaseUrl"),
+        etherscanApiBaseUrl: form.get("etherscanApiBaseUrl"),
         coinGeckoBaseUrl: form.get("coinGeckoBaseUrl"),
         xpubGapLimit: form.get("xpubGapLimit"),
         xpubMaxDerivationsPerBranch: form.get("xpubMaxDerivationsPerBranch"),
@@ -77,12 +82,16 @@ el("settings-form").addEventListener("submit", async (event) => {
         clearTronGridApiKey: form.get("clearTronGridApiKey") === "on",
         blockfrostProjectId: form.get("blockfrostProjectId"),
         clearBlockfrostProjectId: form.get("clearBlockfrostProjectId") === "on",
+        etherscanApiKey: form.get("etherscanApiKey"),
+        clearEtherscanApiKey: form.get("clearEtherscanApiKey") === "on",
       }),
     });
     el("trongrid-key").value = "";
     el("clear-trongrid-key").checked = false;
     el("blockfrost-project-id").value = "";
     el("clear-blockfrost-project-id").checked = false;
+    el("etherscan-key").value = "";
+    el("clear-etherscan-key").checked = false;
     render(settings);
     toast("Einstellungen gespeichert. Sie gelten beim nächsten Synchronisieren.");
   } catch (requestError) {

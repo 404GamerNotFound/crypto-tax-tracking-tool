@@ -7,9 +7,13 @@ function hasNumber(value) {
   return value !== null && value !== "" && value !== undefined && Number.isFinite(Number(value));
 }
 
-function formatAmount(value, chain) {
-  const config = state.portfolio?.chains?.[chain] || {};
-  return `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: config.decimals || 6 }).format(Number(value || 0))} ${config.asset || chain}`;
+function assetInfo(assetId) {
+  return state.portfolio?.assets?.[assetId] || state.portfolio?.chains?.[assetId] || { symbol: assetId, decimals: 6, chain: assetId };
+}
+
+function formatAmount(value, assetId) {
+  const asset = assetInfo(assetId);
+  return `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: asset.decimals || 6 }).format(Number(value || 0))} ${asset.symbol || asset.asset || assetId}`;
 }
 
 function formatCurrency(value) {
@@ -33,22 +37,22 @@ async function api(url, options = {}) {
   return payload;
 }
 
-function renderAssetCard(chainKey, chain) {
-  const report = state.portfolio.assetAnalytics?.[chainKey];
+function renderAssetCard(assetId, asset) {
+  const report = state.portfolio.assetAnalytics?.[assetId];
   const card = document.createElement("a");
   card.className = "asset-dashboard-card";
-  card.href = `/asset.html?chain=${encodeURIComponent(chainKey)}`;
+  card.href = `/asset.html?chain=${encodeURIComponent(asset.chain)}&asset=${encodeURIComponent(assetId)}`;
   const head = document.createElement("div");
   head.className = "asset-card-head";
   const coin = document.createElement("span");
-  coin.className = `chain-icon ${chainKey.toLowerCase()}`;
-  coin.textContent = chain.icon;
+  coin.className = `chain-icon ${asset.chain.toLowerCase()}`;
+  coin.textContent = asset.icon;
   const title = document.createElement("div");
   const label = document.createElement("span");
   label.className = "card-label";
-  label.textContent = chain.name;
+  label.textContent = asset.kind === "erc20" ? `${asset.name} · ERC-20` : asset.name;
   const amount = document.createElement("strong");
-  amount.textContent = formatAmount(report?.holdingAmount || 0, chainKey);
+  amount.textContent = formatAmount(report?.holdingAmount || 0, assetId);
   title.append(label, amount);
   const arrow = document.createElement("span");
   arrow.className = "asset-card-arrow";
@@ -59,7 +63,7 @@ function renderAssetCard(chainKey, chain) {
   metrics.className = "asset-card-metrics";
   const purchaseProfit = report?.purchases?.profitEur;
   const rows = [
-    ["Gekauft", formatAmount(report?.purchases?.acquiredAmount || 0, chainKey)],
+    ["Gekauft", formatAmount(report?.purchases?.acquiredAmount || 0, assetId)],
     ["Gewinn ggü. Kauf", purchaseProfit === null || purchaseProfit === undefined ? "k. A." : formatCurrency(purchaseProfit), purchaseProfit >= 0 ? "positive" : "negative"],
     ["Staking-Ertrag", formatCurrency(report?.staking?.currentValueEur)],
   ];
@@ -91,7 +95,13 @@ function render() {
     : prices.updatedAt ? `Preisstand ${dateTime.format(new Date(prices.updatedAt * 1000))}` : "Aktuelle Preise nicht verfügbar";
   const dashboard = el("asset-dashboard");
   dashboard.replaceChildren();
-  for (const [chainKey, chain] of Object.entries(portfolio.chains || {})) dashboard.append(renderAssetCard(chainKey, chain));
+  for (const chain of Object.values(portfolio.chains || {})) {
+    const asset = assetInfo(chain.asset);
+    dashboard.append(renderAssetCard(chain.asset, asset));
+  }
+  for (const [assetId, asset] of Object.entries(portfolio.assets || {})) {
+    if (asset.kind === "erc20" && Math.abs(Number(portfolio.holdings?.[assetId] || 0)) > 0) dashboard.append(renderAssetCard(assetId, asset));
+  }
   const hasWallets = (portfolio.wallets || []).length > 0;
   dashboard.hidden = !hasWallets;
   el("dashboard-empty").hidden = hasWallets;

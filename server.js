@@ -13,6 +13,7 @@ const { CHAIN_CONFIG, cleanLabel, isValidAddress } = require("./lib/validation")
 const { isConfirmedStakingPayout, trustedPayoutAliases } = require("./lib/tezos-staking");
 const { normalizeTronNativeTransfer } = require("./lib/tron");
 const { normalizeCardanoTransaction } = require("./lib/cardano");
+const { normalizeEthereumTransaction, normalizeErc20Transfer } = require("./lib/ethereum");
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const number = Number(value);
@@ -30,9 +31,11 @@ const SETTINGS_DEFAULTS = Object.freeze({
   tzktApiBaseUrl: (process.env.TZKT_API_BASE_URL || "https://api.tzkt.io/v1").replace(/\/$/, ""),
   tronGridBaseUrl: (process.env.TRONGRID_BASE_URL || "https://api.trongrid.io").replace(/\/$/, ""),
   blockfrostBaseUrl: (process.env.BLOCKFROST_BASE_URL || "https://cardano-mainnet.blockfrost.io/api/v0").replace(/\/$/, ""),
+  etherscanApiBaseUrl: (process.env.ETHERSCAN_API_BASE_URL || "https://api.etherscan.io/v2/api").replace(/\/$/, ""),
   coinGeckoBaseUrl: (process.env.COINGECKO_API_BASE_URL || "https://api.coingecko.com/api/v3").replace(/\/$/, ""),
   tronGridApiKey: String(process.env.TRONGRID_API_KEY || "").trim(),
   blockfrostProjectId: String(process.env.BLOCKFROST_PROJECT_ID || "").trim(),
+  etherscanApiKey: String(process.env.ETHERSCAN_API_KEY || "").trim(),
   xpubGapLimit: DEFAULT_XPUB_GAP_LIMIT,
   xpubMaxDerivationsPerBranch: boundedInteger(process.env.XPUB_MAX_DERIVATIONS_PER_BRANCH, 200, DEFAULT_XPUB_GAP_LIMIT, 1000),
   xtzStakingPayoutAliases: String(process.env.XTZ_STAKING_PAYOUT_ALIASES || "Stake.fish Payouts").trim(),
@@ -56,7 +59,7 @@ db.exec(`
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS wallets (
     id INTEGER PRIMARY KEY,
-    chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX', 'ADA')),
+    chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX', 'ADA', 'ETH')),
     address TEXT NOT NULL,
     label TEXT NOT NULL DEFAULT '',
     source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub')),
@@ -73,8 +76,13 @@ db.exec(`
     timestamp TEXT,
     direction TEXT NOT NULL CHECK (direction IN ('in', 'out', 'self')),
     asset TEXT NOT NULL,
+    asset_symbol TEXT,
+    asset_name TEXT,
+    asset_decimals INTEGER,
+    asset_contract TEXT,
     amount REAL NOT NULL,
     fee REAL NOT NULL DEFAULT 0,
+    fee_asset TEXT,
     counterparty TEXT,
     price_transaction_eur REAL,
     purpose TEXT,
@@ -118,7 +126,7 @@ db.exec(`
 
 function migrateWalletSchemaForChains() {
   const walletSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'wallets'").get()?.sql || "";
-  if (walletSql.includes("'ADA'")) return;
+  if (walletSql.includes("'ETH'")) return;
   const walletColumns = new Set(db.prepare("PRAGMA table_info(wallets)").all().map((column) => column.name));
   const sourceType = walletColumns.has("source_type") ? "source_type" : "'address'";
   const xpubAddressType = walletColumns.has("xpub_address_type") ? "xpub_address_type" : "NULL";
@@ -128,7 +136,7 @@ function migrateWalletSchemaForChains() {
     BEGIN;
     CREATE TABLE wallets_chain_migration (
       id INTEGER PRIMARY KEY,
-      chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX', 'ADA')),
+      chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX', 'ADA', 'ETH')),
       address TEXT NOT NULL,
       label TEXT NOT NULL DEFAULT '',
       source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub')),
@@ -161,12 +169,18 @@ if (!transactionColumnNames.has("purpose_origin")) {
   db.exec("ALTER TABLE transactions ADD COLUMN purpose_origin TEXT NOT NULL DEFAULT 'unspecified'");
   db.prepare("UPDATE transactions SET purpose_origin = 'manual' WHERE purpose IS NOT NULL").run();
 }
+if (!transactionColumnNames.has("asset_symbol")) db.exec("ALTER TABLE transactions ADD COLUMN asset_symbol TEXT");
+if (!transactionColumnNames.has("asset_name")) db.exec("ALTER TABLE transactions ADD COLUMN asset_name TEXT");
+if (!transactionColumnNames.has("asset_decimals")) db.exec("ALTER TABLE transactions ADD COLUMN asset_decimals INTEGER");
+if (!transactionColumnNames.has("asset_contract")) db.exec("ALTER TABLE transactions ADD COLUMN asset_contract TEXT");
+if (!transactionColumnNames.has("fee_asset")) db.exec("ALTER TABLE transactions ADD COLUMN fee_asset TEXT");
 
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "64kb" }));
 
 let currentPriceCache = { expiresAt: 0, data: {} };
+let tokenPriceCache = { expiresAt: 0, data: {} };
 
 function asPositiveId(value) {
   const id = Number(value);
@@ -221,9 +235,11 @@ function runtimeSettings() {
     tzktApiBaseUrl: values.tzktApiBaseUrl || SETTINGS_DEFAULTS.tzktApiBaseUrl,
     tronGridBaseUrl: values.tronGridBaseUrl || SETTINGS_DEFAULTS.tronGridBaseUrl,
     blockfrostBaseUrl: values.blockfrostBaseUrl || SETTINGS_DEFAULTS.blockfrostBaseUrl,
+    etherscanApiBaseUrl: values.etherscanApiBaseUrl || SETTINGS_DEFAULTS.etherscanApiBaseUrl,
     coinGeckoBaseUrl: values.coinGeckoBaseUrl || SETTINGS_DEFAULTS.coinGeckoBaseUrl,
     tronGridApiKey: values.tronGridApiKey || "",
     blockfrostProjectId: values.blockfrostProjectId || "",
+    etherscanApiKey: values.etherscanApiKey || "",
     xpubGapLimit,
     xpubMaxDerivationsPerBranch: boundedInteger(values.xpubMaxDerivationsPerBranch, SETTINGS_DEFAULTS.xpubMaxDerivationsPerBranch, xpubGapLimit, 1000),
     xtzStakingPayoutAliases: values.xtzStakingPayoutAliases || "",
@@ -240,9 +256,11 @@ function settingsResponse() {
     tzktApiBaseUrl: settings.tzktApiBaseUrl,
     tronGridBaseUrl: settings.tronGridBaseUrl,
     blockfrostBaseUrl: settings.blockfrostBaseUrl,
+    etherscanApiBaseUrl: settings.etherscanApiBaseUrl,
     coinGeckoBaseUrl: settings.coinGeckoBaseUrl,
     tronGridApiKeyConfigured: Boolean(settings.tronGridApiKey),
     blockfrostProjectIdConfigured: Boolean(settings.blockfrostProjectId),
+    etherscanApiKeyConfigured: Boolean(settings.etherscanApiKey),
     xpubGapLimit: settings.xpubGapLimit,
     xpubMaxDerivationsPerBranch: settings.xpubMaxDerivationsPerBranch,
     xtzStakingPayoutAliases: settings.xtzStakingPayoutAliases,
@@ -271,15 +289,18 @@ function updateSettings(input) {
     tzktApiBaseUrl: cleanServiceUrl(input.tzktApiBaseUrl, "Die TzKT-URL"),
     tronGridBaseUrl: cleanServiceUrl(input.tronGridBaseUrl, "Die TronGrid-URL"),
     blockfrostBaseUrl: cleanServiceUrl(input.blockfrostBaseUrl, "Die Blockfrost-URL"),
+    etherscanApiBaseUrl: cleanServiceUrl(input.etherscanApiBaseUrl, "Die Etherscan-URL"),
     coinGeckoBaseUrl: cleanServiceUrl(input.coinGeckoBaseUrl, "Die CoinGecko-URL"),
     xpubGapLimit,
     xpubMaxDerivationsPerBranch,
     xtzStakingPayoutAliases: cleanAliases(input.xtzStakingPayoutAliases),
     tronGridApiKey: input.clearTronGridApiKey ? "" : String(input.tronGridApiKey || "").trim() || current.tronGridApiKey,
     blockfrostProjectId: input.clearBlockfrostProjectId ? "" : String(input.blockfrostProjectId || "").trim() || current.blockfrostProjectId,
+    etherscanApiKey: input.clearEtherscanApiKey ? "" : String(input.etherscanApiKey || "").trim() || current.etherscanApiKey,
   };
   if (next.tronGridApiKey.length > 300) throw makeError("Der TronGrid-API-Key ist zu lang.");
   if (next.blockfrostProjectId.length > 300) throw makeError("Die Blockfrost Project-ID ist zu lang.");
+  if (next.etherscanApiKey.length > 300) throw makeError("Der Etherscan-API-Key ist zu lang.");
 
   const upsert = db.prepare(`
     INSERT INTO app_settings (setting_key, setting_value, updated_at)
@@ -295,6 +316,7 @@ function updateSettings(input) {
     throw error;
   }
   currentPriceCache = { expiresAt: 0, data: {} };
+  tokenPriceCache = { expiresAt: 0, data: {} };
   return settingsResponse();
 }
 
@@ -367,6 +389,25 @@ async function getCurrentPrices() {
       warning: error.message,
     };
   }
+}
+
+async function getErc20CurrentPrices(contracts, settings) {
+  const uniqueContracts = [...new Set(contracts.map((contract) => String(contract || "").toLowerCase()).filter((contract) => /^0x[a-f0-9]{40}$/.test(contract)))];
+  if (uniqueContracts.length === 0) return {};
+  if (tokenPriceCache.expiresAt > Date.now() && uniqueContracts.every((contract) => contract in tokenPriceCache.data)) {
+    return Object.fromEntries(uniqueContracts.map((contract) => [contract, tokenPriceCache.data[contract]]));
+  }
+  const cached = { ...tokenPriceCache.data };
+  for (const contract of uniqueContracts) {
+    try {
+      const payload = await fetchJson(`${settings.coinGeckoBaseUrl}/coins/ethereum/contract/${encodeURIComponent(contract)}`);
+      cached[contract] = positiveNumber(payload.market_data?.current_price?.eur);
+    } catch (_) {
+      cached[contract] = null;
+    }
+  }
+  tokenPriceCache = { expiresAt: Date.now() + 5 * 60 * 1000, data: cached };
+  return Object.fromEntries(uniqueContracts.map((contract) => [contract, cached[contract] || null]));
 }
 
 function cachedHistoricalPrice(coinId, date) {
@@ -444,6 +485,35 @@ async function hydrateHistoricalPrices(chain, timestamps, settings) {
     }
   }
   return result;
+}
+
+async function hydrateHistoricalTokenPrices(contract, timestamps, settings) {
+  const normalizedContract = String(contract || "").toLowerCase();
+  if (!/^0x[a-f0-9]{40}$/.test(normalizedContract)) return new Map();
+  const dates = [...new Set(timestamps.filter(Boolean).map(isoDay))].sort();
+  const coinId = `erc20:ethereum:${normalizedContract}`;
+  const prices = new Map();
+  for (const date of dates) {
+    const cached = cachedHistoricalPrice(coinId, date);
+    if (cached) {
+      prices.set(date, cached);
+      continue;
+    }
+    try {
+      const [year, month, day] = date.split("-");
+      const payload = await fetchJson(
+        `${settings.coinGeckoBaseUrl}/coins/ethereum/contract/${encodeURIComponent(normalizedContract)}/history?date=${day}-${month}-${year}`,
+      );
+      const value = positiveNumber(payload.market_data?.current_price?.eur);
+      if (value) {
+        saveHistoricalPrice(coinId, date, value);
+        prices.set(date, value);
+      }
+    } catch (_) {
+      // Token prices are optional. Unknown contracts remain visible as k. A.
+    }
+  }
+  return prices;
 }
 
 function hasBitcoinAddressActivity(summary) {
@@ -609,6 +679,55 @@ async function fetchCardanoTransactions(address, settings) {
   return transactions;
 }
 
+async function fetchEtherscanRecords(address, action, settings, maxTransactions = settings.maxTransactionsPerSync) {
+  if (!settings.etherscanApiKey) {
+    throw makeError("Für Ethereum wird ein Etherscan-API-Key benötigt. Bitte unter Einstellungen → Ethereum hinterlegen.");
+  }
+  const output = [];
+  const pageSize = 1000;
+  let page = 1;
+  while (true) {
+    if (maxTransactions && output.length >= maxTransactions) break;
+    const url = new URL(settings.etherscanApiBaseUrl);
+    url.search = new URLSearchParams({
+      chainid: "1",
+      module: "account",
+      action,
+      address,
+      startblock: "0",
+      endblock: "99999999",
+      page: String(page),
+      offset: String(pageSize),
+      sort: "desc",
+      apikey: settings.etherscanApiKey,
+    }).toString();
+    const payload = await fetchJson(url.toString());
+    const result = Array.isArray(payload.result) ? payload.result : [];
+    if (String(payload.status) === "0" && result.length === 0) {
+      const message = `${payload.message || ""} ${typeof payload.result === "string" ? payload.result : ""}`;
+      if (/no transactions|no records/i.test(message)) break;
+      throw makeError(`Etherscan konnte die Ethereum-Historie nicht laden: ${payload.result || payload.message || "unbekannter Fehler"}.`, 502);
+    }
+    if (!Array.isArray(payload.result)) throw makeError("Etherscan lieferte ein unerwartetes Antwortformat.", 502);
+    output.push(...result);
+    if (result.length < pageSize) break;
+    page += 1;
+  }
+  return maxTransactions ? output.slice(0, maxTransactions) : output;
+}
+
+async function fetchEthereumTransactions(address, settings) {
+  const [native, erc20] = await Promise.all([
+    fetchEtherscanRecords(address, "txlist", settings),
+    fetchEtherscanRecords(address, "tokentx", settings),
+  ]);
+  const rows = [
+    ...native.map((transaction) => ({ type: "native", transaction })),
+    ...erc20.map((transaction) => ({ type: "erc20", transaction })),
+  ].sort((left, right) => Number(right.transaction.timeStamp || 0) - Number(left.transaction.timeStamp || 0));
+  return settings.maxTransactionsPerSync ? rows.slice(0, settings.maxTransactionsPerSync) : rows;
+}
+
 function normalizeBitcoinTransaction(transaction, addresses) {
   const isWalletAddress = (address) => Boolean(address && addresses.has(address));
   const inputAmount = transaction.vin.reduce(
@@ -698,6 +817,14 @@ const CHAIN_ADAPTERS = {
     },
     normalize: normalizeCardanoTransaction,
   },
+  ETH: {
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchEthereumTransactions(wallet.address, settings), context: wallet.address, xpubCapped: false };
+    },
+    normalize(item, address) {
+      return item.type === "erc20" ? normalizeErc20Transfer(item.transaction, address) : normalizeEthereumTransaction(item.transaction, address);
+    },
+  },
 };
 
 function getWallet(id) {
@@ -711,28 +838,50 @@ async function syncWallet(wallet) {
   if (!adapter) throw makeError("Für diese Blockchain ist keine Synchronisierung eingerichtet.");
   const settings = runtimeSettings();
   const { rawTransactions, context, xpubCapped } = await adapter.load(wallet, settings);
-  const transactions = rawTransactions.map((item) => adapter.normalize(item, context, settings)).filter(Boolean);
+  const transactions = rawTransactions.map((item) => adapter.normalize(item, context, settings)).filter(Boolean).map((transaction) => ({
+    ...transaction,
+    assetSymbol: transaction.assetSymbol || transaction.asset,
+    assetName: transaction.assetName || transaction.asset,
+    assetDecimals: Number.isInteger(transaction.assetDecimals) ? transaction.assetDecimals : CHAIN_CONFIG[wallet.chain].decimals,
+    assetContract: transaction.assetContract || null,
+    feeAsset: transaction.feeAsset || transaction.asset,
+    priceKind: transaction.priceKind || "native",
+  }));
   const pricesByDate = await hydrateHistoricalPrices(
     wallet.chain,
-    transactions.filter((transaction) => !positiveNumber(transaction.historicalPrice)).map((transaction) => transaction.timestamp),
+    transactions.filter((transaction) => transaction.priceKind !== "erc20" && !positiveNumber(transaction.historicalPrice)).map((transaction) => transaction.timestamp),
     settings,
   );
+  const tokenDates = new Map();
+  for (const transaction of transactions) {
+    if (transaction.priceKind !== "erc20" || !transaction.assetContract || positiveNumber(transaction.historicalPrice)) continue;
+    if (!tokenDates.has(transaction.assetContract)) tokenDates.set(transaction.assetContract, []);
+    tokenDates.get(transaction.assetContract).push(transaction.timestamp);
+  }
+  const tokenPricesByContract = new Map();
+  for (const [contract, timestamps] of tokenDates) tokenPricesByContract.set(contract, await hydrateHistoricalTokenPrices(contract, timestamps, settings));
 
   const existingTransaction = db.prepare(
     "SELECT price_transaction_eur, purpose, purpose_origin FROM transactions WHERE wallet_id = ? AND external_id = ?",
   );
   const upsert = db.prepare(`
     INSERT INTO transactions (
-      wallet_id, external_id, hash, timestamp, direction, asset, amount, fee, counterparty,
+      wallet_id, external_id, hash, timestamp, direction, asset, asset_symbol, asset_name, asset_decimals, asset_contract,
+      amount, fee, fee_asset, counterparty,
       price_transaction_eur, purpose, purpose_origin, raw_json, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(wallet_id, external_id) DO UPDATE SET
       hash = excluded.hash,
       timestamp = excluded.timestamp,
       direction = excluded.direction,
       asset = excluded.asset,
+      asset_symbol = excluded.asset_symbol,
+      asset_name = excluded.asset_name,
+      asset_decimals = excluded.asset_decimals,
+      asset_contract = excluded.asset_contract,
       amount = excluded.amount,
       fee = excluded.fee,
+      fee_asset = excluded.fee_asset,
       counterparty = excluded.counterparty,
       price_transaction_eur = COALESCE(excluded.price_transaction_eur, transactions.price_transaction_eur),
       purpose = CASE
@@ -756,7 +905,9 @@ async function syncWallet(wallet) {
       const existing = existingTransaction.get(wallet.id, transaction.externalId);
       const historicPrice = positiveNumber(transaction.historicalPrice)
         ?? positiveNumber(existing?.price_transaction_eur)
-        ?? (transaction.timestamp ? positiveNumber(pricesByDate.get(isoDay(transaction.timestamp))) : null);
+        ?? (transaction.timestamp && transaction.priceKind === "erc20"
+          ? positiveNumber(tokenPricesByContract.get(transaction.assetContract)?.get(isoDay(transaction.timestamp)))
+          : transaction.timestamp ? positiveNumber(pricesByDate.get(isoDay(transaction.timestamp))) : null);
       upsert.run(
         wallet.id,
         transaction.externalId,
@@ -764,8 +915,13 @@ async function syncWallet(wallet) {
         transaction.timestamp,
         transaction.direction,
         transaction.asset,
+        transaction.assetSymbol,
+        transaction.assetName,
+        transaction.assetDecimals,
+        transaction.assetContract,
         transaction.amount,
         transaction.fee,
+        transaction.feeAsset,
         transaction.counterparty,
         historicPrice,
         transaction.autoPurpose,
@@ -787,9 +943,44 @@ async function syncWallet(wallet) {
   };
 }
 
-function emptyAssetAnalytics(chain, currentPrice, holdingAmount) {
+function nativeAssetDescriptors() {
+  return Object.fromEntries(Object.entries(CHAIN_CONFIG).map(([chain, config]) => [config.asset, {
+    id: config.asset,
+    chain,
+    name: config.name,
+    symbol: config.asset,
+    decimals: config.decimals,
+    icon: config.icon,
+    kind: "native",
+  }]));
+}
+
+function assetDescriptorFromTransaction(transaction) {
+  const native = CHAIN_CONFIG[transaction.chain];
+  if (!transaction.asset_contract) return nativeAssetDescriptors()[transaction.asset] || {
+    id: transaction.asset,
+    chain: transaction.chain,
+    name: transaction.asset_name || transaction.asset,
+    symbol: transaction.asset_symbol || transaction.asset,
+    decimals: Number.isInteger(transaction.asset_decimals) ? transaction.asset_decimals : native?.decimals || 6,
+    icon: native?.icon || "◇",
+    kind: "native",
+  };
   return {
-    asset: CHAIN_CONFIG[chain].asset,
+    id: transaction.asset,
+    chain: transaction.chain,
+    name: transaction.asset_name || transaction.asset_symbol || "ERC-20 Token",
+    symbol: transaction.asset_symbol || "ERC-20",
+    decimals: boundedInteger(transaction.asset_decimals, 18, 0, 36),
+    icon: "◇",
+    kind: "erc20",
+    contractAddress: transaction.asset_contract.toLowerCase(),
+  };
+}
+
+function emptyAssetAnalytics(asset, currentPrice, holdingAmount) {
+  return {
+    asset: asset.id,
     holdingAmount,
     holdingValueEur: currentPrice ? holdingAmount * currentPrice : null,
     currentPriceEur: currentPrice || null,
@@ -812,16 +1003,16 @@ function emptyAssetAnalytics(chain, currentPrice, holdingAmount) {
   };
 }
 
-function calculateAssetAnalytics(transactions, currentPrices, holdings) {
-  const analytics = Object.fromEntries(Object.entries(CHAIN_CONFIG).map(([chain, config]) => [
-    chain,
-    emptyAssetAnalytics(chain, positiveNumber(currentPrices[chain]), Number(holdings[config.asset] || 0)),
+function calculateAssetAnalytics(transactions, pricesByAsset, holdings, assets) {
+  const analytics = Object.fromEntries(Object.entries(assets).map(([assetId, asset]) => [
+    assetId,
+    emptyAssetAnalytics(asset, positiveNumber(pricesByAsset[assetId]), Number(holdings[assetId] || 0)),
   ]));
-  const purchaseLots = Object.fromEntries(Object.keys(CHAIN_CONFIG).map((chain) => [chain, []]));
+  const purchaseLots = Object.fromEntries(Object.keys(assets).map((assetId) => [assetId, []]));
   const chronological = [...transactions].sort((left, right) => String(left.timestamp || "").localeCompare(String(right.timestamp || "")));
 
   for (const transaction of chronological) {
-    const report = analytics[transaction.chain];
+    const report = analytics[transaction.asset];
     if (!report) continue;
     const amount = Number(transaction.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) continue;
@@ -830,11 +1021,11 @@ function calculateAssetAnalytics(transactions, currentPrices, holdings) {
     if (transaction.direction === "in" && transaction.purpose === "Kauf") {
       report.purchases.count += 1;
       report.purchases.acquiredAmount += amount;
-      purchaseLots[transaction.chain].push({ amount, costPerAsset: historicPrice });
+      purchaseLots[transaction.asset].push({ amount, costPerAsset: historicPrice });
     }
     if (transaction.direction === "out" && transaction.purpose === "Verkauf") {
       let remainingToSell = amount;
-      for (const lot of purchaseLots[transaction.chain]) {
+      for (const lot of purchaseLots[transaction.asset]) {
         if (remainingToSell <= 0) break;
         const consumed = Math.min(lot.amount, remainingToSell);
         lot.amount -= consumed;
@@ -849,8 +1040,8 @@ function calculateAssetAnalytics(transactions, currentPrices, holdings) {
     }
   }
 
-  for (const [chain, report] of Object.entries(analytics)) {
-    for (const lot of purchaseLots[chain]) {
+  for (const [assetId, report] of Object.entries(analytics)) {
+    for (const lot of purchaseLots[assetId]) {
       if (lot.amount <= 0) continue;
       report.purchases.remainingAmount += lot.amount;
       if (lot.costPerAsset) report.purchases.remainingCostEur += lot.amount * lot.costPerAsset;
@@ -873,27 +1064,41 @@ async function portfolioResponse() {
     JOIN wallets w ON w.id = t.wallet_id
     ORDER BY CASE WHEN t.timestamp IS NULL THEN 0 ELSE 1 END, t.timestamp DESC, t.id DESC
   `).all();
-  const currentPrices = await getCurrentPrices();
-  const enriched = transactions.map((transaction) => ({
-    ...transaction,
-    price_now_eur: currentPrices[transaction.chain] || null,
-  }));
   const holdings = Object.fromEntries(Object.values(CHAIN_CONFIG).map((chain) => [chain.asset, 0]));
-  for (const transaction of enriched) {
+  const assets = nativeAssetDescriptors();
+  for (const transaction of transactions) {
+    assets[transaction.asset] = assets[transaction.asset] || assetDescriptorFromTransaction(transaction);
     const sign = transaction.direction === "in" ? 1 : transaction.direction === "out" ? -1 : 0;
     holdings[transaction.asset] = Number(holdings[transaction.asset] || 0) + sign * Number(transaction.amount);
   }
+  const currentPrices = await getCurrentPrices();
+  const tokenPrices = await getErc20CurrentPrices(
+    Object.values(assets)
+      .filter((asset) => asset.kind === "erc20" && Number(holdings[asset.id] || 0) !== 0)
+      .map((asset) => asset.contractAddress),
+    runtimeSettings(),
+  );
+  const pricesByAsset = Object.fromEntries(Object.entries(assets).map(([assetId, asset]) => [
+    assetId,
+    asset.kind === "erc20" ? tokenPrices[asset.contractAddress] || null : currentPrices[asset.chain] || null,
+  ]));
+  const enriched = transactions.map((transaction) => ({
+    ...transaction,
+    price_now_eur: pricesByAsset[transaction.asset] || null,
+  }));
   const totalValueEur = Object.entries(holdings).reduce(
-    (sum, [asset, amount]) => sum + amount * Number(currentPrices[asset] || 0),
+    (sum, [asset, amount]) => sum + amount * Number(pricesByAsset[asset] || 0),
     0,
   );
-  const assetAnalytics = calculateAssetAnalytics(enriched, currentPrices, holdings);
+  const assetAnalytics = calculateAssetAnalytics(enriched, pricesByAsset, holdings, assets);
 
   return {
     wallets,
     transactions: enriched,
     holdings,
     assetAnalytics,
+    assets,
+    assetPrices: pricesByAsset,
     totalValueEur,
     currentPrices,
     purposePresets: PURPOSE_PRESETS,
