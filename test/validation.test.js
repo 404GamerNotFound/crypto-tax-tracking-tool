@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const bitcoin = require("bitcoinjs-lib");
-const { cleanLabel, isValidAddress } = require("../lib/validation");
+const { cleanLabel, isValidAddress, isValidCardanoStakeAddress } = require("../lib/validation");
 
 test("validiert typische Bitcoin-Adressen", () => {
   assert.equal(isValidAddress("BTC", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080"), true);
@@ -23,6 +23,11 @@ test("validiert Cardano-Mainnet-Zahlungsadressen", () => {
   const address = `addr1${"q".repeat(98)}`;
   assert.equal(isValidAddress("ADA", address), true);
   assert.equal(isValidAddress("ADA", "addr_test1qwerty"), false);
+});
+
+test("validiert Cardano-Mainnet-Stake-Adressen", () => {
+  assert.equal(isValidCardanoStakeAddress(`stake1${"q".repeat(54)}`), true);
+  assert.equal(isValidCardanoStakeAddress("addr1qwerty"), false);
 });
 
 test("validiert Ethereum-Mainnet-Adressen", () => {

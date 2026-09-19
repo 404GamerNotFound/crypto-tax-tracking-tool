@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Wallet-Verwaltung für CryptoBuch" />
     <title>CryptoBuch · Wallets</title>
-    <link rel="stylesheet" href="/styles.css?v=20260919-4" />
+    <link rel="stylesheet" href="/styles.css?v=20260919-5" />
   </head>
   <body>
     <div class="shell wallet-page-shell">
@@ -74,10 +74,10 @@
             <input name="label" maxlength="80" placeholder="z. B. Ledger" />
           </label>
         </div>
-        <div class="form-grid" id="bitcoin-source-fields">
+        <div class="form-grid" id="bitcoin-source-fields" hidden>
           <label>
             <span>Bitcoin-Quelle</span>
-            <select name="sourceType" id="wallet-source-type">
+            <select name="btcSourceType" id="wallet-source-type">
               <option value="address">Einzelne Adresse</option>
               <option value="xpub">xPub, yPub oder zPub – alle Adressen</option>
             </select>
@@ -90,6 +90,19 @@
               <option value="p2pkh">Legacy · 1…</option>
             </select>
           </label>
+        </div>
+        <div class="form-grid" id="cardano-source-fields" hidden>
+          <label>
+            <span>Cardano-Quelle</span>
+            <select name="cardanoSourceType" id="cardano-source-type">
+              <option value="address">Einzelne Zahlungsadresse</option>
+              <option value="stake">Stake-Adresse · alle verbundenen Adressen</option>
+            </select>
+          </label>
+          <div class="source-explanation">
+            <strong>Empfohlen: Stake-Adresse</strong>
+            <small>Ermittelt alle durch diese Stake-Adresse verbundenen Zahlungsadressen und importiert ihre gemeinsame Historie.</small>
+          </div>
         </div>
         <label>
           <span id="wallet-identifier-label">Öffentliche Wallet-Adresse</span>
@@ -106,6 +119,6 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/wallets.js?v=20260919-4" defer></script>
+    <script src="/wallets.js?v=20260919-5" defer></script>
   </body>
 </html>

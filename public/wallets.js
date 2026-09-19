@@ -45,7 +45,9 @@ async function api(url, options = {}) {
 
 function walletName(wallet) {
   if (wallet.label) return wallet.label;
-  return wallet.source_type === "xpub" ? "Bitcoin xPub" : `${chainInfo(wallet.chain).name}-Wallet`;
+  if (wallet.source_type === "xpub") return "Bitcoin xPub";
+  if (wallet.source_type === "stake") return "Cardano Stake-Adresse";
+  return `${chainInfo(wallet.chain).name}-Wallet`;
 }
 
 function renderWallet(wallet) {
@@ -61,7 +63,11 @@ function renderWallet(wallet) {
   const title = document.createElement("h3");
   title.textContent = walletName(wallet);
   const meta = document.createElement("p");
-  meta.textContent = wallet.source_type === "xpub" ? `Bitcoin-xPub · ${shorten(wallet.address)}` : `${chain.name} · ${shorten(wallet.address)}`;
+  meta.textContent = wallet.source_type === "xpub"
+    ? `Bitcoin-xPub · ${shorten(wallet.address)}`
+    : wallet.source_type === "stake"
+      ? `Cardano Stake-Adresse · ${shorten(wallet.address)}`
+      : `${chain.name} · ${shorten(wallet.address)}`;
   copy.append(title, meta);
   identity.append(icon, copy);
 
@@ -113,19 +119,26 @@ function render() {
 function updateWalletFields() {
   const chain = el("wallet-chain").value;
   const config = chainInfo(chain);
-  const bitcoin = Boolean(config.supportsXpub);
+  const bitcoin = chain === "BTC" && Boolean(config.supportsXpub);
+  const cardano = chain === "ADA";
   const source = el("wallet-source-type");
+  const cardanoSource = el("cardano-source-type");
   if (!bitcoin) source.value = "address";
+  if (!cardano) cardanoSource.value = "address";
   const xpub = bitcoin && source.value === "xpub";
+  const stake = cardano && cardanoSource.value === "stake";
   const inferred = xpubAddressTypeFor(el("wallet-address").value);
   if (xpub && inferred) el("xpub-address-type").value = inferred;
   el("bitcoin-source-fields").hidden = !bitcoin;
+  el("cardano-source-fields").hidden = !cardano;
   el("xpub-format-wrap").hidden = !xpub;
   el("xpub-notice").hidden = !xpub;
-  el("wallet-identifier-label").textContent = xpub ? "Bitcoin-xPub" : "Öffentliche Wallet-Adresse";
-  el("wallet-address").placeholder = xpub ? "xpub6…" : config.addressPlaceholder || "Öffentliche Adresse";
+  el("wallet-identifier-label").textContent = xpub ? "Bitcoin-xPub" : stake ? "Cardano Stake-Adresse" : "Öffentliche Wallet-Adresse";
+  el("wallet-address").placeholder = xpub ? "xpub6…" : stake ? "stake1…" : config.addressPlaceholder || "Öffentliche Adresse";
   el("address-hint").textContent = xpub
     ? "xPub, yPub und zPub werden erkannt. Leerzeichen und Zeilenumbrüche aus dem Einfügen werden automatisch entfernt."
+    : stake
+      ? "Die Stake-Adresse fasst die zugehörigen Cardano-Zahlungsadressen zusammen. Deren gesamte über Blockfrost sichtbare Transaktionshistorie wird importiert."
     : config.addressHint || `Öffentliche ${config.name}-Adresse eingeben.`;
 }
 
@@ -214,6 +227,7 @@ el("close-wallet-modal").addEventListener("click", closeWalletModal);
 el("cancel-wallet").addEventListener("click", closeWalletModal);
 el("wallet-chain").addEventListener("change", updateWalletFields);
 el("wallet-source-type").addEventListener("change", updateWalletFields);
+el("cardano-source-type").addEventListener("change", updateWalletFields);
 el("wallet-address").addEventListener("input", () => {
   const field = el("wallet-address");
   const normalized = normalizeExtendedPublicKey(field.value);
@@ -233,11 +247,17 @@ el("wallet-form").addEventListener("submit", async (event) => {
     const rawIdentifier = String(form.get("address") || "");
     const identifier = isExtendedPublicKey(rawIdentifier) ? normalizeExtendedPublicKey(rawIdentifier) : rawIdentifier.trim();
     const detectedXpub = isExtendedPublicKey(identifier);
-    const wallet = await api("/api/wallets", {
+      const chain = String(form.get("chain") || "");
+      const sourceType = detectedXpub
+        ? "xpub"
+        : chain === "BTC" ? form.get("btcSourceType")
+          : chain === "ADA" ? form.get("cardanoSourceType")
+            : "address";
+      const wallet = await api("/api/wallets", {
       method: "POST",
       body: JSON.stringify({
         chain: form.get("chain"), label: form.get("label"), address: identifier,
-        sourceType: detectedXpub ? "xpub" : form.get("sourceType"),
+        sourceType,
         xpubAddressType: xpubAddressTypeFor(identifier) || form.get("xpubAddressType"),
       }),
     });

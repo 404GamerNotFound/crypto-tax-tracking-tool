@@ -195,7 +195,9 @@ function renderTransactions() {
     const walletTitle = document.createElement("strong");
     walletTitle.textContent = transaction.wallet_label || `${chainInfo().name}-Wallet`;
     const address = document.createElement("small");
-    address.textContent = transaction.source_type === "xpub" ? "Bitcoin-xPub" : shorten(transaction.address, 7, 6);
+    address.textContent = transaction.source_type === "xpub"
+      ? "Bitcoin-xPub"
+      : transaction.source_type === "stake" ? "Cardano Stake-Adresse" : shorten(transaction.address, 7, 6);
     wallet.append(walletTitle, address);
 
     const amount = document.createElement("td");

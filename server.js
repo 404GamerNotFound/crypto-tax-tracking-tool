@@ -9,7 +9,7 @@ const {
   isExtendedPublicKey,
   normalizeExtendedPublicKey,
 } = require("./lib/bitcoin-xpub");
-const { CHAIN_CONFIG, cleanLabel, isValidAddress } = require("./lib/validation");
+const { CHAIN_CONFIG, cleanLabel, isValidAddress, isValidCardanoStakeAddress } = require("./lib/validation");
 const { isConfirmedStakingPayout, trustedPayoutAliases } = require("./lib/tezos-staking");
 const { normalizeTronNativeTransfer } = require("./lib/tron");
 const { normalizeCardanoTransaction } = require("./lib/cardano");
@@ -62,7 +62,7 @@ db.exec(`
     chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX', 'ADA', 'ETH')),
     address TEXT NOT NULL,
     label TEXT NOT NULL DEFAULT '',
-    source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub')),
+    source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub', 'stake')),
     xpub_address_type TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_synced_at TEXT,
@@ -126,7 +126,7 @@ db.exec(`
 
 function migrateWalletSchemaForChains() {
   const walletSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'wallets'").get()?.sql || "";
-  if (walletSql.includes("'ETH'")) return;
+  if (walletSql.includes("'ETH'") && walletSql.includes("'stake'")) return;
   const walletColumns = new Set(db.prepare("PRAGMA table_info(wallets)").all().map((column) => column.name));
   const sourceType = walletColumns.has("source_type") ? "source_type" : "'address'";
   const xpubAddressType = walletColumns.has("xpub_address_type") ? "xpub_address_type" : "NULL";
@@ -139,7 +139,7 @@ function migrateWalletSchemaForChains() {
       chain TEXT NOT NULL CHECK (chain IN ('BTC', 'XTZ', 'TRX', 'ADA', 'ETH')),
       address TEXT NOT NULL,
       label TEXT NOT NULL DEFAULT '',
-      source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub')),
+      source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub', 'stake')),
       xpub_address_type TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       last_synced_at TEXT,
@@ -645,17 +645,38 @@ async function fetchTronTransactions(address, settings) {
   return settings.maxTransactionsPerSync ? output.slice(0, settings.maxTransactionsPerSync) : output;
 }
 
-async function fetchCardanoTransactions(address, settings) {
+function cardanoHeaders(settings) {
   if (!settings.blockfrostProjectId) {
     throw makeError("Für Cardano wird eine Blockfrost Project-ID benötigt. Bitte unter Einstellungen → Cardano hinterlegen.");
   }
-  const references = [];
-  const pageSize = 100;
-  const headers = { project_id: settings.blockfrostProjectId };
-  let page = 1;
+  return { project_id: settings.blockfrostProjectId };
+}
 
+async function fetchCardanoAccountAddresses(stakeAddress, settings) {
+  const addresses = [];
+  const headers = cardanoHeaders(settings);
+  let page = 1;
   while (true) {
-    if (settings.maxTransactionsPerSync && references.length >= settings.maxTransactionsPerSync) break;
+    const query = new URLSearchParams({ count: "100", page: String(page), order: "asc" });
+    const batch = await fetchJson(
+      `${settings.blockfrostBaseUrl}/accounts/${encodeURIComponent(stakeAddress)}/addresses?${query.toString()}`,
+      headers,
+    );
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    for (const item of batch) if (isValidAddress("ADA", item?.address)) addresses.push(item.address);
+    if (batch.length < 100) break;
+    page += 1;
+  }
+  return [...new Set(addresses)];
+}
+
+async function fetchCardanoTransactionReferences(address, settings, remaining = settings.maxTransactionsPerSync) {
+  const references = [];
+  const headers = cardanoHeaders(settings);
+  const pageSize = 100;
+  let page = 1;
+  while (true) {
+    if (remaining && references.length >= remaining) break;
     const query = new URLSearchParams({ count: String(pageSize), page: String(page), order: "desc" });
     const batch = await fetchJson(
       `${settings.blockfrostBaseUrl}/addresses/${encodeURIComponent(address)}/txs?${query.toString()}`,
@@ -666,10 +687,27 @@ async function fetchCardanoTransactions(address, settings) {
     if (batch.length < pageSize) break;
     page += 1;
   }
+  return remaining ? references.slice(0, remaining) : references;
+}
 
-  const limited = settings.maxTransactionsPerSync ? references.slice(0, settings.maxTransactionsPerSync) : references;
+async function fetchCardanoTransactions(addresses, settings) {
+  const paymentAddresses = [...new Set(Array.isArray(addresses) ? addresses : [addresses])];
+  const references = [];
+  const seen = new Set();
+  for (const address of paymentAddresses) {
+    const remaining = settings.maxTransactionsPerSync ? settings.maxTransactionsPerSync - references.length : 0;
+    if (settings.maxTransactionsPerSync && remaining <= 0) break;
+    for (const reference of await fetchCardanoTransactionReferences(address, settings, remaining)) {
+      const hash = reference.tx_hash || reference.hash;
+      if (hash && !seen.has(hash)) {
+        seen.add(hash);
+        references.push(reference);
+      }
+    }
+  }
   const transactions = [];
-  for (const reference of limited) {
+  const headers = cardanoHeaders(settings);
+  for (const reference of references) {
     const hash = reference.tx_hash || reference.hash;
     if (!hash) continue;
     const transaction = await fetchJson(`${settings.blockfrostBaseUrl}/txs/${encodeURIComponent(hash)}/utxos`, headers);
@@ -813,7 +851,14 @@ const CHAIN_ADAPTERS = {
   },
   ADA: {
     async load(wallet, settings) {
-      return { rawTransactions: await fetchCardanoTransactions(wallet.address, settings), context: wallet.address, xpubCapped: false };
+      if (wallet.source_type === "stake") {
+        const addresses = await fetchCardanoAccountAddresses(wallet.address, settings);
+        if (addresses.length === 0) {
+          throw makeError("Zu dieser Cardano-Stake-Adresse wurden keine Zahlungsadressen gefunden. Prüfe, ob es eine Mainnet-Stake-Adresse ist.");
+        }
+        return { rawTransactions: await fetchCardanoTransactions(addresses, settings), context: new Set(addresses), xpubCapped: false };
+      }
+      return { rawTransactions: await fetchCardanoTransactions(wallet.address, settings), context: new Set([wallet.address]), xpubCapped: false };
     },
     normalize: normalizeCardanoTransaction,
   },
@@ -1152,7 +1197,7 @@ app.post("/api/wallets", (request, response, next) => {
       address = normalizeExtendedPublicKey(rawAddress);
       if (sourceType === "address" && isExtendedPublicKey(address)) sourceType = "xpub";
     }
-    if (!['address', 'xpub'].includes(sourceType)) throw makeError("Nicht unterstützte Wallet-Art.");
+    if (!['address', 'xpub', 'stake'].includes(sourceType)) throw makeError("Nicht unterstützte Wallet-Art.");
     if (sourceType === "xpub") {
       if (chain !== "BTC") throw makeError("xPub wird nur für Bitcoin unterstützt.");
       if (!XPUB_ADDRESS_TYPES.has(xpubAddressType)) throw makeError("Bitte ein unterstütztes Bitcoin-Adressformat auswählen.");
@@ -1162,6 +1207,9 @@ app.post("/api/wallets", (request, response, next) => {
       } catch (error) {
         throw makeError(error.message);
       }
+    } else if (sourceType === "stake") {
+      if (chain !== "ADA") throw makeError("Eine Stake-Adresse wird nur für Cardano unterstützt.");
+      if (!isValidCardanoStakeAddress(address)) throw makeError("Die Cardano-Stake-Adresse hat kein unterstütztes Mainnet-Format.");
     } else if (!isValidAddress(chain, address)) {
       throw makeError(`Die ${CHAIN_CONFIG[chain].name}-Adresse hat kein unterstütztes Format.`);
     }

@@ -156,6 +156,9 @@ dialog form { padding: 27px; }
 .modal-close:hover { color: var(--red); }
 .modal-copy { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 18px 0 21px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.source-explanation { align-self: end; margin-bottom: 16px; padding: 10px 11px; border: 1px solid #c9e2d1; border-radius: 5px; background: #eef8f0; color: var(--green-dark); font-size: 10px; line-height: 1.4; }
+.source-explanation strong, .source-explanation small { display: block; }
+.source-explanation small { margin-top: 2px; color: #4e6e5b; }
 form > label, .form-grid label { display: grid; gap: 7px; margin-bottom: 16px; font-size: 12px; font-weight: 600; }
 form label span small, form label > small { color: var(--muted); font-weight: 400; }
 form input, form select { width: 100%; min-height: 42px; border: 1px solid var(--line); border-radius: 5px; outline-color: var(--green); padding: 0 11px; color: var(--ink); background: white; font-size: 13px; }

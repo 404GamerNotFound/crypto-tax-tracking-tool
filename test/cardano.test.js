@@ -42,3 +42,19 @@ test("normalisiert einen Cardano-Ausgang mit Wechselgeld", () => {
   assert.equal(transaction.fee, 0.17);
   assert.equal(transaction.counterparty, recipient);
 });
+
+test("fasst Transaktionen mehrerer einer Stake-Adresse zugeordneter Zahlungsadressen zusammen", () => {
+  const secondAddress = `addr1${"s".repeat(98)}`;
+  const transaction = normalizeCardanoTransaction({
+    hash: "c".repeat(64),
+    block_time: 1_700_000_002,
+    inputs: [{ address: wallet, amount: [{ unit: "lovelace", quantity: "4000000" }] }],
+    outputs: [
+      { address: secondAddress, amount: [{ unit: "lovelace", quantity: "1000000" }] },
+      { address: recipient, amount: [{ unit: "lovelace", quantity: "3000000" }] },
+    ],
+  }, new Set([wallet, secondAddress]));
+  assert.equal(transaction.direction, "out");
+  assert.equal(transaction.amount, 3);
+  assert.equal(transaction.counterparty, recipient);
+});

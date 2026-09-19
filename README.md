@@ -92,7 +92,9 @@ Für die Cardano-Transaktionshistorie benötigst du eine Blockfrost Project-ID. 
 BLOCKFROST_PROJECT_ID=deine_blockfrost_project_id
 ```
 
-Die Anwendung fragt zunächst die paginierten Transaktions-Referenzen der Zahlungsadresse ab und lädt dann die UTXOs jeder Transaktion. Dadurch können Ein- und Ausgänge inklusive Wechselgeld als Netto-ADA-Bewegung der Wallet dargestellt werden. Die Basisadresse ist bei Bedarf ebenfalls konfigurierbar (`BLOCKFROST_BASE_URL`).
+Beim Hinzufügen einer Cardano-Wallet kann statt einer einzelnen Zahlungsadresse (`addr1…`) eine öffentliche Stake-Adresse (`stake1…`) gewählt werden. Diese Account-Quelle ist die Cardano-Entsprechung zum Bitcoin-xPub: Die Anwendung fragt über Blockfrost alle der Stake-Adresse zugeordneten Zahlungsadressen ab und importiert ihre gemeinsame Transaktionshistorie. Einzelne `addr1…`-Adressen bleiben weiterhin möglich.
+
+Die Anwendung fragt anschließend die paginierten Transaktions-Referenzen der Zahlungsadressen ab und lädt dann die UTXOs jeder Transaktion. Dadurch können Ein- und Ausgänge inklusive Wechselgeld als Netto-ADA-Bewegung der Wallet dargestellt werden. Das umfasst alle Zahlungsadressen, die Blockfrost der Stake-Adresse zuordnet; reine Enterprise-Adressen ohne Stake-Referenz sind technisch nicht ableitbar und müssen bei Bedarf einzeln ergänzt werden. Die Basisadresse ist bei Bedarf ebenfalls konfigurierbar (`BLOCKFROST_BASE_URL`).
 
 ### Ethereum / Etherscan und ERC-20
 
