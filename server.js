@@ -2,21 +2,32 @@ const express = require("express");
 const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
-const { XPUB_ADDRESS_TYPES, deriveXpubAddress, parseXpub } = require("./lib/bitcoin-xpub");
+const { XPUB_ADDRESS_TYPES, deriveXpubAddress, inspectXpub, isExtendedPublicKey } = require("./lib/bitcoin-xpub");
 const { CHAIN_CONFIG, cleanLabel, isValidAddress } = require("./lib/validation");
 const { isConfirmedStakingPayout, trustedPayoutAliases } = require("./lib/tezos-staking");
 const { normalizeTronNativeTransfer } = require("./lib/tron");
 
+function boundedInteger(value, fallback, minimum, maximum) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= minimum && number <= maximum ? number : fallback;
+}
+
 const PORT = Number(process.env.PORT || 3000);
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DB_PATH = path.join(DATA_DIR, "cryptobuch.sqlite");
-const MAX_TRANSACTIONS_PER_SYNC = Math.max(0, Number(process.env.MAX_TRANSACTIONS_PER_SYNC || 0));
-const BITCOIN_EXPLORER_BASE_URL = (process.env.BITCOIN_EXPLORER_BASE_URL || "https://blockstream.info/api").replace(/\/$/, "");
-const TRONGRID_BASE_URL = (process.env.TRONGRID_BASE_URL || "https://api.trongrid.io").replace(/\/$/, "");
-const TRONGRID_API_KEY = String(process.env.TRONGRID_API_KEY || "").trim();
-const XPUB_GAP_LIMIT = Math.min(50, Math.max(1, Number(process.env.XPUB_GAP_LIMIT || 20)));
-const XPUB_MAX_DERIVATIONS_PER_BRANCH = Math.max(XPUB_GAP_LIMIT, Math.min(1000, Number(process.env.XPUB_MAX_DERIVATIONS_PER_BRANCH || 200)));
-const XTZ_STAKING_PAYOUT_ALIASES = trustedPayoutAliases(process.env.XTZ_STAKING_PAYOUT_ALIASES || "Stake.fish Payouts");
+const DEFAULT_XPUB_GAP_LIMIT = boundedInteger(process.env.XPUB_GAP_LIMIT, 20, 1, 50);
+const SETTINGS_DEFAULTS = Object.freeze({
+  maxTransactionsPerSync: boundedInteger(process.env.MAX_TRANSACTIONS_PER_SYNC, 0, 0, 100000),
+  bulkPurposeLimit: 2500,
+  bitcoinExplorerBaseUrl: (process.env.BITCOIN_EXPLORER_BASE_URL || "https://blockstream.info/api").replace(/\/$/, ""),
+  tzktApiBaseUrl: (process.env.TZKT_API_BASE_URL || "https://api.tzkt.io/v1").replace(/\/$/, ""),
+  tronGridBaseUrl: (process.env.TRONGRID_BASE_URL || "https://api.trongrid.io").replace(/\/$/, ""),
+  coinGeckoBaseUrl: (process.env.COINGECKO_API_BASE_URL || "https://api.coingecko.com/api/v3").replace(/\/$/, ""),
+  tronGridApiKey: String(process.env.TRONGRID_API_KEY || "").trim(),
+  xpubGapLimit: DEFAULT_XPUB_GAP_LIMIT,
+  xpubMaxDerivationsPerBranch: boundedInteger(process.env.XPUB_MAX_DERIVATIONS_PER_BRANCH, 200, DEFAULT_XPUB_GAP_LIMIT, 1000),
+  xtzStakingPayoutAliases: String(process.env.XTZ_STAKING_PAYOUT_ALIASES || "Stake.fish Payouts").trim(),
+});
 const PURPOSE_PRESETS = [
   "Kauf",
   "Verkauf",
@@ -81,6 +92,11 @@ db.exec(`
     last_checked_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(wallet_id, address),
     UNIQUE(wallet_id, branch, derivation_index)
+  );
+  CREATE TABLE IF NOT EXISTS app_settings (
+    setting_key TEXT PRIMARY KEY,
+    setting_value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_transactions_wallet_timestamp
     ON transactions(wallet_id, timestamp DESC);
@@ -154,6 +170,120 @@ function makeError(message, status = 400) {
   return error;
 }
 
+function cleanServiceUrl(value, label) {
+  const candidate = String(value || "").trim();
+  try {
+    const url = new URL(candidate);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error();
+    return url.toString().replace(/\/$/, "");
+  } catch (_) {
+    throw makeError(`${label} muss eine vollständige HTTP(S)-Adresse sein.`);
+  }
+}
+
+function cleanAliases(value) {
+  if (typeof value !== "string") return "";
+  return [...new Set(value.split(",").map((item) => cleanLabel(item, 80)).filter(Boolean))].join(", ");
+}
+
+function seedSettings() {
+  const upsert = db.prepare(`
+    INSERT INTO app_settings (setting_key, setting_value, updated_at)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(setting_key) DO NOTHING
+  `);
+  for (const [key, value] of Object.entries(SETTINGS_DEFAULTS)) upsert.run(key, String(value));
+}
+
+function rawSettings() {
+  const values = Object.fromEntries(
+    db.prepare("SELECT setting_key, setting_value FROM app_settings").all().map((row) => [row.setting_key, row.setting_value]),
+  );
+  return { ...Object.fromEntries(Object.entries(SETTINGS_DEFAULTS).map(([key, value]) => [key, String(value)])), ...values };
+}
+
+function runtimeSettings() {
+  const values = rawSettings();
+  const xpubGapLimit = boundedInteger(values.xpubGapLimit, SETTINGS_DEFAULTS.xpubGapLimit, 1, 50);
+  return {
+    maxTransactionsPerSync: boundedInteger(values.maxTransactionsPerSync, SETTINGS_DEFAULTS.maxTransactionsPerSync, 0, 100000),
+    bulkPurposeLimit: boundedInteger(values.bulkPurposeLimit, SETTINGS_DEFAULTS.bulkPurposeLimit, 1, 2500),
+    bitcoinExplorerBaseUrl: values.bitcoinExplorerBaseUrl || SETTINGS_DEFAULTS.bitcoinExplorerBaseUrl,
+    tzktApiBaseUrl: values.tzktApiBaseUrl || SETTINGS_DEFAULTS.tzktApiBaseUrl,
+    tronGridBaseUrl: values.tronGridBaseUrl || SETTINGS_DEFAULTS.tronGridBaseUrl,
+    coinGeckoBaseUrl: values.coinGeckoBaseUrl || SETTINGS_DEFAULTS.coinGeckoBaseUrl,
+    tronGridApiKey: values.tronGridApiKey || "",
+    xpubGapLimit,
+    xpubMaxDerivationsPerBranch: boundedInteger(values.xpubMaxDerivationsPerBranch, SETTINGS_DEFAULTS.xpubMaxDerivationsPerBranch, xpubGapLimit, 1000),
+    xtzStakingPayoutAliases: values.xtzStakingPayoutAliases || "",
+    trustedStakingPayoutAliases: trustedPayoutAliases(values.xtzStakingPayoutAliases || ""),
+  };
+}
+
+function settingsResponse() {
+  const settings = runtimeSettings();
+  return {
+    maxTransactionsPerSync: settings.maxTransactionsPerSync,
+    bulkPurposeLimit: settings.bulkPurposeLimit,
+    bitcoinExplorerBaseUrl: settings.bitcoinExplorerBaseUrl,
+    tzktApiBaseUrl: settings.tzktApiBaseUrl,
+    tronGridBaseUrl: settings.tronGridBaseUrl,
+    coinGeckoBaseUrl: settings.coinGeckoBaseUrl,
+    tronGridApiKeyConfigured: Boolean(settings.tronGridApiKey),
+    xpubGapLimit: settings.xpubGapLimit,
+    xpubMaxDerivationsPerBranch: settings.xpubMaxDerivationsPerBranch,
+    xtzStakingPayoutAliases: settings.xtzStakingPayoutAliases,
+  };
+}
+
+function updateSettings(input) {
+  const current = runtimeSettings();
+  const maxTransactionsPerSync = boundedInteger(input.maxTransactionsPerSync, current.maxTransactionsPerSync, 0, 100000);
+  if (String(input.maxTransactionsPerSync ?? "") !== "" && Number(input.maxTransactionsPerSync) !== maxTransactionsPerSync) {
+    throw makeError("Das Transaktionslimit muss eine ganze Zahl zwischen 0 und 100.000 sein.");
+  }
+  const xpubGapLimit = boundedInteger(input.xpubGapLimit, current.xpubGapLimit, 1, 50);
+  if (Number(input.xpubGapLimit) !== xpubGapLimit) throw makeError("Das xPub-Gap-Limit muss zwischen 1 und 50 liegen.");
+  const xpubMaxDerivationsPerBranch = boundedInteger(input.xpubMaxDerivationsPerBranch, current.xpubMaxDerivationsPerBranch, xpubGapLimit, 1000);
+  if (Number(input.xpubMaxDerivationsPerBranch) !== xpubMaxDerivationsPerBranch) {
+    throw makeError("Die xPub-Sicherheitsgrenze muss mindestens dem Gap-Limit entsprechen und darf höchstens 1.000 sein.");
+  }
+  const bulkPurposeLimit = boundedInteger(input.bulkPurposeLimit, current.bulkPurposeLimit, 1, 2500);
+  if (Number(input.bulkPurposeLimit) !== bulkPurposeLimit) throw makeError("Das Limit für die Sammelbearbeitung muss zwischen 1 und 2.500 liegen.");
+
+  const next = {
+    maxTransactionsPerSync,
+    bulkPurposeLimit,
+    bitcoinExplorerBaseUrl: cleanServiceUrl(input.bitcoinExplorerBaseUrl, "Die Bitcoin-Explorer-URL"),
+    tzktApiBaseUrl: cleanServiceUrl(input.tzktApiBaseUrl, "Die TzKT-URL"),
+    tronGridBaseUrl: cleanServiceUrl(input.tronGridBaseUrl, "Die TronGrid-URL"),
+    coinGeckoBaseUrl: cleanServiceUrl(input.coinGeckoBaseUrl, "Die CoinGecko-URL"),
+    xpubGapLimit,
+    xpubMaxDerivationsPerBranch,
+    xtzStakingPayoutAliases: cleanAliases(input.xtzStakingPayoutAliases),
+    tronGridApiKey: input.clearTronGridApiKey ? "" : String(input.tronGridApiKey || "").trim() || current.tronGridApiKey,
+  };
+  if (next.tronGridApiKey.length > 300) throw makeError("Der TronGrid-API-Key ist zu lang.");
+
+  const upsert = db.prepare(`
+    INSERT INTO app_settings (setting_key, setting_value, updated_at)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = datetime('now')
+  `);
+  db.exec("BEGIN");
+  try {
+    for (const [key, value] of Object.entries(next)) upsert.run(key, String(value));
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  currentPriceCache = { expiresAt: 0, data: {} };
+  return settingsResponse();
+}
+
+seedSettings();
+
 function cleanPurpose(value) {
   if (value === null || value === undefined || value === "") return null;
   const cleaned = cleanLabel(value, 80);
@@ -202,9 +332,10 @@ async function getCurrentPrices() {
   if (currentPriceCache.expiresAt > Date.now()) return currentPriceCache.data;
 
   try {
+    const settings = runtimeSettings();
     const entries = Object.entries(CHAIN_CONFIG);
     const ids = entries.map(([, config]) => config.coinGeckoId).filter(Boolean).join(",");
-    const data = await fetchJson(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=eur&include_last_updated_at=true`);
+    const data = await fetchJson(`${settings.coinGeckoBaseUrl}/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=eur&include_last_updated_at=true`);
     const prices = Object.fromEntries(entries.map(([chain, config]) => [chain, positiveNumber(data[config.coinGeckoId]?.eur)]));
     prices.updatedAt = Math.max(...entries.map(([, config]) => Number(data[config.coinGeckoId]?.last_updated_at || 0)), 0) || null;
     currentPriceCache = { data: prices, expiresAt: Date.now() + 5 * 60 * 1000 };
@@ -233,7 +364,7 @@ function saveHistoricalPrice(coinId, date, price) {
   `).run(coinId, date, price);
 }
 
-async function hydrateHistoricalPrices(chain, timestamps) {
+async function hydrateHistoricalPrices(chain, timestamps, settings) {
   const coinId = CHAIN_CONFIG[chain]?.coinGeckoId;
   const dates = [...new Set(timestamps.filter(Boolean).map(isoDay))].sort();
   if (!coinId || dates.length === 0) return new Map();
@@ -269,7 +400,7 @@ async function hydrateHistoricalPrices(chain, timestamps) {
     const to = Math.floor(new Date(`${requestedDates.at(-1)}T23:59:59.999Z`).getTime() / 1000) + 86400;
     try {
       const payload = await fetchJson(
-        `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart/range?vs_currency=eur&from=${from}&to=${to}`,
+        `${settings.coinGeckoBaseUrl}/coins/${coinId}/market_chart/range?vs_currency=eur&from=${from}&to=${to}`,
       );
       const samples = Array.isArray(payload.prices) ? payload.prices : [];
       for (const date of requestedDates) {
@@ -304,8 +435,8 @@ function pause(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function fetchBitcoinTransactions(address, maxTransactions = MAX_TRANSACTIONS_PER_SYNC) {
-  const base = `${BITCOIN_EXPLORER_BASE_URL}/address/${encodeURIComponent(address)}`;
+async function fetchBitcoinTransactions(address, settings, maxTransactions = settings.maxTransactionsPerSync) {
+  const base = `${settings.bitcoinExplorerBaseUrl}/address/${encodeURIComponent(address)}`;
   const output = [];
   const seen = new Set();
   const add = (items) => {
@@ -330,7 +461,7 @@ async function fetchBitcoinTransactions(address, maxTransactions = MAX_TRANSACTI
   return maxTransactions ? output.slice(0, maxTransactions) : output;
 }
 
-async function discoverXpubAddresses(wallet) {
+async function discoverXpubAddresses(wallet, settings) {
   const discovered = [];
   const saveAddress = db.prepare(`
     INSERT INTO wallet_addresses (wallet_id, address, branch, derivation_index, is_used, last_checked_at)
@@ -343,9 +474,9 @@ async function discoverXpubAddresses(wallet) {
 
   for (const branch of [0, 1]) {
     let unusedInARow = 0;
-    for (let index = 0; index < XPUB_MAX_DERIVATIONS_PER_BRANCH && unusedInARow < XPUB_GAP_LIMIT; index += 1) {
+    for (let index = 0; index < settings.xpubMaxDerivationsPerBranch && unusedInARow < settings.xpubGapLimit; index += 1) {
       const address = deriveXpubAddress(wallet.address, branch, index, wallet.xpub_address_type);
-      const summary = await fetchJson(`${BITCOIN_EXPLORER_BASE_URL}/address/${encodeURIComponent(address)}`);
+      const summary = await fetchJson(`${settings.bitcoinExplorerBaseUrl}/address/${encodeURIComponent(address)}`);
       const isUsed = hasBitcoinAddressActivity(summary);
       saveAddress.run(wallet.id, address, branch, index, isUsed ? 1 : 0);
       if (isUsed) {
@@ -355,30 +486,30 @@ async function discoverXpubAddresses(wallet) {
         unusedInARow += 1;
       }
       // The public Esplora service is intentionally queried gently during an xPub scan.
-      if (unusedInARow < XPUB_GAP_LIMIT) await pause(120);
+      if (unusedInARow < settings.xpubGapLimit) await pause(120);
     }
-    if (unusedInARow < XPUB_GAP_LIMIT) capped = true;
+    if (unusedInARow < settings.xpubGapLimit) capped = true;
   }
   return { addresses: discovered, capped };
 }
 
-async function fetchBitcoinTransactionsForAddresses(addresses) {
+async function fetchBitcoinTransactionsForAddresses(addresses, settings) {
   const transactions = new Map();
   for (const address of addresses) {
-    const remaining = MAX_TRANSACTIONS_PER_SYNC ? MAX_TRANSACTIONS_PER_SYNC - transactions.size : 0;
-    if (MAX_TRANSACTIONS_PER_SYNC && remaining <= 0) break;
-    const items = await fetchBitcoinTransactions(address, remaining);
+    const remaining = settings.maxTransactionsPerSync ? settings.maxTransactionsPerSync - transactions.size : 0;
+    if (settings.maxTransactionsPerSync && remaining <= 0) break;
+    const items = await fetchBitcoinTransactions(address, settings, remaining);
     for (const transaction of items) transactions.set(transaction.txid, transaction);
   }
   return [...transactions.values()];
 }
 
-async function fetchTezosTransactions(address) {
+async function fetchTezosTransactions(address, settings) {
   const output = [];
   const limit = 1000;
   let offset = 0;
   while (true) {
-    if (MAX_TRANSACTIONS_PER_SYNC && output.length >= MAX_TRANSACTIONS_PER_SYNC) break;
+    if (settings.maxTransactionsPerSync && output.length >= settings.maxTransactionsPerSync) break;
     const query = new URLSearchParams({
       "anyof.sender.target": address,
       "sort.desc": "id",
@@ -388,23 +519,23 @@ async function fetchTezosTransactions(address) {
       // secondary price lookup for every Tezos transaction.
       quote: "eur",
     });
-    const page = await fetchJson(`https://api.tzkt.io/v1/operations/transactions?${query.toString()}`);
+    const page = await fetchJson(`${settings.tzktApiBaseUrl}/operations/transactions?${query.toString()}`);
     if (!Array.isArray(page) || page.length === 0) break;
     output.push(...page);
     if (page.length < limit) break;
     offset += page.length;
   }
-  return MAX_TRANSACTIONS_PER_SYNC ? output.slice(0, MAX_TRANSACTIONS_PER_SYNC) : output;
+  return settings.maxTransactionsPerSync ? output.slice(0, settings.maxTransactionsPerSync) : output;
 }
 
-async function fetchTronTransactions(address) {
+async function fetchTronTransactions(address, settings) {
   const output = [];
   let fingerprint = null;
   const pageSize = 200;
-  const headers = TRONGRID_API_KEY ? { "TRON-PRO-API-KEY": TRONGRID_API_KEY } : {};
+  const headers = settings.tronGridApiKey ? { "TRON-PRO-API-KEY": settings.tronGridApiKey } : {};
 
   while (true) {
-    if (MAX_TRANSACTIONS_PER_SYNC && output.length >= MAX_TRANSACTIONS_PER_SYNC) break;
+    if (settings.maxTransactionsPerSync && output.length >= settings.maxTransactionsPerSync) break;
     const query = new URLSearchParams({
       only_confirmed: "true",
       limit: String(pageSize),
@@ -412,7 +543,7 @@ async function fetchTronTransactions(address) {
     });
     if (fingerprint) query.set("fingerprint", fingerprint);
     const payload = await fetchJson(
-      `${TRONGRID_BASE_URL}/v1/accounts/${encodeURIComponent(address)}/transactions?${query.toString()}`,
+      `${settings.tronGridBaseUrl}/v1/accounts/${encodeURIComponent(address)}/transactions?${query.toString()}`,
       headers,
     );
     const page = Array.isArray(payload.data) ? payload.data : [];
@@ -422,7 +553,7 @@ async function fetchTronTransactions(address) {
     if (page.length < pageSize || !nextFingerprint || nextFingerprint === fingerprint) break;
     fingerprint = nextFingerprint;
   }
-  return MAX_TRANSACTIONS_PER_SYNC ? output.slice(0, MAX_TRANSACTIONS_PER_SYNC) : output;
+  return settings.maxTransactionsPerSync ? output.slice(0, settings.maxTransactionsPerSync) : output;
 }
 
 function normalizeBitcoinTransaction(transaction, addresses) {
@@ -455,7 +586,7 @@ function normalizeBitcoinTransaction(transaction, addresses) {
   };
 }
 
-function normalizeTezosTransaction(transaction, address) {
+function normalizeTezosTransaction(transaction, address, settings) {
   const sender = transaction.sender?.address || null;
   const target = transaction.target?.address || null;
   const direction = sender === address && target === address ? "self" : sender === address ? "out" : "in";
@@ -472,24 +603,24 @@ function normalizeTezosTransaction(transaction, address) {
     fee: direction === "out" ? decimal(feeMutez / 1000000, 6) : 0,
     counterparty: direction === "in" ? sender : target,
     historicalPrice: positiveNumber(transaction.quote?.eur),
-    autoPurpose: isConfirmedStakingPayout(transaction, address, XTZ_STAKING_PAYOUT_ALIASES) ? "Staking Rewards" : null,
+    autoPurpose: isConfirmedStakingPayout(transaction, address, settings.trustedStakingPayoutAliases) ? "Staking Rewards" : null,
     rawJson: JSON.stringify(transaction),
   };
 }
 
 const CHAIN_ADAPTERS = {
   BTC: {
-    async load(wallet) {
+    async load(wallet, settings) {
       if (wallet.source_type === "xpub") {
-        const discovery = await discoverXpubAddresses(wallet);
+        const discovery = await discoverXpubAddresses(wallet, settings);
         return {
-          rawTransactions: await fetchBitcoinTransactionsForAddresses(discovery.addresses),
+          rawTransactions: await fetchBitcoinTransactionsForAddresses(discovery.addresses, settings),
           context: new Set(discovery.addresses),
           xpubCapped: discovery.capped,
         };
       }
       return {
-        rawTransactions: await fetchBitcoinTransactions(wallet.address),
+        rawTransactions: await fetchBitcoinTransactions(wallet.address, settings),
         context: new Set([wallet.address]),
         xpubCapped: false,
       };
@@ -497,14 +628,14 @@ const CHAIN_ADAPTERS = {
     normalize: normalizeBitcoinTransaction,
   },
   XTZ: {
-    async load(wallet) {
-      return { rawTransactions: await fetchTezosTransactions(wallet.address), context: wallet.address, xpubCapped: false };
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchTezosTransactions(wallet.address, settings), context: wallet.address, xpubCapped: false };
     },
     normalize: normalizeTezosTransaction,
   },
   TRX: {
-    async load(wallet) {
-      return { rawTransactions: await fetchTronTransactions(wallet.address), context: wallet.address, xpubCapped: false };
+    async load(wallet, settings) {
+      return { rawTransactions: await fetchTronTransactions(wallet.address, settings), context: wallet.address, xpubCapped: false };
     },
     normalize: normalizeTronNativeTransfer,
   },
@@ -519,11 +650,13 @@ function getWallet(id) {
 async function syncWallet(wallet) {
   const adapter = CHAIN_ADAPTERS[wallet.chain];
   if (!adapter) throw makeError("Für diese Blockchain ist keine Synchronisierung eingerichtet.");
-  const { rawTransactions, context, xpubCapped } = await adapter.load(wallet);
-  const transactions = rawTransactions.map((item) => adapter.normalize(item, context)).filter(Boolean);
+  const settings = runtimeSettings();
+  const { rawTransactions, context, xpubCapped } = await adapter.load(wallet, settings);
+  const transactions = rawTransactions.map((item) => adapter.normalize(item, context, settings)).filter(Boolean);
   const pricesByDate = await hydrateHistoricalPrices(
     wallet.chain,
     transactions.filter((transaction) => !positiveNumber(transaction.historicalPrice)).map((transaction) => transaction.timestamp),
+    settings,
   );
 
   const existingTransaction = db.prepare(
@@ -590,7 +723,7 @@ async function syncWallet(wallet) {
   }
   return {
     imported,
-    limited: Boolean(MAX_TRANSACTIONS_PER_SYNC && rawTransactions.length >= MAX_TRANSACTIONS_PER_SYNC),
+    limited: Boolean(settings.maxTransactionsPerSync && rawTransactions.length >= settings.maxTransactionsPerSync),
     xpubCapped,
   };
 }
@@ -646,20 +779,40 @@ app.get("/api/portfolio", async (_request, response, next) => {
   }
 });
 
+app.get("/api/settings", (_request, response, next) => {
+  try {
+    response.json(settingsResponse());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/settings", (request, response, next) => {
+  try {
+    response.json(updateSettings(request.body || {}));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/wallets", (request, response, next) => {
   try {
     const chain = String(request.body?.chain || "").toUpperCase();
-    const sourceType = String(request.body?.sourceType || "address").toLowerCase();
+    let sourceType = String(request.body?.sourceType || "address").toLowerCase();
     const address = cleanLabel(request.body?.address, 120);
     const label = cleanLabel(request.body?.label, 80);
-    const xpubAddressType = String(request.body?.xpubAddressType || "p2wpkh").toLowerCase();
+    let xpubAddressType = String(request.body?.xpubAddressType || "p2wpkh").toLowerCase();
     if (!CHAIN_CONFIG[chain]) throw makeError("Bitte eine unterstützte Blockchain auswählen.");
+    if (chain === "BTC" && sourceType === "address" && isExtendedPublicKey(address)) {
+      sourceType = "xpub";
+    }
     if (!['address', 'xpub'].includes(sourceType)) throw makeError("Nicht unterstützte Wallet-Art.");
     if (sourceType === "xpub") {
       if (chain !== "BTC") throw makeError("xPub wird nur für Bitcoin unterstützt.");
       if (!XPUB_ADDRESS_TYPES.has(xpubAddressType)) throw makeError("Bitte ein unterstütztes Bitcoin-Adressformat auswählen.");
       try {
-        parseXpub(address);
+        const xpub = inspectXpub(address);
+        if (xpub.addressType) xpubAddressType = xpub.addressType;
       } catch (error) {
         throw makeError(error.message);
       }
@@ -710,7 +863,8 @@ app.patch("/api/transactions/bulk", (request, response, next) => {
     const purpose = cleanPurpose(request.body?.purpose);
     const ids = Array.isArray(request.body?.ids) ? [...new Set(request.body.ids.map(asPositiveId).filter(Boolean))] : [];
     if (ids.length === 0) throw makeError("Bitte mindestens eine Transaktion auswählen.");
-    if (ids.length > 2500) throw makeError("Maximal 2.500 Transaktionen gleichzeitig bearbeiten.");
+    const bulkPurposeLimit = runtimeSettings().bulkPurposeLimit;
+    if (ids.length > bulkPurposeLimit) throw makeError(`Maximal ${bulkPurposeLimit.toLocaleString("de-DE")} Transaktionen gleichzeitig bearbeiten.`);
     const placeholders = ids.map(() => "?").join(", ");
     const result = db.prepare(`UPDATE transactions SET purpose = ?, purpose_origin = 'manual', updated_at = datetime('now') WHERE id IN (${placeholders})`).run(purpose, ...ids);
     response.json({ updated: result.changes, purpose, purpose_origin: "manual" });
@@ -742,7 +896,13 @@ app.get("/api/explorer/:chain/address/:address", (request, response, next) => {
   }
 });
 
-app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"], maxAge: "1h" }));
+app.use(express.static(path.join(__dirname, "public"), {
+  extensions: ["html"],
+  maxAge: 0,
+  setHeaders(response, filePath) {
+    if (/\.(?:html|css|js)$/i.test(filePath)) response.setHeader("Cache-Control", "no-store");
+  },
+}));
 app.get("*splat", (_request, response) => response.sendFile(path.join(__dirname, "public", "index.html")));
 
 app.use((error, _request, response, _next) => {
@@ -757,4 +917,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, db };
+module.exports = { app, db, runtimeSettings, settingsResponse, updateSettings };

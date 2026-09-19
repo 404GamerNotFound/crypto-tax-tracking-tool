@@ -32,6 +32,27 @@ function directionLabel(direction) {
   return { in: "Eingang", out: "Ausgang", self: "Eigener Transfer" }[direction] || "Unbekannt";
 }
 
+function purposeInfo(transaction) {
+  const purpose = transaction.purpose || "";
+  const presets = {
+    "Staking Rewards": { icon: "✦", tone: "staking", label: "Staking-Ertrag" },
+    Kauf: { icon: "↗", tone: "purchase", label: "Kauf" },
+    Verkauf: { icon: "↘", tone: "sale", label: "Verkauf" },
+    "Mining Reward": { icon: "⛏", tone: "mining", label: "Mining-Ertrag" },
+    Transfer: { icon: "↔", tone: "transfer", label: "Transfer" },
+    Geschenk: { icon: "◇", tone: "gift", label: "Geschenk" },
+    Gebühr: { icon: "−", tone: "fee", label: "Gebühr" },
+    Sonstiges: { icon: "•", tone: "other", label: "Sonstiges" },
+  };
+  const info = presets[purpose] || (purpose ? { icon: "•", tone: "custom", label: purpose } : { icon: "?", tone: "unassigned", label: "Noch nicht zugeordnet" });
+  const source = transaction.purpose_origin === "auto"
+    ? "automatisch erkannt"
+    : transaction.purpose_origin === "manual"
+      ? "manuell zugeordnet"
+      : "Herkunft prüfen";
+  return { ...info, source };
+}
+
 function chainInfo(chain) {
   return state.portfolio?.chains?.[chain] || { name: chain, asset: chain, decimals: 6, icon: chain.slice(0, 1) };
 }
@@ -39,6 +60,15 @@ function chainInfo(chain) {
 function explorerUrl(chain, type, value) {
   const template = chainInfo(chain).explorer?.[type];
   return template ? template.replace("{value}", encodeURIComponent(value)) : "#";
+}
+
+function xpubAddressTypeFor(value) {
+  const prefix = String(value || "").trim().slice(0, 4).toLowerCase();
+  return prefix === "ypub" ? "p2sh-p2wpkh" : prefix === "zpub" ? "p2wpkh" : null;
+}
+
+function isExtendedPublicKey(value) {
+  return /^(?:xpub|ypub|zpub)/i.test(String(value || "").trim());
 }
 
 function renderChainControls() {
@@ -247,6 +277,21 @@ function renderTransactions() {
     historic.append(historicSub);
 
     const purposeCell = document.createElement("td");
+    purposeCell.className = "purpose-cell";
+    const info = purposeInfo(transaction);
+    const purposeCard = document.createElement("div");
+    purposeCard.className = `purpose-card ${info.tone}`;
+    const purposeIcon = document.createElement("span");
+    purposeIcon.className = "purpose-icon";
+    purposeIcon.textContent = info.icon;
+    purposeIcon.setAttribute("aria-hidden", "true");
+    const purposeCopy = document.createElement("div");
+    const purposeName = document.createElement("strong");
+    purposeName.textContent = info.label;
+    const purposeSource = document.createElement("small");
+    purposeSource.textContent = `${transaction.direction === "in" ? "Zugang" : directionLabel(transaction.direction)} · ${info.source}`;
+    purposeCopy.append(purposeName, purposeSource);
+    purposeCard.append(purposeIcon, purposeCopy);
     const select = document.createElement("select");
     select.className = "purpose-select";
     select.ariaLabel = `Zweck für Transaktion ${shorten(transaction.hash)}`;
@@ -263,13 +308,7 @@ function renderTransactions() {
       }
       setTransactionPurpose(transaction.id, customPurpose.trim());
     });
-    purposeCell.append(select);
-    if (transaction.purpose_origin === "auto") {
-      const autoNote = document.createElement("small");
-      autoNote.className = "auto-purpose-note";
-      autoNote.textContent = "automatisch · TzKT-Payout";
-      purposeCell.append(autoNote);
-    }
+    purposeCell.append(purposeCard, select);
     row.append(checkCell, operation, wallet, amount, now, historic, purposeCell);
     body.append(row);
   }
@@ -456,13 +495,15 @@ function updateWalletFields() {
   const sourceType = el("wallet-source-type");
   if (!bitcoin) sourceType.value = "address";
   const xpub = bitcoin && sourceType.value === "xpub";
+  const inferredAddressType = xpubAddressTypeFor(el("wallet-address").value);
+  if (xpub && inferredAddressType) el("xpub-address-type").value = inferredAddressType;
   el("bitcoin-source-fields").hidden = !bitcoin;
   el("xpub-format-wrap").hidden = !xpub;
   el("xpub-notice").hidden = !xpub;
   el("wallet-identifier-label").textContent = xpub ? "Bitcoin-xPub" : "Öffentliche Wallet-Adresse";
   el("wallet-address").placeholder = xpub ? "xpub6…" : info.addressPlaceholder || "Öffentliche Adresse";
   el("address-hint").textContent = xpub
-    ? "Es werden Empfangs- und Wechselgeldadressen bis zum Gap-Limit abgeleitet. Wähle das Format der exportierten Wallet."
+    ? "xPub, yPub und zPub werden erkannt. Empfangs- und Wechselgeldadressen werden bis zum Gap-Limit abgeleitet."
     : info.addressHint || `Öffentliche ${info.name}-Adresse eingeben.`;
 }
 
@@ -473,6 +514,11 @@ function bindEvents() {
   el("cancel-wallet").addEventListener("click", closeWalletModal);
   el("wallet-chain").addEventListener("change", updateWalletFields);
   el("wallet-source-type").addEventListener("change", updateWalletFields);
+  el("wallet-address").addEventListener("input", () => {
+    if (el("wallet-chain").value !== "BTC" || !isExtendedPublicKey(el("wallet-address").value)) return;
+    el("wallet-source-type").value = "xpub";
+    updateWalletFields();
+  });
   el("refresh-all").addEventListener("click", syncAll);
   el("reload-portfolio").addEventListener("click", () => loadPortfolio());
   el("transaction-search").addEventListener("input", (event) => {
@@ -506,14 +552,16 @@ function bindEvents() {
     formError.hidden = true;
     try {
       setButtonBusy(save, true, "Speichert …");
+      const identifier = String(form.get("address") || "").trim();
+      const detectedXpub = isExtendedPublicKey(identifier);
       const wallet = await api("/api/wallets", {
         method: "POST",
         body: JSON.stringify({
           chain: form.get("chain"),
           label: form.get("label"),
-          address: form.get("address"),
-          sourceType: form.get("sourceType"),
-          xpubAddressType: form.get("xpubAddressType"),
+          address: identifier,
+          sourceType: detectedXpub ? "xpub" : form.get("sourceType"),
+          xpubAddressType: xpubAddressTypeFor(identifier) || form.get("xpubAddressType"),
         }),
       });
       const syncResult = await api(`/api/wallets/${wallet.id}/sync`, { method: "POST" });

@@ -7,14 +7,18 @@ services:
     environment:
       PORT: 3000
       DATA_DIR: /data
+      # Diese Werte dienen beim allerersten Start als Vorgaben. Danach werden sie
+      # sicher pro Installation in der UI unter „Einstellungen“ verwaltet.
       # 0 = alle vom Explorer bereitgestellten Transaktionen laden
       MAX_TRANSACTIONS_PER_SYNC: ${MAX_TRANSACTIONS_PER_SYNC:-0}
       # Optionaler eigener Esplora-kompatibler Endpunkt; standardmäßig Blockstream.
       BITCOIN_EXPLORER_BASE_URL: ${BITCOIN_EXPLORER_BASE_URL:-https://blockstream.info/api}
+      TZKT_API_BASE_URL: ${TZKT_API_BASE_URL:-https://api.tzkt.io/v1}
       # TronGrid liefert bestätigte native TRX-Transfers. Ein API-Key ist optional,
       # aber für größere Portfolios wegen der öffentlichen Rate Limits empfohlen.
       TRONGRID_BASE_URL: ${TRONGRID_BASE_URL:-https://api.trongrid.io}
       TRONGRID_API_KEY: ${TRONGRID_API_KEY:-}
+      COINGECKO_API_BASE_URL: ${COINGECKO_API_BASE_URL:-https://api.coingecko.com/api/v3}
       # Exakt so benannte, vertrauenswürdige TzKT-Payout-Konten werden automatisch als Staking markiert.
       XTZ_STAKING_PAYOUT_ALIASES: ${XTZ_STAKING_PAYOUT_ALIASES:-Stake.fish Payouts}
       # BIP44-Scan für Bitcoin-xPubs: 20 aufeinanderfolgende unbenutzte Adressen pro Zweig.

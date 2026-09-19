@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
+    <title>CryptoBuch · Einstellungen</title>
+    <link rel="stylesheet" href="/styles.css?v=20260919-2" />
+  </head>
+  <body>
+    <div class="shell settings-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Zurück zum CryptoBuch Portfolio">
+          <span class="brand-mark" aria-hidden="true">₿</span>
+          <span>CryptoBuch</span>
+        </a>
+        <a class="topbar-link" href="/">← Portfolio</a>
+      </header>
+
+      <main class="settings-main">
+        <section class="settings-intro" aria-labelledby="settings-title">
+          <p class="eyebrow">LOKALE KONFIGURATION</p>
+          <h1 id="settings-title">Einstellungen<br /><em>für deinen Import.</em></h1>
+          <p>Änderungen gelten beim nächsten Synchronisieren und werden lokal in der CryptoBuch-Datenbank gespeichert. Ein hinterlegter TronGrid-Key wird nicht wieder an den Browser zurückgegeben.</p>
+        </section>
+
+        <form id="settings-form" class="settings-form">
+          <section class="settings-card" aria-labelledby="sync-title">
+            <div class="settings-heading">
+              <div>
+                <p class="eyebrow">IMPORT</p>
+                <h2 id="sync-title">Synchronisierung</h2>
+              </div>
+              <span class="settings-mark">01</span>
+            </div>
+            <label>
+              <span>Maximale Transaktionen pro Synchronisierung</span>
+              <input id="max-transactions" name="maxTransactionsPerSync" type="number" min="0" max="100000" step="1" required />
+              <small><code>0</code> bedeutet: komplette vom Explorer bereitgestellte Historie laden.</small>
+            </label>
+            <label>
+              <span>Maximale Transaktionen für eine Sammel-Zweckzuordnung</span>
+              <input id="bulk-purpose-limit" name="bulkPurposeLimit" type="number" min="1" max="2500" step="1" required />
+              <small>Aus Sicherheits- und Bedienungsgründen sind höchstens 2.500 möglich.</small>
+            </label>
+          </section>
+
+          <section class="settings-card" aria-labelledby="bitcoin-title">
+            <div class="settings-heading">
+              <div>
+                <p class="eyebrow">BITCOIN</p>
+                <h2 id="bitcoin-title">Explorer &amp; xPub</h2>
+              </div>
+              <span class="settings-mark">02</span>
+            </div>
+            <label>
+              <span>Esplora-API-Basisadresse</span>
+              <input id="bitcoin-explorer" name="bitcoinExplorerBaseUrl" type="url" inputmode="url" required />
+              <small>Standard: Blockstream Esplora. Eigene Esplora-kompatible Instanzen sind möglich.</small>
+            </label>
+            <div class="form-grid settings-grid">
+              <label>
+                <span>xPub-Gap-Limit</span>
+                <input id="xpub-gap" name="xpubGapLimit" type="number" min="1" max="50" step="1" required />
+                <small>Aufeinanderfolgende unbenutzte Adressen pro Zweig.</small>
+              </label>
+              <label>
+                <span>xPub-Sicherheitsgrenze</span>
+                <input id="xpub-maximum" name="xpubMaxDerivationsPerBranch" type="number" min="1" max="1000" step="1" required />
+                <small>Maximal geprüfte Adressen je Zweig.</small>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-card" aria-labelledby="tezos-title">
+            <div class="settings-heading">
+              <div>
+                <p class="eyebrow">TEZOS</p>
+                <h2 id="tezos-title">Staking &amp; Datenquelle</h2>
+              </div>
+              <span class="settings-mark">03</span>
+            </div>
+            <label>
+              <span>TzKT-API-Basisadresse</span>
+              <input id="tzkt-api" name="tzktApiBaseUrl" type="url" inputmode="url" required />
+            </label>
+            <label>
+              <span>Vertrauenswürdige Staking-Payout-Aliase</span>
+              <textarea id="staking-aliases" name="xtzStakingPayoutAliases" rows="3" placeholder="Stake.fish Payouts, Mein Baker Payouts"></textarea>
+              <small>Kommagetrennte, exakt bei TzKT angezeigte Absendernamen. Nur bestätigte Eingänge dieser Konten werden automatisch als Staking-Ertrag markiert.</small>
+            </label>
+          </section>
+
+          <section class="settings-card" aria-labelledby="tron-title">
+            <div class="settings-heading">
+              <div>
+                <p class="eyebrow">TRON</p>
+                <h2 id="tron-title">TronGrid</h2>
+              </div>
+              <span class="settings-mark">04</span>
+            </div>
+            <label>
+              <span>TronGrid-API-Basisadresse</span>
+              <input id="trongrid-api" name="tronGridBaseUrl" type="url" inputmode="url" required />
+            </label>
+            <label>
+              <span>TronGrid-API-Key <small>optional</small></span>
+              <input id="trongrid-key" name="tronGridApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
+              <small id="trongrid-key-status">Key-Status wird geladen …</small>
+            </label>
+            <label class="check-setting">
+              <input id="clear-trongrid-key" name="clearTronGridApiKey" type="checkbox" />
+              <span>Gespeicherten TronGrid-API-Key entfernen</span>
+            </label>
+          </section>
+
+          <section class="settings-card" aria-labelledby="price-title">
+            <div class="settings-heading">
+              <div>
+                <p class="eyebrow">MARKTDATEN</p>
+                <h2 id="price-title">Preisdaten</h2>
+              </div>
+              <span class="settings-mark">05</span>
+            </div>
+            <label>
+              <span>CoinGecko-API-Basisadresse</span>
+              <input id="coingecko-api" name="coinGeckoBaseUrl" type="url" inputmode="url" required />
+              <small>Wird für aktuelle und historische EUR-Kurse verwendet. Bereits gespeicherte Tageskurse bleiben erhalten.</small>
+            </label>
+          </section>
+
+          <p id="settings-error" class="form-error" role="alert" hidden></p>
+          <div class="settings-actions">
+            <a class="button button-secondary" href="/">Abbrechen</a>
+            <button id="save-settings" class="button button-primary" type="submit">Einstellungen speichern</button>
+          </div>
+        </form>
+
+        <aside class="settings-note">
+          <strong>Docker &amp; Portainer</strong>
+          <p>Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.</p>
+        </aside>
+      </main>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/settings.js?v=20260919-2" defer></script>
+  </body>
+</html>

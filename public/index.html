@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokales Crypto-Portfolio für öffentliche Blockchain-Wallets" />
     <title>CryptoBuch · Portfolio</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260919-2" />
   </head>
   <body>
     <div class="shell">
@@ -14,7 +14,10 @@
           <span class="brand-mark" aria-hidden="true">₿</span>
           <span>CryptoBuch</span>
         </a>
-        <div class="topbar-status" id="price-status" aria-live="polite">Preise werden geladen …</div>
+        <div class="topbar-actions">
+          <a class="topbar-link" href="/settings.html">Einstellungen</a>
+          <div class="topbar-status" id="price-status" aria-live="polite">Preise werden geladen …</div>
+        </div>
       </header>
 
       <main>
@@ -114,7 +117,7 @@
                     <th>Betrag</th>
                     <th>Preis jetzt</th>
                     <th>Preis Transaktionsdatum</th>
-                    <th>Zweck</th>
+                    <th>Herkunft / Zweck</th>
                   </tr>
                 </thead>
                 <tbody id="transaction-list"></tbody>
@@ -164,7 +167,7 @@
             <span>Bitcoin-Quelle</span>
             <select name="sourceType" id="wallet-source-type">
               <option value="address">Einzelne Adresse</option>
-              <option value="xpub">xPub – alle abgeleiteten Adressen</option>
+              <option value="xpub">xPub, yPub oder zPub – alle Adressen</option>
             </select>
           </label>
           <label id="xpub-format-wrap" hidden>
@@ -191,6 +194,6 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/app.js" defer></script>
+    <script src="/app.js?v=20260919-2" defer></script>
   </body>
 </html>
