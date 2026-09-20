@@ -43,6 +43,10 @@ services:
       BLOCKCHAIR_API_BASE_URL: ${BLOCKCHAIR_API_BASE_URL:-https://api.blockchair.com}
       BLOCKCHAIR_API_KEY: ${BLOCKCHAIR_API_KEY:-}
       COINGECKO_API_BASE_URL: ${COINGECKO_API_BASE_URL:-https://api.coingecko.com/api/v3}
+      # Kostenloser EUR-Kerzen-Fallback für historische native Coin-Kurse.
+      BITVAVO_API_BASE_URL: ${BITVAVO_API_BASE_URL:-https://api.bitvavo.com/v2}
+      # Für nicht verfügbare Märkte und historische ERC-20-Kurse kann CoinGecko Pro nötig sein.
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
       # Exakt so benannte, vertrauenswürdige TzKT-Payout-Konten werden automatisch als Staking markiert.
       XTZ_STAKING_PAYOUT_ALIASES: ${XTZ_STAKING_PAYOUT_ALIASES:-Stake.fish Payouts}
       # BIP44-Scan für Bitcoin-xPubs: 20 aufeinanderfolgende unbenutzte Adressen pro Zweig.

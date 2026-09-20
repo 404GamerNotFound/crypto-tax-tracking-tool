@@ -37,6 +37,7 @@ function render(settings) {
   el("blockchair-api").value = settings.blockchairApiBaseUrl;
   el("blockcypher-api").value = settings.blockCypherApiBaseUrl;
   el("coingecko-api").value = settings.coinGeckoBaseUrl;
+  el("bitvavo-api").value = settings.bitvavoApiBaseUrl;
   el("xpub-gap").value = settings.xpubGapLimit;
   el("xpub-maximum").value = settings.xpubMaxDerivationsPerBranch;
   el("staking-aliases").value = settings.xtzStakingPayoutAliases;
@@ -56,6 +57,9 @@ function render(settings) {
   el("tonapi-key-status").textContent = settings.tonApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche TonAPI-Rate kann begrenzt sein.";
   el("blockchair-key-status").textContent = settings.blockchairApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche Blockchair-Rate kann begrenzt sein.";
   el("blockcypher-token-status").textContent = settings.blockCypherApiTokenConfigured ? "Ein Token ist gespeichert." : "Kein Token gespeichert; die öffentliche BlockCypher-Rate kann begrenzt sein.";
+  el("coingecko-key-status").textContent = settings.coinGeckoApiKeyConfigured
+    ? "Ein API-Key ist gespeichert. Bei pro-api.coingecko.com wird er als Pro-Key verwendet."
+    : "Kein API-Key gespeichert. Die öffentliche CoinGecko-API liefert historische Daten nur für die letzten 365 Tage.";
 }
 
 function setSaving(button, saving) {
@@ -100,6 +104,9 @@ el("settings-form").addEventListener("submit", async (event) => {
         blockchairApiBaseUrl: form.get("blockchairApiBaseUrl"),
         blockCypherApiBaseUrl: form.get("blockCypherApiBaseUrl"),
         coinGeckoBaseUrl: form.get("coinGeckoBaseUrl"),
+        bitvavoApiBaseUrl: form.get("bitvavoApiBaseUrl"),
+        coinGeckoApiKey: form.get("coinGeckoApiKey"),
+        clearCoinGeckoApiKey: form.get("clearCoinGeckoApiKey") === "on",
         xpubGapLimit: form.get("xpubGapLimit"),
         xpubMaxDerivationsPerBranch: form.get("xpubMaxDerivationsPerBranch"),
         xtzStakingPayoutAliases: form.get("xtzStakingPayoutAliases"),
@@ -125,6 +132,8 @@ el("settings-form").addEventListener("submit", async (event) => {
     el("clear-blockfrost-project-id").checked = false;
     el("etherscan-key").value = "";
     el("clear-etherscan-key").checked = false;
+    el("coingecko-key").value = "";
+    el("clear-coingecko-key").checked = false;
     for (const id of ["bscscan-key", "snowtrace-key", "solscan-key", "nearblocks-key", "tonapi-key", "blockchair-key", "blockcypher-token"]) el(id).value = "";
     el("clear-additional-network-keys").checked = false;
     render(settings);

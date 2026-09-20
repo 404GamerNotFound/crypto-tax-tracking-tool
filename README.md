@@ -27,7 +27,7 @@ docker compose down
 - Bitcoin-xPubs importieren und daraus abgeleitete Empfangs- sowie Wechselgeldadressen mit BIP44-Gap-Limit erkennen
 - Historien mit dedizierten Netzwerkadaptern synchronisieren: Blockstream Esplora (BTC), TzKT (XTZ), TronGrid (TRX), Blockfrost (ADA), Etherscan (ETH/ERC-20), BscScan (BNB), Solscan (SOL), XRPL JSON-RPC (XRP), Stellar Horizon (XLM), BlockCypher (DOGE/LTC), Blockchair (BCH/ZEC), NearBlocks (NEAR), Snowtrace (AVAX) und TonAPI (TON)
 - Ein- und Ausgänge, eigene Transfers, Gebühren und Gegenadressen in einer Tabelle darstellen
-- Aktuellen EUR-Marktpreis sowie EUR-Preis zum Transaktionsdatum anzeigen; Tezos verwendet dafür den von TzKT zum Blockzeitpunkt gelieferten EUR-Kurs, Bitcoin, TRON, Cardano, Ethereum und erkannte ERC-20-Token einen CoinGecko-Kurs
+- Aktuellen EUR-Marktpreis sowie EUR-Preis zum Transaktionsdatum anzeigen; Tezos verwendet dafür den von TzKT zum Blockzeitpunkt gelieferten EUR-Kurs, andere native Coins CoinGecko mit EUR-Tageskurs-Fallback und erkannte ERC-20-Token CoinGecko-Contract-Kurse
 - Transaktionen einzeln oder gesammelt mit Zwecken wie `Kauf`, `Verkauf`, `Staking Rewards` oder `Transfer` versehen – eigene Zwecke sind ebenfalls möglich
 - Bis zu 2.500 Transaktionen in einem Sammelvorgang bearbeiten
 - Suchen sowie nach Blockchain und Bewegungsrichtung filtern
@@ -42,7 +42,7 @@ docker compose down
 - Ethereum-Transaktionen werden über die [Etherscan API V2](https://docs.etherscan.io/) abgerufen. Der Adapter importiert bestätigte native ETH-Transfers und ERC-20-Transfer-Events einer Ethereum-Mainnet-Adresse. Interne Transaktionen sowie ERC-721/1155-NFTs sind nicht Teil dieses Umfangs.
 - Weitere Top-30-Netzwerke nutzen absichtlich keinen universellen Multi-Chain-Importer. Ihre Quellen und optionalen Zugangsdaten werden getrennt unter **Einstellungen → Weitere Netzwerke** verwaltet. Die Adapter beziehen aktuell native Transfers; ERC-20-Token werden bereits beim Ethereum-Import erkannt.
 - Monero kann ohne privaten View-Key nicht aus einer öffentlichen Adresse synchronisiert werden. Shielded-Zcash-Adressen, Canton und Figure HELOC haben ebenfalls keine für diesen read-only Ansatz passende, frei zugängliche Adresshistorie; sie werden deshalb nicht als voll synchronisierbare Wallet angeboten.
-- Aktuelle und historische EUR-Kurse kommen von [CoinGecko](https://www.coingecko.com/en/api). Historische Kurse werden pro Kalendertag in der lokalen Datenbank zwischengespeichert. Falls der Kursdienst zeitweise nicht erreichbar ist, bleiben Transaktionen sichtbar; für den Preis steht dann `k. A.`.
+- Aktuelle EUR-Kurse kommen von [CoinGecko](https://www.coingecko.com/en/api). Historische Kurse werden pro Kalendertag in der lokalen Datenbank zwischengespeichert. Für native Coins ergänzt CryptoBuch fehlende CoinGecko-Historie automatisch mit EUR-Tageskerzen von Bitvavo. Die öffentliche CoinGecko-API beschränkt historische Abrufe auf die letzten 365 Tage; für nicht verfügbare Märkte oder historische ERC-20-Preise kann eine CoinGecko-Pro-Basisadresse samt Pro-Key erforderlich sein. Falls keine Quelle einen Kurs kennt, bleiben Transaktionen sichtbar und zeigen `k. A.`.
 - Die Top-30-Marktansicht bezieht ebenfalls CoinGecko-Marktdaten und wird für fünf Minuten im Speicher zwischengespeichert. Die Rangfolge ist daher stets aktuell und nicht als feste Coin-Liste im Programm hinterlegt.
 - TzKT liefert zu Tezos-Operationen neben dem Blockzeitstempel auch den zum Blockzeitpunkt errechneten EUR-Kurs. Deshalb kann die Anwendung für XTZ eine präzisere historische Zuordnung verwenden als den Tageskurs.
 - Die Anwendung ist eine Organisationshilfe und keine steuerliche Beratung. Für eine Steuererklärung sollten Zuordnungen und Kursdaten fachlich geprüft werden.
@@ -109,6 +109,19 @@ ETHERSCAN_API_KEY=dein_etherscan_api_key
 ```
 
 Der Import ruft für Chain-ID `1` sowohl die normalen ETH-Transaktionen als auch ERC-20-Transfer-Events ab. Token werden anhand ihrer Contract-Adresse getrennt geführt; dadurch bleiben beispielsweise gleich benannte Token unterscheidbar. Für ERC-20-Transfers wird die Gasgebühr als ETH ausgewiesen. Aktuelle und historische Tokenpreise werden, soweit CoinGecko den jeweiligen Ethereum-Contract kennt, über dessen Contract-Preisendpunkte ergänzt. Nicht gelistete oder Spam-Token bleiben sichtbar, zeigen beim Preis jedoch `k. A.`.
+
+### Historische Kurse für alle Coins
+
+Bei jedem Import nutzt CryptoBuch für alle nativen Coins den hinterlegten CoinGecko-Coin und für ERC-20-Transfers die jeweilige Contract-Adresse. Falls CoinGecko für einen nativen Coin keinen historischen EUR-Kurs liefert – insbesondere bei älteren Daten – ergänzt die Anwendung automatisch verfügbare Bitvavo-EUR-Tageskerzen. TzKT-Kurse für Tezos bleiben ein zusätzlicher, genauerer Quellenwert. Bereits importierte Transaktionen lassen sich ohne erneuten Blockchain-Import im Dashboard über **Historische Kurse ergänzen** nachziehen.
+
+Die öffentliche CoinGecko-API liefert historische Preise nur für die letzten 365 Tage. Für native Coins mit verfügbarem Bitvavo-EUR-Markt braucht es deshalb normalerweise keine weitere Konfiguration. Für nicht verfügbare Märkte oder ältere ERC-20-Transaktionen stelle unter **Einstellungen → Preisdaten** diese Werte ein:
+
+```dotenv
+COINGECKO_API_BASE_URL=https://pro-api.coingecko.com/api/v3
+COINGECKO_API_KEY=dein_coingecko_pro_key
+```
+
+Die Anwendung verwendet dann automatisch den Header `x-cg-pro-api-key`; beim öffentlichen Standard-Endpunkt wird ein optionaler Key als Demo-Key übermittelt. Der Key bleibt serverseitig gespeichert und wird nicht an den Browser zurückgegeben.
 
 ### Weitere Top-30-Netzwerke
 

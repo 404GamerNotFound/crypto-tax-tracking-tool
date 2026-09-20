@@ -16,6 +16,14 @@ const { normalizeCardanoTransaction } = require("./lib/cardano");
 const { normalizeEthereumTransaction, normalizeErc20Transfer } = require("./lib/ethereum");
 const { buildTopMarketCatalog } = require("./lib/market-catalog");
 const {
+  bitvavoDailyClosePrices,
+  coinGeckoDate,
+  coinGeckoHeaders,
+  closestPriceForDate,
+  needsExtendedCoinGeckoHistory,
+  usesCoinGeckoPro,
+} = require("./lib/historical-prices");
+const {
   normalizeEvmNativeTransfer,
   normalizeSolscanTransfer,
   normalizeXrpPayment,
@@ -52,6 +60,7 @@ const SETTINGS_DEFAULTS = Object.freeze({
   blockchairApiBaseUrl: (process.env.BLOCKCHAIR_API_BASE_URL || "https://api.blockchair.com").replace(/\/$/, ""),
   blockCypherApiBaseUrl: (process.env.BLOCKCYPHER_API_BASE_URL || "https://api.blockcypher.com/v1").replace(/\/$/, ""),
   coinGeckoBaseUrl: (process.env.COINGECKO_API_BASE_URL || "https://api.coingecko.com/api/v3").replace(/\/$/, ""),
+  bitvavoApiBaseUrl: (process.env.BITVAVO_API_BASE_URL || "https://api.bitvavo.com/v2").replace(/\/$/, ""),
   tronGridApiKey: String(process.env.TRONGRID_API_KEY || "").trim(),
   blockfrostProjectId: String(process.env.BLOCKFROST_PROJECT_ID || "").trim(),
   etherscanApiKey: String(process.env.ETHERSCAN_API_KEY || "").trim(),
@@ -62,6 +71,7 @@ const SETTINGS_DEFAULTS = Object.freeze({
   tonApiKey: String(process.env.TONAPI_KEY || "").trim(),
   blockchairApiKey: String(process.env.BLOCKCHAIR_API_KEY || "").trim(),
   blockCypherApiToken: String(process.env.BLOCKCYPHER_API_TOKEN || "").trim(),
+  coinGeckoApiKey: String(process.env.COINGECKO_API_KEY || "").trim(),
   xpubGapLimit: DEFAULT_XPUB_GAP_LIMIT,
   xpubMaxDerivationsPerBranch: boundedInteger(process.env.XPUB_MAX_DERIVATIONS_PER_BRANCH, 200, DEFAULT_XPUB_GAP_LIMIT, 1000),
   xtzStakingPayoutAliases: String(process.env.XTZ_STAKING_PAYOUT_ALIASES || "Stake.fish Payouts").trim(),
@@ -273,6 +283,7 @@ function runtimeSettings() {
     blockchairApiBaseUrl: values.blockchairApiBaseUrl || SETTINGS_DEFAULTS.blockchairApiBaseUrl,
     blockCypherApiBaseUrl: values.blockCypherApiBaseUrl || SETTINGS_DEFAULTS.blockCypherApiBaseUrl,
     coinGeckoBaseUrl: values.coinGeckoBaseUrl || SETTINGS_DEFAULTS.coinGeckoBaseUrl,
+    bitvavoApiBaseUrl: values.bitvavoApiBaseUrl || SETTINGS_DEFAULTS.bitvavoApiBaseUrl,
     tronGridApiKey: values.tronGridApiKey || "",
     blockfrostProjectId: values.blockfrostProjectId || "",
     etherscanApiKey: values.etherscanApiKey || "",
@@ -283,6 +294,7 @@ function runtimeSettings() {
     tonApiKey: values.tonApiKey || "",
     blockchairApiKey: values.blockchairApiKey || "",
     blockCypherApiToken: values.blockCypherApiToken || "",
+    coinGeckoApiKey: values.coinGeckoApiKey || "",
     xpubGapLimit,
     xpubMaxDerivationsPerBranch: boundedInteger(values.xpubMaxDerivationsPerBranch, SETTINGS_DEFAULTS.xpubMaxDerivationsPerBranch, xpubGapLimit, 1000),
     xtzStakingPayoutAliases: values.xtzStakingPayoutAliases || "",
@@ -310,6 +322,7 @@ function settingsResponse() {
     blockchairApiBaseUrl: settings.blockchairApiBaseUrl,
     blockCypherApiBaseUrl: settings.blockCypherApiBaseUrl,
     coinGeckoBaseUrl: settings.coinGeckoBaseUrl,
+    bitvavoApiBaseUrl: settings.bitvavoApiBaseUrl,
     tronGridApiKeyConfigured: Boolean(settings.tronGridApiKey),
     blockfrostProjectIdConfigured: Boolean(settings.blockfrostProjectId),
     etherscanApiKeyConfigured: Boolean(settings.etherscanApiKey),
@@ -320,6 +333,7 @@ function settingsResponse() {
     tonApiKeyConfigured: Boolean(settings.tonApiKey),
     blockchairApiKeyConfigured: Boolean(settings.blockchairApiKey),
     blockCypherApiTokenConfigured: Boolean(settings.blockCypherApiToken),
+    coinGeckoApiKeyConfigured: Boolean(settings.coinGeckoApiKey),
     xpubGapLimit: settings.xpubGapLimit,
     xpubMaxDerivationsPerBranch: settings.xpubMaxDerivationsPerBranch,
     xtzStakingPayoutAliases: settings.xtzStakingPayoutAliases,
@@ -359,6 +373,7 @@ function updateSettings(input) {
     blockchairApiBaseUrl: cleanServiceUrl(input.blockchairApiBaseUrl, "Die Blockchair-URL"),
     blockCypherApiBaseUrl: cleanServiceUrl(input.blockCypherApiBaseUrl, "Die BlockCypher-URL"),
     coinGeckoBaseUrl: cleanServiceUrl(input.coinGeckoBaseUrl, "Die CoinGecko-URL"),
+    bitvavoApiBaseUrl: cleanServiceUrl(input.bitvavoApiBaseUrl, "Die Bitvavo-URL"),
     xpubGapLimit,
     xpubMaxDerivationsPerBranch,
     xtzStakingPayoutAliases: cleanAliases(input.xtzStakingPayoutAliases),
@@ -372,6 +387,7 @@ function updateSettings(input) {
     tonApiKey: input.clearAdditionalNetworkApiKeys ? "" : String(input.tonApiKey || "").trim() || current.tonApiKey,
     blockchairApiKey: input.clearAdditionalNetworkApiKeys ? "" : String(input.blockchairApiKey || "").trim() || current.blockchairApiKey,
     blockCypherApiToken: input.clearAdditionalNetworkApiKeys ? "" : String(input.blockCypherApiToken || "").trim() || current.blockCypherApiToken,
+    coinGeckoApiKey: input.clearCoinGeckoApiKey ? "" : String(input.coinGeckoApiKey || "").trim() || current.coinGeckoApiKey,
   };
   if (next.tronGridApiKey.length > 300) throw makeError("Der TronGrid-API-Key ist zu lang.");
   if (next.blockfrostProjectId.length > 300) throw makeError("Die Blockfrost Project-ID ist zu lang.");
@@ -455,7 +471,10 @@ async function getCurrentPrices() {
     const settings = runtimeSettings();
     const entries = Object.entries(CHAIN_CONFIG);
     const ids = entries.map(([, config]) => config.coinGeckoId).filter(Boolean).join(",");
-    const data = await fetchJson(`${settings.coinGeckoBaseUrl}/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=eur&include_last_updated_at=true`);
+    const data = await fetchJson(
+      `${settings.coinGeckoBaseUrl}/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=eur&include_last_updated_at=true`,
+      coinGeckoHeaders(settings.coinGeckoBaseUrl, settings.coinGeckoApiKey),
+    );
     const prices = Object.fromEntries(entries.map(([chain, config]) => [chain, positiveNumber(data[config.coinGeckoId]?.eur)]));
     prices.updatedAt = Math.max(...entries.map(([, config]) => Number(data[config.coinGeckoId]?.last_updated_at || 0)), 0) || null;
     currentPriceCache = { data: prices, expiresAt: Date.now() + 5 * 60 * 1000 };
@@ -484,7 +503,7 @@ async function getTopMarketCatalog() {
       sparkline: "false",
       price_change_percentage: "24h",
     }).toString();
-    const rows = await fetchJson(url.toString());
+    const rows = await fetchJson(url.toString(), coinGeckoHeaders(settings.coinGeckoBaseUrl, settings.coinGeckoApiKey));
     const assets = buildTopMarketCatalog(rows, CHAIN_CONFIG);
     if (assets.length === 0) throw makeError("CoinGecko lieferte keine Marktdaten.", 502);
     const timestamps = assets
@@ -511,7 +530,10 @@ async function getErc20CurrentPrices(contracts, settings) {
   const cached = { ...tokenPriceCache.data };
   for (const contract of uniqueContracts) {
     try {
-      const payload = await fetchJson(`${settings.coinGeckoBaseUrl}/coins/ethereum/contract/${encodeURIComponent(contract)}`);
+      const payload = await fetchJson(
+        `${settings.coinGeckoBaseUrl}/coins/ethereum/contract/${encodeURIComponent(contract)}`,
+        coinGeckoHeaders(settings.coinGeckoBaseUrl, settings.coinGeckoApiKey),
+      );
       cached[contract] = positiveNumber(payload.market_data?.current_price?.eur);
     } catch (_) {
       cached[contract] = null;
@@ -533,6 +555,67 @@ function saveHistoricalPrice(coinId, date, price) {
     VALUES (?, ?, ?, datetime('now'))
     ON CONFLICT(coin_id, price_date) DO UPDATE SET price_eur = excluded.price_eur, updated_at = excluded.updated_at
   `).run(coinId, date, price);
+}
+
+async function hydrateBitvavoHistoricalPrices(chain, timestamps, settings) {
+  const asset = CHAIN_CONFIG[chain]?.asset;
+  const dates = [...new Set(timestamps.filter(Boolean).map(isoDay))].sort();
+  if (!asset || dates.length === 0) return new Map();
+
+  // Keep this cache separate from CoinGecko: the stored value retains its
+  // provider context while the caller still receives one unified EUR price.
+  const coinId = `bitvavo:${asset}`;
+  const result = new Map();
+  const missing = [];
+  for (const date of dates) {
+    const cached = cachedHistoricalPrice(coinId, date);
+    if (cached) result.set(date, cached);
+    else missing.push(date);
+  }
+  if (missing.length === 0) return result;
+
+  // Bitvavo's daily candle endpoint accepts up to 1,000 candles. 330-day
+  // chunks leave enough room for the inclusive range and keep old imports
+  // reliable without requesting a full, unnecessary market history.
+  const ranges = [];
+  const maxRangeMs = 330 * 86400000;
+  let range = [];
+  let rangeStart = 0;
+  for (const date of missing) {
+    const at = new Date(`${date}T00:00:00.000Z`).getTime();
+    if (range.length && at - rangeStart > maxRangeMs) {
+      ranges.push(range);
+      range = [];
+    }
+    if (range.length === 0) rangeStart = at;
+    range.push(date);
+  }
+  if (range.length) ranges.push(range);
+
+  for (const requestedDates of ranges) {
+    const start = new Date(`${requestedDates[0]}T00:00:00.000Z`).getTime();
+    const end = new Date(`${requestedDates.at(-1)}T23:59:59.999Z`).getTime();
+    const url = new URL(`${settings.bitvavoApiBaseUrl}/${encodeURIComponent(asset)}-EUR/candles`);
+    url.search = new URLSearchParams({
+      interval: "1d",
+      limit: "1000",
+      start: String(start),
+      end: String(end),
+    }).toString();
+    try {
+      const prices = bitvavoDailyClosePrices(await fetchJson(url.toString()));
+      for (const date of requestedDates) {
+        const value = positiveNumber(prices.get(date));
+        if (!value) continue;
+        saveHistoricalPrice(coinId, date, value);
+        result.set(date, value);
+      }
+    } catch (_) {
+      // Not every asset has a EUR market. CoinGecko/Pro remains available for
+      // those assets and ERC-20 contracts.
+    }
+  }
+  return result;
 }
 
 async function hydrateHistoricalPrices(chain, timestamps, settings) {
@@ -572,28 +655,28 @@ async function hydrateHistoricalPrices(chain, timestamps, settings) {
     try {
       const payload = await fetchJson(
         `${settings.coinGeckoBaseUrl}/coins/${coinId}/market_chart/range?vs_currency=eur&from=${from}&to=${to}`,
+        coinGeckoHeaders(settings.coinGeckoBaseUrl, settings.coinGeckoApiKey),
       );
       const samples = Array.isArray(payload.prices) ? payload.prices : [];
       for (const date of requestedDates) {
-        const target = new Date(`${date}T12:00:00.000Z`).getTime();
-        let closest = null;
-        let distance = Number.POSITIVE_INFINITY;
-        for (const [at, price] of samples) {
-          const nextDistance = Math.abs(Number(at) - target);
-          if (nextDistance < distance) {
-            closest = Number(price);
-            distance = nextDistance;
-          }
-        }
+        const value = closestPriceForDate(samples, date);
         // Daily samples are accepted only if they are close enough to the requested day.
-        if (Number.isFinite(closest) && closest > 0 && distance <= 3 * 86400000) {
-          saveHistoricalPrice(coinId, date, closest);
-          result.set(date, closest);
+        if (value) {
+          saveHistoricalPrice(coinId, date, value);
+          result.set(date, value);
         }
       }
     } catch (_) {
       // Historic price is optional metadata. The transaction itself remains usable.
     }
+  }
+
+  // CoinGecko's public history is time-limited. If it cannot answer a date,
+  // use independent EUR daily candles for native assets where a market exists.
+  const unresolvedDates = missing.filter((date) => !result.has(date));
+  if (unresolvedDates.length > 0) {
+    const fallback = await hydrateBitvavoHistoricalPrices(chain, unresolvedDates, settings);
+    for (const [date, price] of fallback) result.set(date, price);
   }
   return result;
 }
@@ -611,9 +694,9 @@ async function hydrateHistoricalTokenPrices(contract, timestamps, settings) {
       continue;
     }
     try {
-      const [year, month, day] = date.split("-");
       const payload = await fetchJson(
-        `${settings.coinGeckoBaseUrl}/coins/ethereum/contract/${encodeURIComponent(normalizedContract)}/history?date=${day}-${month}-${year}`,
+        `${settings.coinGeckoBaseUrl}/coins/ethereum/contract/${encodeURIComponent(normalizedContract)}/history?date=${coinGeckoDate(date)}`,
+        coinGeckoHeaders(settings.coinGeckoBaseUrl, settings.coinGeckoApiKey),
       );
       const value = positiveNumber(payload.market_data?.current_price?.eur);
       if (value) {
@@ -1365,6 +1448,69 @@ async function syncWallet(wallet) {
   };
 }
 
+async function backfillHistoricalPrices() {
+  const settings = runtimeSettings();
+  const candidates = db.prepare(`
+    SELECT t.id, t.timestamp, t.asset_contract, w.chain
+    FROM transactions t
+    JOIN wallets w ON w.id = t.wallet_id
+    WHERE t.timestamp IS NOT NULL
+      AND (t.price_transaction_eur IS NULL OR t.price_transaction_eur <= 0)
+  `).all();
+  const nativeDates = new Map();
+  const tokenDates = new Map();
+  for (const transaction of candidates) {
+    if (transaction.asset_contract) {
+      const contract = String(transaction.asset_contract).toLowerCase();
+      if (!tokenDates.has(contract)) tokenDates.set(contract, []);
+      tokenDates.get(contract).push(transaction.timestamp);
+    } else {
+      if (!nativeDates.has(transaction.chain)) nativeDates.set(transaction.chain, []);
+      nativeDates.get(transaction.chain).push(transaction.timestamp);
+    }
+  }
+
+  const nativePrices = new Map();
+  for (const [chain, timestamps] of nativeDates) nativePrices.set(chain, await hydrateHistoricalPrices(chain, timestamps, settings));
+  const tokenPrices = new Map();
+  for (const [contract, timestamps] of tokenDates) tokenPrices.set(contract, await hydrateHistoricalTokenPrices(contract, timestamps, settings));
+
+  const update = db.prepare(`
+    UPDATE transactions
+    SET price_transaction_eur = ?, updated_at = datetime('now')
+    WHERE id = ? AND (price_transaction_eur IS NULL OR price_transaction_eur <= 0)
+  `);
+  let updated = 0;
+  db.exec("BEGIN");
+  try {
+    for (const transaction of candidates) {
+      const date = isoDay(transaction.timestamp);
+      const price = transaction.asset_contract
+        ? positiveNumber(tokenPrices.get(String(transaction.asset_contract).toLowerCase())?.get(date))
+        : positiveNumber(nativePrices.get(transaction.chain)?.get(date));
+      if (price) updated += update.run(price, transaction.id).changes;
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+
+  const unresolved = candidates.length - updated;
+  const requiresExtendedHistory = candidates.some((transaction) => needsExtendedCoinGeckoHistory(isoDay(transaction.timestamp)));
+  const usingPro = usesCoinGeckoPro(settings.coinGeckoBaseUrl, settings.coinGeckoApiKey);
+  return {
+    candidates: candidates.length,
+    updated,
+    unresolved,
+    requiresExtendedHistory,
+    usingPro,
+    hint: unresolved && requiresExtendedHistory && !usingPro
+      ? "Für ältere native Coins wurde der kostenlose EUR-Tageskurs-Fallback versucht. Für nicht verfügbare Märkte und ERC-20-Token bitte unter Einstellungen eine CoinGecko-Pro-API-Basisadresse und einen Pro-API-Key hinterlegen."
+      : unresolved ? "Einige Kurse waren bei der Preisquelle nicht verfügbar und bleiben als k. A. markiert." : null,
+  };
+}
+
 function nativeAssetDescriptors() {
   return Object.fromEntries(Object.entries(CHAIN_CONFIG).map(([chain, config]) => [config.asset, {
     id: config.asset,
@@ -1569,6 +1715,14 @@ app.put("/api/settings", (request, response, next) => {
   }
 });
 
+app.post("/api/prices/historical/backfill", async (_request, response, next) => {
+  try {
+    response.json(await backfillHistoricalPrices());
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/wallets", (request, response, next) => {
   try {
     const chain = String(request.body?.chain || "").toUpperCase();
@@ -1696,4 +1850,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, db, runtimeSettings, settingsResponse, updateSettings };
+module.exports = { app, backfillHistoricalPrices, db, runtimeSettings, settingsResponse, updateSettings };

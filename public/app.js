@@ -218,6 +218,26 @@ async function syncAll() {
   }
 }
 
+async function backfillHistoricalPrices() {
+  const button = el("backfill-historical-prices");
+  button.disabled = true;
+  button.textContent = "Kurse werden ergänzt …";
+  try {
+    const result = await api("/api/prices/historical/backfill", { method: "POST" });
+    await loadPortfolio({ quiet: true });
+    const summary = result.updated > 0
+      ? `${result.updated.toLocaleString("de-DE")} historische Kurse ergänzt.`
+      : "Keine fehlenden historischen Kurse ergänzt.";
+    toast(result.hint ? `${summary} ${result.hint}` : summary, result.hint ? "error" : "success");
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = "Historische Kurse ergänzen";
+  }
+}
+
 el("refresh-all").addEventListener("click", syncAll);
+el("backfill-historical-prices").addEventListener("click", backfillHistoricalPrices);
 loadPortfolio();
 loadMarketCatalog();
