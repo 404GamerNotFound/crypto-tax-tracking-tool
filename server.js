@@ -2,6 +2,11 @@ const express = require("express");
 const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
+const QRCode = require("qrcode");
+const { z } = require("zod");
+const { createPublicClient, http, parseAbi } = require("viem");
+const { mainnet } = require("viem/chains");
+const { BlockFrostAPI } = require("@blockfrost/blockfrost-js");
 const {
   XPUB_ADDRESS_TYPES,
   deriveXpubAddress,
@@ -9,12 +14,15 @@ const {
   isExtendedPublicKey,
   normalizeExtendedPublicKey,
 } = require("./lib/bitcoin-xpub");
+const { previewPsbt } = require("./lib/bitcoin-psbt");
 const { CHAIN_CONFIG, cleanLabel, isValidAddress, isValidCardanoStakeAddress } = require("./lib/validation");
 const { isConfirmedStakingPayout, trustedPayoutAliases } = require("./lib/tezos-staking");
 const { normalizeTronNativeTransfer } = require("./lib/tron");
 const { normalizeCardanoTransaction } = require("./lib/cardano");
 const { normalizeEthereumTransaction, normalizeErc20Transfer } = require("./lib/ethereum");
 const { buildTopMarketCatalog } = require("./lib/market-catalog");
+const { calculateAssetAnalytics } = require("./lib/portfolio-analytics");
+const { calculateTaxReport } = require("./lib/tax-report");
 const {
   bitvavoDailyClosePrices,
   coinGeckoDate,
@@ -41,15 +49,21 @@ function boundedInteger(value, fallback, minimum, maximum) {
 const PORT = Number(process.env.PORT || 3000);
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DB_PATH = path.join(DATA_DIR, "cryptobuch.sqlite");
+const BACKUP_DIR = path.join(DATA_DIR, "backups");
 const DEFAULT_XPUB_GAP_LIMIT = boundedInteger(process.env.XPUB_GAP_LIMIT, 20, 1, 50);
+const HISTORICAL_PRICE_REQUEST_GAP_MS = 1750;
 const SETTINGS_DEFAULTS = Object.freeze({
   maxTransactionsPerSync: boundedInteger(process.env.MAX_TRANSACTIONS_PER_SYNC, 0, 0, 100000),
   bulkPurposeLimit: 2500,
+  historicalPriceRetryIntervalMinutes: boundedInteger(process.env.HISTORICAL_PRICE_RETRY_INTERVAL_MINUTES, 15, 5, 1440),
+  historicalPriceBackfillBatchSize: boundedInteger(process.env.HISTORICAL_PRICE_BACKFILL_BATCH_SIZE, 60, 1, 250),
+  personalTaxRatePercent: 0,
   bitcoinExplorerBaseUrl: (process.env.BITCOIN_EXPLORER_BASE_URL || "https://blockstream.info/api").replace(/\/$/, ""),
   tzktApiBaseUrl: (process.env.TZKT_API_BASE_URL || "https://api.tzkt.io/v1").replace(/\/$/, ""),
   tronGridBaseUrl: (process.env.TRONGRID_BASE_URL || "https://api.trongrid.io").replace(/\/$/, ""),
   blockfrostBaseUrl: (process.env.BLOCKFROST_BASE_URL || "https://cardano-mainnet.blockfrost.io/api/v0").replace(/\/$/, ""),
   etherscanApiBaseUrl: (process.env.ETHERSCAN_API_BASE_URL || "https://api.etherscan.io/v2/api").replace(/\/$/, ""),
+  ethereumRpcUrl: (process.env.ETHEREUM_RPC_URL || "https://cloudflare-eth.com").replace(/\/$/, ""),
   bscScanApiBaseUrl: (process.env.BSCSCAN_API_BASE_URL || "https://api.bscscan.com/api").replace(/\/$/, ""),
   snowtraceApiBaseUrl: (process.env.SNOWTRACE_API_BASE_URL || "https://api.snowtrace.io/api").replace(/\/$/, ""),
   solscanApiBaseUrl: (process.env.SOLSCAN_API_BASE_URL || "https://pro-api.solscan.io/v2.0").replace(/\/$/, ""),
@@ -81,6 +95,9 @@ const PURPOSE_PRESETS = [
   "Verkauf",
   "Staking Rewards",
   "Mining Reward",
+  "Airdrop",
+  "Lending-Ertrag",
+  "DeFi-Ertrag",
   "Transfer",
   "Geschenk",
   "Gebühr",
@@ -88,6 +105,7 @@ const PURPOSE_PRESETS = [
 ];
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(BACKUP_DIR, { recursive: true });
 const db = new DatabaseSync(DB_PATH);
 
 db.exec(`
@@ -121,6 +139,7 @@ db.exec(`
     fee_asset TEXT,
     counterparty TEXT,
     price_transaction_eur REAL,
+    price_source TEXT NOT NULL DEFAULT 'auto' CHECK (price_source IN ('auto', 'manual')),
     purpose TEXT,
     purpose_origin TEXT NOT NULL DEFAULT 'unspecified' CHECK (purpose_origin IN ('unspecified', 'auto', 'manual')),
     raw_json TEXT NOT NULL,
@@ -134,6 +153,28 @@ db.exec(`
     price_eur REAL NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (coin_id, price_date)
+  );
+  CREATE TABLE IF NOT EXISTS historical_price_retries (
+    transaction_id INTEGER PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    last_attempt_at TEXT NOT NULL,
+    next_attempt_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS transaction_price_audit (
+    id INTEGER PRIMARY KEY,
+    transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    price_eur REAL,
+    source TEXT NOT NULL,
+    note TEXT,
+    changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS sync_events (
+    id INTEGER PRIMARY KEY,
+    wallet_id INTEGER NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK (status IN ('success', 'error')),
+    imported_count INTEGER NOT NULL DEFAULT 0,
+    message TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS wallet_addresses (
     id INTEGER PRIMARY KEY,
@@ -151,18 +192,59 @@ db.exec(`
     setting_value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS background_jobs (
+    id INTEGER PRIMARY KEY,
+    type TEXT NOT NULL CHECK (type IN ('wallet_sync', 'price_backfill')),
+    payload_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'success', 'error')),
+    progress_current INTEGER NOT NULL DEFAULT 0,
+    progress_total INTEGER NOT NULL DEFAULT 0,
+    result_json TEXT,
+    error_message TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    started_at TEXT,
+    finished_at TEXT
+  );
+  CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY,
+    level TEXT NOT NULL CHECK (level IN ('info', 'success', 'warning', 'error')),
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_read INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE INDEX IF NOT EXISTS idx_transactions_wallet_timestamp
     ON transactions(wallet_id, timestamp DESC);
   CREATE INDEX IF NOT EXISTS idx_transactions_purpose
     ON transactions(purpose) WHERE purpose IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_wallet_addresses_wallet_branch_index
     ON wallet_addresses(wallet_id, branch, derivation_index);
+  CREATE INDEX IF NOT EXISTS idx_historical_price_retries_next_attempt
+    ON historical_price_retries(next_attempt_at);
+  CREATE INDEX IF NOT EXISTS idx_transaction_price_audit_transaction
+    ON transaction_price_audit(transaction_id, changed_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_sync_events_wallet_created
+    ON sync_events(wallet_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_background_jobs_status_created
+    ON background_jobs(status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_notifications_read_created
+    ON notifications(is_read, created_at DESC);
   PRAGMA optimize;
 `);
 
 function migrateWalletSchemaForChains() {
   const walletSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'wallets'").get()?.sql || "";
-  if (!walletSql.includes("CHECK (chain IN")) return;
+  const uniqueIndexes = db.prepare("PRAGMA index_list(wallets)").all();
+  const hasChainScopedUniqueAddress = uniqueIndexes.some((index) => {
+    if (!index.unique) return false;
+    const indexName = String(index.name || "").replaceAll('"', '""');
+    const columns = db.prepare(`PRAGMA index_info("${indexName}")`).all().map((column) => column.name);
+    return columns.length === 2 && columns[0] === "chain" && columns[1] === "address";
+  });
+  // Older versions used UNIQUE(address), which prevents the same EVM address
+  // from being added to ETH, BNB and AVAX independently. Rebuild both that
+  // schema and the former fixed chain CHECK constraint without touching data.
+  if (!walletSql.includes("CHECK (chain IN") && hasChainScopedUniqueAddress) return;
   const walletColumns = new Set(db.prepare("PRAGMA table_info(wallets)").all().map((column) => column.name));
   const sourceType = walletColumns.has("source_type") ? "source_type" : "'address'";
   const xpubAddressType = walletColumns.has("xpub_address_type") ? "xpub_address_type" : "NULL";
@@ -183,7 +265,7 @@ function migrateWalletSchemaForChains() {
     );
     INSERT INTO wallets_chain_migration (id, chain, address, label, source_type, xpub_address_type, created_at, last_synced_at)
     SELECT id, chain, address, label,
-      COALESCE(${sourceType}, 'address'), ${xpubAddressType}, created_at, last_synced_at
+      COALESCE(${sourceType}, 'address'), ${xpubAddressType}, COALESCE(created_at, datetime('now')), last_synced_at
     FROM wallets;
     DROP TABLE wallets;
     ALTER TABLE wallets_chain_migration RENAME TO wallets;
@@ -193,6 +275,17 @@ function migrateWalletSchemaForChains() {
 }
 
 migrateWalletSchemaForChains();
+
+// Erst nach einer möglichen Wallet-Tabellenmigration anlegen, damit bestehende
+// Datenbanken mit älterem UNIQUE-Schema ohne Fremdschlüssel-Konflikt migrieren.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS wallet_metadata (
+    wallet_id INTEGER PRIMARY KEY REFERENCES wallets(id) ON DELETE CASCADE,
+    group_name TEXT NOT NULL DEFAULT '',
+    tags TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
 
 // Existing installations predate automatic purpose assignment. Preserve manual
 // entries, while allowing unclassified legacy rows to be enriched on re-sync.
@@ -210,6 +303,7 @@ if (!transactionColumnNames.has("asset_name")) db.exec("ALTER TABLE transactions
 if (!transactionColumnNames.has("asset_decimals")) db.exec("ALTER TABLE transactions ADD COLUMN asset_decimals INTEGER");
 if (!transactionColumnNames.has("asset_contract")) db.exec("ALTER TABLE transactions ADD COLUMN asset_contract TEXT");
 if (!transactionColumnNames.has("fee_asset")) db.exec("ALTER TABLE transactions ADD COLUMN fee_asset TEXT");
+if (!transactionColumnNames.has("price_source")) db.exec("ALTER TABLE transactions ADD COLUMN price_source TEXT NOT NULL DEFAULT 'auto'");
 
 const app = express();
 app.disable("x-powered-by");
@@ -218,6 +312,8 @@ app.use(express.json({ limit: "64kb" }));
 let currentPriceCache = { expiresAt: 0, data: {} };
 let tokenPriceCache = { expiresAt: 0, data: {} };
 let topMarketCache = { expiresAt: 0, data: null };
+let historicalPriceRequestTail = Promise.resolve();
+let nextHistoricalPriceRequestAt = 0;
 
 function asPositiveId(value) {
   const id = Number(value);
@@ -268,6 +364,9 @@ function runtimeSettings() {
   return {
     maxTransactionsPerSync: boundedInteger(values.maxTransactionsPerSync, SETTINGS_DEFAULTS.maxTransactionsPerSync, 0, 100000),
     bulkPurposeLimit: boundedInteger(values.bulkPurposeLimit, SETTINGS_DEFAULTS.bulkPurposeLimit, 1, 2500),
+    historicalPriceRetryIntervalMinutes: boundedInteger(values.historicalPriceRetryIntervalMinutes, SETTINGS_DEFAULTS.historicalPriceRetryIntervalMinutes, 5, 1440),
+    historicalPriceBackfillBatchSize: boundedInteger(values.historicalPriceBackfillBatchSize, SETTINGS_DEFAULTS.historicalPriceBackfillBatchSize, 1, 250),
+    personalTaxRatePercent: Math.min(100, Math.max(0, Number(values.personalTaxRatePercent) || 0)),
     bitcoinExplorerBaseUrl: values.bitcoinExplorerBaseUrl || SETTINGS_DEFAULTS.bitcoinExplorerBaseUrl,
     tzktApiBaseUrl: values.tzktApiBaseUrl || SETTINGS_DEFAULTS.tzktApiBaseUrl,
     tronGridBaseUrl: values.tronGridBaseUrl || SETTINGS_DEFAULTS.tronGridBaseUrl,
@@ -307,11 +406,15 @@ function settingsResponse() {
   return {
     maxTransactionsPerSync: settings.maxTransactionsPerSync,
     bulkPurposeLimit: settings.bulkPurposeLimit,
+    historicalPriceRetryIntervalMinutes: settings.historicalPriceRetryIntervalMinutes,
+    historicalPriceBackfillBatchSize: settings.historicalPriceBackfillBatchSize,
+    personalTaxRatePercent: settings.personalTaxRatePercent,
     bitcoinExplorerBaseUrl: settings.bitcoinExplorerBaseUrl,
     tzktApiBaseUrl: settings.tzktApiBaseUrl,
     tronGridBaseUrl: settings.tronGridBaseUrl,
     blockfrostBaseUrl: settings.blockfrostBaseUrl,
     etherscanApiBaseUrl: settings.etherscanApiBaseUrl,
+    ethereumRpcUrl: settings.ethereumRpcUrl,
     bscScanApiBaseUrl: settings.bscScanApiBaseUrl,
     snowtraceApiBaseUrl: settings.snowtraceApiBaseUrl,
     solscanApiBaseUrl: settings.solscanApiBaseUrl,
@@ -354,15 +457,31 @@ function updateSettings(input) {
   }
   const bulkPurposeLimit = boundedInteger(input.bulkPurposeLimit, current.bulkPurposeLimit, 1, 2500);
   if (Number(input.bulkPurposeLimit) !== bulkPurposeLimit) throw makeError("Das Limit für die Sammelbearbeitung muss zwischen 1 und 2.500 liegen.");
+  const historicalPriceRetryIntervalMinutes = boundedInteger(input.historicalPriceRetryIntervalMinutes, current.historicalPriceRetryIntervalMinutes, 5, 1440);
+  if (Number(input.historicalPriceRetryIntervalMinutes) !== historicalPriceRetryIntervalMinutes) {
+    throw makeError("Der Wiederholungsabstand für historische Kurse muss zwischen 5 und 1.440 Minuten liegen.");
+  }
+  const historicalPriceBackfillBatchSize = boundedInteger(input.historicalPriceBackfillBatchSize, current.historicalPriceBackfillBatchSize, 1, 250);
+  if (Number(input.historicalPriceBackfillBatchSize) !== historicalPriceBackfillBatchSize) {
+    throw makeError("Die Anzahl historischer Kurse je Durchlauf muss zwischen 1 und 250 liegen.");
+  }
+  const personalTaxRatePercent = Number(input.personalTaxRatePercent);
+  if (!Number.isFinite(personalTaxRatePercent) || personalTaxRatePercent < 0 || personalTaxRatePercent > 100) {
+    throw makeError("Der persönliche Steuersatz muss zwischen 0 und 100 Prozent liegen.");
+  }
 
   const next = {
     maxTransactionsPerSync,
     bulkPurposeLimit,
+    historicalPriceRetryIntervalMinutes,
+    historicalPriceBackfillBatchSize,
+    personalTaxRatePercent,
     bitcoinExplorerBaseUrl: cleanServiceUrl(input.bitcoinExplorerBaseUrl, "Die Bitcoin-Explorer-URL"),
     tzktApiBaseUrl: cleanServiceUrl(input.tzktApiBaseUrl, "Die TzKT-URL"),
     tronGridBaseUrl: cleanServiceUrl(input.tronGridBaseUrl, "Die TronGrid-URL"),
     blockfrostBaseUrl: cleanServiceUrl(input.blockfrostBaseUrl, "Die Blockfrost-URL"),
     etherscanApiBaseUrl: cleanServiceUrl(input.etherscanApiBaseUrl, "Die Etherscan-URL"),
+    ethereumRpcUrl: cleanServiceUrl(input.ethereumRpcUrl, "Die Ethereum-RPC-URL"),
     bscScanApiBaseUrl: cleanServiceUrl(input.bscScanApiBaseUrl, "Die BscScan-URL"),
     snowtraceApiBaseUrl: cleanServiceUrl(input.snowtraceApiBaseUrl, "Die Snowtrace-URL"),
     solscanApiBaseUrl: cleanServiceUrl(input.solscanApiBaseUrl, "Die Solscan-URL"),
@@ -412,6 +531,9 @@ function updateSettings(input) {
   currentPriceCache = { expiresAt: 0, data: {} };
   tokenPriceCache = { expiresAt: 0, data: {} };
   topMarketCache = { expiresAt: 0, data: null };
+  // Apply a changed retry cadence at the next scheduler tick instead of
+  // keeping a previously calculated interval alive.
+  nextAutomaticHistoricalPriceBackfillAt = 0;
   return settingsResponse();
 }
 
@@ -461,7 +583,22 @@ async function fetchJson(url, additionalHeaders = {}) {
     }
     throw makeError(`Die Blockchain-Datenquelle ist momentan nicht verfügbar (HTTP ${response.status}).`, 502);
   }
-  return response.json();
+  const payload = await response.json();
+  const parsed = z.union([z.array(z.unknown()), z.record(z.string(), z.unknown())]).safeParse(payload);
+  if (!parsed.success) throw makeError("Die externe Datenquelle lieferte kein gültiges JSON-Objekt oder JSON-Array.", 502);
+  return parsed.data;
+}
+
+function fetchHistoricalJson(url, additionalHeaders = {}) {
+  const request = historicalPriceRequestTail.then(async () => {
+    const waitFor = Math.max(0, nextHistoricalPriceRequestAt - Date.now());
+    if (waitFor > 0) await pause(waitFor);
+    nextHistoricalPriceRequestAt = Date.now() + HISTORICAL_PRICE_REQUEST_GAP_MS;
+    return fetchJson(url, additionalHeaders);
+  });
+  // A failed provider response must not stop the queue for later retry jobs.
+  historicalPriceRequestTail = request.catch(() => undefined);
+  return request;
 }
 
 async function getCurrentPrices() {
@@ -603,7 +740,7 @@ async function hydrateBitvavoHistoricalPrices(chain, timestamps, settings) {
       end: String(end),
     }).toString();
     try {
-      const prices = bitvavoDailyClosePrices(await fetchJson(url.toString()));
+      const prices = bitvavoDailyClosePrices(await fetchHistoricalJson(url.toString()));
       for (const date of requestedDates) {
         const value = positiveNumber(prices.get(date));
         if (!value) continue;
@@ -653,7 +790,7 @@ async function hydrateHistoricalPrices(chain, timestamps, settings) {
     const from = Math.floor(new Date(`${requestedDates[0]}T00:00:00.000Z`).getTime() / 1000) - 86400;
     const to = Math.floor(new Date(`${requestedDates.at(-1)}T23:59:59.999Z`).getTime() / 1000) + 86400;
     try {
-      const payload = await fetchJson(
+      const payload = await fetchHistoricalJson(
         `${settings.coinGeckoBaseUrl}/coins/${coinId}/market_chart/range?vs_currency=eur&from=${from}&to=${to}`,
         coinGeckoHeaders(settings.coinGeckoBaseUrl, settings.coinGeckoApiKey),
       );
@@ -694,7 +831,7 @@ async function hydrateHistoricalTokenPrices(contract, timestamps, settings) {
       continue;
     }
     try {
-      const payload = await fetchJson(
+      const payload = await fetchHistoricalJson(
         `${settings.coinGeckoBaseUrl}/coins/ethereum/contract/${encodeURIComponent(normalizedContract)}/history?date=${coinGeckoDate(date)}`,
         coinGeckoHeaders(settings.coinGeckoBaseUrl, settings.coinGeckoApiKey),
       );
@@ -846,6 +983,35 @@ function cardanoHeaders(settings) {
   return { project_id: settings.blockfrostProjectId };
 }
 
+const cardanoRewardsSchema = z.array(z.object({ epoch: z.coerce.number().int(), amount: z.coerce.string(), pool_id: z.string().optional() }));
+
+async function fetchCardanoRewards(stakeAddress, settings) {
+  const client = new BlockFrostAPI({ projectId: settings.blockfrostProjectId, customBackend: settings.blockfrostBaseUrl });
+  const result = await client.accountsRewards(stakeAddress, { count: 100, order: "desc" });
+  return cardanoRewardsSchema.parse(result);
+}
+
+function normalizeCardanoReward(reward) {
+  const amount = Number(reward.amount || 0) / 1000000;
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return {
+    externalId: `ada-reward:${reward.epoch}:${reward.pool_id || "unknown"}:${reward.amount}`,
+    hash: `cardano-reward:${reward.epoch}:${reward.pool_id || "unknown"}`,
+    timestamp: null,
+    direction: "in",
+    asset: "ADA",
+    assetSymbol: "ADA",
+    assetName: "Cardano",
+    assetDecimals: 6,
+    amount,
+    fee: 0,
+    counterparty: reward.pool_id || null,
+    historicalPrice: null,
+    autoPurpose: "Staking Rewards",
+    rawJson: JSON.stringify(reward),
+  };
+}
+
 async function fetchCardanoAccountAddresses(stakeAddress, settings) {
   const addresses = [];
   const headers = cardanoHeaders(settings);
@@ -946,6 +1112,34 @@ async function fetchEtherscanRecords(address, action, settings, maxTransactions 
     page += 1;
   }
   return maxTransactions ? output.slice(0, maxTransactions) : output;
+}
+
+const ERC20_METADATA_ABI = parseAbi([
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+]);
+
+async function enrichErc20Metadata(records, settings) {
+  const contracts = [...new Set(records.map((record) => String(record.contractAddress || "").toLowerCase()).filter((contract) => /^0x[a-f0-9]{40}$/.test(contract)))];
+  if (!contracts.length) return records;
+  try {
+    const client = createPublicClient({ chain: mainnet, transport: http(settings.ethereumRpcUrl, { timeout: 8000 }) });
+    const calls = contracts.flatMap((address) => ["name", "symbol", "decimals"].map((functionName) => ({ address, abi: ERC20_METADATA_ABI, functionName })));
+    const results = await client.multicall({ contracts: calls, allowFailure: true, batchSize: 1024 });
+    const metadata = new Map();
+    contracts.forEach((contract, index) => {
+      const [name, symbol, decimals] = results.slice(index * 3, index * 3 + 3).map((result) => result.status === "success" ? result.result : null);
+      metadata.set(contract, { name: typeof name === "string" ? name : null, symbol: typeof symbol === "string" ? symbol : null, decimals: Number.isInteger(Number(decimals)) ? Number(decimals) : null });
+    });
+    return records.map((record) => {
+      const item = metadata.get(String(record.contractAddress || "").toLowerCase());
+      return item ? { ...record, tokenName: item.name || record.tokenName, tokenSymbol: item.symbol || record.tokenSymbol, tokenDecimal: item.decimals ?? record.tokenDecimal } : record;
+    });
+  } catch (_) {
+    // Etherscan metadata remains the fallback when a public RPC is unavailable.
+    return records;
+  }
 }
 
 async function fetchExplorerNativeTransactions(address, { apiBaseUrl, apiKey, providerName }, settings) {
@@ -1137,9 +1331,10 @@ async function fetchEthereumTransactions(address, settings) {
     fetchEtherscanRecords(address, "txlist", settings),
     fetchEtherscanRecords(address, "tokentx", settings),
   ]);
+  const enrichedErc20 = await enrichErc20Metadata(erc20, settings);
   const rows = [
     ...native.map((transaction) => ({ type: "native", transaction })),
-    ...erc20.map((transaction) => ({ type: "erc20", transaction })),
+    ...enrichedErc20.map((transaction) => ({ type: "erc20", transaction })),
   ].sort((left, right) => Number(right.transaction.timeStamp || 0) - Number(left.transaction.timeStamp || 0));
   return settings.maxTransactionsPerSync ? rows.slice(0, settings.maxTransactionsPerSync) : rows;
 }
@@ -1234,11 +1429,12 @@ const CHAIN_ADAPTERS = {
         if (addresses.length === 0) {
           throw makeError("Zu dieser Cardano-Stake-Adresse wurden keine Zahlungsadressen gefunden. Prüfe, ob es eine Mainnet-Stake-Adresse ist.");
         }
-        return { rawTransactions: await fetchCardanoTransactions(addresses, settings), context: new Set(addresses), xpubCapped: false };
+        const [transactions, rewards] = await Promise.all([fetchCardanoTransactions(addresses, settings), fetchCardanoRewards(wallet.address, settings).catch(() => [])]);
+        return { rawTransactions: [...transactions.map((transaction) => ({ type: "utxo", transaction })), ...rewards.map((reward) => ({ type: "reward", reward }))], context: new Set(addresses), xpubCapped: false };
       }
-      return { rawTransactions: await fetchCardanoTransactions(wallet.address, settings), context: new Set([wallet.address]), xpubCapped: false };
+      return { rawTransactions: (await fetchCardanoTransactions(wallet.address, settings)).map((transaction) => ({ type: "utxo", transaction })), context: new Set([wallet.address]), xpubCapped: false };
     },
-    normalize: normalizeCardanoTransaction,
+    normalize(item, address) { return item.type === "reward" ? normalizeCardanoReward(item.reward) : normalizeCardanoTransaction(item.transaction, address); },
   },
   ETH: {
     async load(wallet, settings) {
@@ -1333,9 +1529,69 @@ const CHAIN_ADAPTERS = {
 };
 
 function getWallet(id) {
-  const wallet = db.prepare("SELECT * FROM wallets WHERE id = ?").get(id);
+  const wallet = db.prepare(`SELECT w.*, COALESCE(m.group_name, '') AS group_name, COALESCE(m.tags, '[]') AS tags
+    FROM wallets w LEFT JOIN wallet_metadata m ON m.wallet_id = w.id WHERE w.id = ?`).get(id);
   if (!wallet) throw makeError("Wallet nicht gefunden.", 404);
   return wallet;
+}
+
+function cleanTags(value) {
+  const raw = Array.isArray(value) ? value : String(value || "").split(",");
+  return [...new Set(raw.map((tag) => cleanLabel(tag, 32)).filter(Boolean))].slice(0, 12);
+}
+
+function updateWalletMetadata(walletId, groupName, tags) {
+  const cleanGroup = cleanLabel(groupName, 48);
+  const cleanTagList = cleanTags(tags);
+  db.prepare(`INSERT INTO wallet_metadata (wallet_id, group_name, tags, updated_at) VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(wallet_id) DO UPDATE SET group_name = excluded.group_name, tags = excluded.tags, updated_at = datetime('now')`)
+    .run(walletId, cleanGroup, JSON.stringify(cleanTagList));
+  return { group_name: cleanGroup, tags: cleanTagList };
+}
+
+function createNotification(level, title, message) {
+  db.prepare("INSERT INTO notifications (level, title, message) VALUES (?, ?, ?)")
+    .run(level, cleanLabel(title, 100), cleanLabel(message, 500));
+}
+
+let jobWorkerScheduled = false;
+function scheduleJobWorker() {
+  if (jobWorkerScheduled) return;
+  jobWorkerScheduled = true;
+  setImmediate(async () => {
+    jobWorkerScheduled = false;
+    const job = db.prepare("SELECT * FROM background_jobs WHERE status = 'queued' ORDER BY id ASC LIMIT 1").get();
+    if (!job) return;
+    db.prepare("UPDATE background_jobs SET status = 'running', started_at = datetime('now') WHERE id = ?").run(job.id);
+    try {
+      const payload = JSON.parse(job.payload_json);
+      let result;
+      if (job.type === "wallet_sync") {
+        const wallet = getWallet(payload.walletId);
+        result = await syncWallet(wallet);
+        recordSyncEvent(wallet.id, "success", result.imported);
+        createNotification("success", "Wallet synchronisiert", `${wallet.label || wallet.address}: ${result.imported.toLocaleString("de-DE")} Transaktionen verarbeitet.`);
+      } else {
+        result = await backfillHistoricalPrices({ force: Boolean(payload.force) });
+        if (result.remaining > 0) createNotification("warning", "Historische Kurse offen", `${result.remaining.toLocaleString("de-DE")} historische Kurse werden weiter automatisch geprüft.`);
+        else createNotification("success", "Historische Kurse ergänzt", `${result.updated.toLocaleString("de-DE")} Kurse wurden ergänzt.`);
+      }
+      db.prepare("UPDATE background_jobs SET status = 'success', progress_current = 1, progress_total = 1, result_json = ?, finished_at = datetime('now') WHERE id = ?")
+        .run(JSON.stringify(result), job.id);
+    } catch (error) {
+      db.prepare("UPDATE background_jobs SET status = 'error', error_message = ?, finished_at = datetime('now') WHERE id = ?")
+        .run(String(error.message || error).slice(0, 500), job.id);
+      createNotification("error", "Hintergrundjob fehlgeschlagen", String(error.message || error).slice(0, 400));
+    }
+    scheduleJobWorker();
+  });
+}
+
+function enqueueJob(type, payload) {
+  const result = db.prepare("INSERT INTO background_jobs (type, payload_json) VALUES (?, ?)").run(type, JSON.stringify(payload));
+  const job = db.prepare("SELECT * FROM background_jobs WHERE id = ?").get(Number(result.lastInsertRowid));
+  scheduleJobWorker();
+  return job;
 }
 
 async function syncWallet(wallet) {
@@ -1367,7 +1623,7 @@ async function syncWallet(wallet) {
   for (const [contract, timestamps] of tokenDates) tokenPricesByContract.set(contract, await hydrateHistoricalTokenPrices(contract, timestamps, settings));
 
   const existingTransaction = db.prepare(
-    "SELECT price_transaction_eur, purpose, purpose_origin FROM transactions WHERE wallet_id = ? AND external_id = ?",
+    "SELECT price_transaction_eur, price_source, purpose, purpose_origin FROM transactions WHERE wallet_id = ? AND external_id = ?",
   );
   const upsert = db.prepare(`
     INSERT INTO transactions (
@@ -1388,7 +1644,14 @@ async function syncWallet(wallet) {
       fee = excluded.fee,
       fee_asset = excluded.fee_asset,
       counterparty = excluded.counterparty,
-      price_transaction_eur = COALESCE(excluded.price_transaction_eur, transactions.price_transaction_eur),
+      price_transaction_eur = CASE
+        WHEN transactions.price_source = 'manual' THEN transactions.price_transaction_eur
+        ELSE COALESCE(excluded.price_transaction_eur, transactions.price_transaction_eur)
+      END,
+      price_source = CASE
+        WHEN transactions.price_source = 'manual' THEN 'manual'
+        ELSE 'auto'
+      END,
       purpose = CASE
         WHEN transactions.purpose_origin = 'manual' THEN transactions.purpose
         WHEN excluded.purpose IS NOT NULL THEN excluded.purpose
@@ -1448,15 +1711,43 @@ async function syncWallet(wallet) {
   };
 }
 
-async function backfillHistoricalPrices() {
+function pendingHistoricalPriceCount() {
+  return Number(db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM transactions
+    WHERE timestamp IS NOT NULL
+      AND price_source <> 'manual'
+      AND (price_transaction_eur IS NULL OR price_transaction_eur <= 0)
+  `).get().count || 0);
+}
+
+async function backfillHistoricalPrices({ force = false } = {}) {
   const settings = runtimeSettings();
+  const totalPending = pendingHistoricalPriceCount();
+  const retryFilter = force ? "1 = 1" : "(retry.next_attempt_at IS NULL OR retry.next_attempt_at <= ?)";
   const candidates = db.prepare(`
-    SELECT t.id, t.timestamp, t.asset_contract, w.chain
+    SELECT t.id, t.timestamp, t.asset_contract, w.chain, retry.attempt_count AS retry_attempt_count
     FROM transactions t
     JOIN wallets w ON w.id = t.wallet_id
+    LEFT JOIN historical_price_retries retry ON retry.transaction_id = t.id
     WHERE t.timestamp IS NOT NULL
+      AND t.price_source <> 'manual'
       AND (t.price_transaction_eur IS NULL OR t.price_transaction_eur <= 0)
-  `).all();
+      AND ${retryFilter}
+    ORDER BY retry.last_attempt_at ASC, t.timestamp ASC
+    LIMIT ?
+  `).all(...(force ? [] : [new Date().toISOString()]), settings.historicalPriceBackfillBatchSize);
+  if (candidates.length === 0) {
+    return {
+      candidates: totalPending,
+      attempted: 0,
+      updated: 0,
+      unresolved: totalPending,
+      remaining: totalPending,
+      retryIntervalMinutes: settings.historicalPriceRetryIntervalMinutes,
+      hint: totalPending ? "Für die noch fehlenden Kurse läuft bereits eine gedrosselte Wiederholung." : null,
+    };
+  }
   const nativeDates = new Map();
   const tokenDates = new Map();
   for (const transaction of candidates) {
@@ -1478,9 +1769,19 @@ async function backfillHistoricalPrices() {
   const update = db.prepare(`
     UPDATE transactions
     SET price_transaction_eur = ?, updated_at = datetime('now')
-    WHERE id = ? AND (price_transaction_eur IS NULL OR price_transaction_eur <= 0)
+    WHERE id = ? AND price_source <> 'manual' AND (price_transaction_eur IS NULL OR price_transaction_eur <= 0)
+  `);
+  const removeRetry = db.prepare("DELETE FROM historical_price_retries WHERE transaction_id = ?");
+  const saveRetry = db.prepare(`
+    INSERT INTO historical_price_retries (transaction_id, attempt_count, last_attempt_at, next_attempt_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(transaction_id) DO UPDATE SET
+      attempt_count = excluded.attempt_count,
+      last_attempt_at = excluded.last_attempt_at,
+      next_attempt_at = excluded.next_attempt_at
   `);
   let updated = 0;
+  const unresolvedTransactions = [];
   db.exec("BEGIN");
   try {
     for (const transaction of candidates) {
@@ -1488,7 +1789,26 @@ async function backfillHistoricalPrices() {
       const price = transaction.asset_contract
         ? positiveNumber(tokenPrices.get(String(transaction.asset_contract).toLowerCase())?.get(date))
         : positiveNumber(nativePrices.get(transaction.chain)?.get(date));
-      if (price) updated += update.run(price, transaction.id).changes;
+      if (price) {
+        updated += update.run(price, transaction.id).changes;
+        removeRetry.run(transaction.id);
+      } else {
+        unresolvedTransactions.push(transaction);
+      }
+    }
+    const attemptedAt = new Date();
+    for (const transaction of unresolvedTransactions) {
+      const attempts = Number(transaction.retry_attempt_count || 0) + 1;
+      const delayMinutes = Math.min(
+        1440,
+        settings.historicalPriceRetryIntervalMinutes * 2 ** Math.min(attempts - 1, 6),
+      );
+      saveRetry.run(
+        transaction.id,
+        attempts,
+        attemptedAt.toISOString(),
+        new Date(attemptedAt.getTime() + delayMinutes * 60000).toISOString(),
+      );
     }
     db.exec("COMMIT");
   } catch (error) {
@@ -1497,18 +1817,41 @@ async function backfillHistoricalPrices() {
   }
 
   const unresolved = candidates.length - updated;
+  const remaining = pendingHistoricalPriceCount();
   const requiresExtendedHistory = candidates.some((transaction) => needsExtendedCoinGeckoHistory(isoDay(transaction.timestamp)));
   const usingPro = usesCoinGeckoPro(settings.coinGeckoBaseUrl, settings.coinGeckoApiKey);
   return {
-    candidates: candidates.length,
+    candidates: totalPending,
+    attempted: candidates.length,
     updated,
     unresolved,
+    remaining,
+    retryIntervalMinutes: settings.historicalPriceRetryIntervalMinutes,
     requiresExtendedHistory,
     usingPro,
     hint: unresolved && requiresExtendedHistory && !usingPro
       ? "Für ältere native Coins wurde der kostenlose EUR-Tageskurs-Fallback versucht. Für nicht verfügbare Märkte und ERC-20-Token bitte unter Einstellungen eine CoinGecko-Pro-API-Basisadresse und einen Pro-API-Key hinterlegen."
       : unresolved ? "Einige Kurse waren bei der Preisquelle nicht verfügbar und bleiben als k. A. markiert." : null,
   };
+}
+
+let historicalPriceBackfillInFlight = null;
+let nextAutomaticHistoricalPriceBackfillAt = 0;
+
+function runHistoricalPriceBackfill(options) {
+  if (historicalPriceBackfillInFlight) return historicalPriceBackfillInFlight;
+  historicalPriceBackfillInFlight = backfillHistoricalPrices(options)
+    .finally(() => { historicalPriceBackfillInFlight = null; });
+  return historicalPriceBackfillInFlight;
+}
+
+function scheduleHistoricalPriceBackfill() {
+  const settings = runtimeSettings();
+  if (Date.now() < nextAutomaticHistoricalPriceBackfillAt || historicalPriceBackfillInFlight) return;
+  nextAutomaticHistoricalPriceBackfillAt = Date.now() + settings.historicalPriceRetryIntervalMinutes * 60000;
+  runHistoricalPriceBackfill({ force: false }).catch((error) => {
+    console.error("Automatische Preisergänzung fehlgeschlagen:", error.message);
+  });
 }
 
 function nativeAssetDescriptors() {
@@ -1546,86 +1889,10 @@ function assetDescriptorFromTransaction(transaction) {
   };
 }
 
-function emptyAssetAnalytics(asset, currentPrice, holdingAmount) {
-  return {
-    asset: asset.id,
-    holdingAmount,
-    holdingValueEur: currentPrice ? holdingAmount * currentPrice : null,
-    currentPriceEur: currentPrice || null,
-    purchases: {
-      count: 0,
-      acquiredAmount: 0,
-      remainingAmount: 0,
-      remainingCostEur: 0,
-      hasUnknownCost: false,
-      currentValueEur: null,
-      profitEur: null,
-    },
-    staking: {
-      count: 0,
-      amount: 0,
-      historicValueEur: 0,
-      hasUnknownHistoricValue: false,
-      currentValueEur: null,
-    },
-  };
-}
-
-function calculateAssetAnalytics(transactions, pricesByAsset, holdings, assets) {
-  const analytics = Object.fromEntries(Object.entries(assets).map(([assetId, asset]) => [
-    assetId,
-    emptyAssetAnalytics(asset, positiveNumber(pricesByAsset[assetId]), Number(holdings[assetId] || 0)),
-  ]));
-  const purchaseLots = Object.fromEntries(Object.keys(assets).map((assetId) => [assetId, []]));
-  const chronological = [...transactions].sort((left, right) => String(left.timestamp || "").localeCompare(String(right.timestamp || "")));
-
-  for (const transaction of chronological) {
-    const report = analytics[transaction.asset];
-    if (!report) continue;
-    const amount = Number(transaction.amount || 0);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-    const historicPrice = positiveNumber(transaction.price_transaction_eur);
-
-    if (transaction.direction === "in" && transaction.purpose === "Kauf") {
-      report.purchases.count += 1;
-      report.purchases.acquiredAmount += amount;
-      purchaseLots[transaction.asset].push({ amount, costPerAsset: historicPrice });
-    }
-    if (transaction.direction === "out" && transaction.purpose === "Verkauf") {
-      let remainingToSell = amount;
-      for (const lot of purchaseLots[transaction.asset]) {
-        if (remainingToSell <= 0) break;
-        const consumed = Math.min(lot.amount, remainingToSell);
-        lot.amount -= consumed;
-        remainingToSell -= consumed;
-      }
-    }
-    if (transaction.direction === "in" && transaction.purpose === "Staking Rewards") {
-      report.staking.count += 1;
-      report.staking.amount += amount;
-      if (historicPrice) report.staking.historicValueEur += amount * historicPrice;
-      else report.staking.hasUnknownHistoricValue = true;
-    }
-  }
-
-  for (const [assetId, report] of Object.entries(analytics)) {
-    for (const lot of purchaseLots[assetId]) {
-      if (lot.amount <= 0) continue;
-      report.purchases.remainingAmount += lot.amount;
-      if (lot.costPerAsset) report.purchases.remainingCostEur += lot.amount * lot.costPerAsset;
-      else report.purchases.hasUnknownCost = true;
-    }
-    if (report.currentPriceEur) {
-      report.purchases.currentValueEur = report.purchases.remainingAmount * report.currentPriceEur;
-      report.staking.currentValueEur = report.staking.amount * report.currentPriceEur;
-      if (!report.purchases.hasUnknownCost) report.purchases.profitEur = report.purchases.currentValueEur - report.purchases.remainingCostEur;
-    }
-  }
-  return analytics;
-}
-
 async function portfolioResponse() {
-  const wallets = db.prepare("SELECT * FROM wallets ORDER BY created_at DESC").all();
+  const wallets = db.prepare(`SELECT w.*, COALESCE(m.group_name, '') AS group_name, COALESCE(m.tags, '[]') AS tags
+    FROM wallets w LEFT JOIN wallet_metadata m ON m.wallet_id = w.id ORDER BY w.created_at DESC`).all()
+    .map((wallet) => ({ ...wallet, tags: (() => { try { return JSON.parse(wallet.tags); } catch { return []; } })() }));
   const transactions = db.prepare(`
     SELECT t.*, w.chain, w.address, w.source_type, w.label AS wallet_label
     FROM transactions t
@@ -1659,6 +1926,30 @@ async function portfolioResponse() {
     0,
   );
   const assetAnalytics = calculateAssetAnalytics(enriched, pricesByAsset, holdings, assets);
+  const allocation = Object.entries(assetAnalytics)
+    .map(([asset, report]) => ({ asset, valueEur: Number(report.holdingValueEur || 0), share: totalValueEur > 0 ? Number(report.holdingValueEur || 0) / totalValueEur : 0 }))
+    .filter((entry) => entry.valueEur > 0)
+    .sort((a, b) => b.valueEur - a.valueEur);
+  const cumulativeByDay = new Map();
+  let cumulativeValue = 0;
+  for (const transaction of [...enriched].filter((item) => item.timestamp).sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)))) {
+    const price = positiveNumber(transaction.price_transaction_eur);
+    if (!price) continue;
+    const sign = transaction.direction === "in" ? 1 : transaction.direction === "out" ? -1 : 0;
+    cumulativeValue += sign * Number(transaction.amount || 0) * price;
+    cumulativeByDay.set(isoDay(transaction.timestamp), cumulativeValue);
+  }
+  const valueHistory = [...cumulativeByDay.entries()].slice(-180).map(([day, valueEur]) => ({ day, valueEur }));
+  const unrealizedProfitEur = Object.values(assetAnalytics).reduce((sum, report) => sum + Number(report.purchases?.profitEur || 0), 0);
+  const remainingPurchaseCostEur = Object.values(assetAnalytics).reduce((sum, report) => sum + Number(report.purchases?.remainingCostEur || 0), 0);
+  const realizedYear = calculateTaxReport(enriched, new Date().getFullYear(), runtimeSettings()).summary.realizedProfitEur;
+  const netInvestmentEur = enriched.reduce((sum, transaction) => {
+    if (!positiveNumber(transaction.price_transaction_eur)) return sum;
+    const value = Number(transaction.amount) * Number(transaction.price_transaction_eur);
+    return transaction.purpose === "Kauf" && transaction.direction === "in" ? sum + value
+      : transaction.purpose === "Verkauf" && transaction.direction === "out" ? sum - value : sum;
+  }, 0);
+  const incomeHistoricValueEur = Object.values(assetAnalytics).reduce((sum, report) => sum + Number(report.staking?.historicValueEur || 0), 0);
 
   return {
     wallets,
@@ -1669,6 +1960,17 @@ async function portfolioResponse() {
     assetPrices: pricesByAsset,
     totalValueEur,
     currentPrices,
+    insights: {
+      allocation,
+      valueHistory,
+      performance: {
+        unrealizedProfitEur,
+        realizedYearEur: realizedYear,
+        netInvestmentEur,
+        purchaseReturnPercent: remainingPurchaseCostEur > 0 ? unrealizedProfitEur / remainingPurchaseCostEur * 100 : null,
+        incomeHistoricValueEur,
+      },
+    },
     purposePresets: PURPOSE_PRESETS,
     chains: Object.fromEntries(Object.entries(CHAIN_CONFIG).map(([key, value]) => [key, {
       name: value.name,
@@ -1717,7 +2019,248 @@ app.put("/api/settings", (request, response, next) => {
 
 app.post("/api/prices/historical/backfill", async (_request, response, next) => {
   try {
-    response.json(await backfillHistoricalPrices());
+    response.json(await runHistoricalPriceBackfill({ force: true }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+function safeBackupName(value) {
+  const name = String(value || "");
+  return /^cryptobuch-\d{8}-\d{6}\.sqlite$/.test(name) ? name : null;
+}
+
+function backupPath(name) {
+  const safeName = safeBackupName(name);
+  if (!safeName) throw makeError("Ungültige Backup-Datei.");
+  return path.join(BACKUP_DIR, safeName);
+}
+
+function listBackups() {
+  return fs.readdirSync(BACKUP_DIR)
+    .filter((name) => safeBackupName(name))
+    .map((name) => {
+      const stats = fs.statSync(path.join(BACKUP_DIR, name));
+      return { name, size: stats.size, createdAt: stats.mtime.toISOString() };
+    })
+    .sort((left, right) => right.name.localeCompare(left.name));
+}
+
+function createBackup() {
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "").replace("T", "-");
+  const name = `cryptobuch-${stamp}.sqlite`;
+  const destination = backupPath(name).replaceAll("'", "''");
+  db.exec(`VACUUM INTO '${destination}'`);
+  return listBackups().find((backup) => backup.name === name);
+}
+
+app.get("/api/backups", (_request, response, next) => {
+  try {
+    response.json({ backups: listBackups() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/backups", (_request, response, next) => {
+  try {
+    response.status(201).json(createBackup());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/backups/:name/download", (request, response, next) => {
+  try {
+    const name = safeBackupName(request.params.name);
+    if (!name) throw makeError("Ungültige Backup-Datei.");
+    response.download(backupPath(name), name);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/backups/:name/restore", (request, response, next) => {
+  try {
+    const source = backupPath(request.params.name);
+    if (!fs.existsSync(source)) throw makeError("Backup nicht gefunden.", 404);
+    // A restore deliberately terminates the process after the response. Docker
+    // restarts the container and opens the restored database from the volume.
+    db.close();
+    for (const sidecar of [`${DB_PATH}-wal`, `${DB_PATH}-shm`]) {
+      if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar);
+    }
+    fs.copyFileSync(source, DB_PATH);
+    response.json({ restored: request.params.name, restarting: true });
+    setTimeout(() => process.exit(0), 500).unref();
+  } catch (error) {
+    next(error);
+  }
+});
+
+function recordSyncEvent(walletId, status, importedCount = 0, message = null) {
+  db.prepare(`
+    INSERT INTO sync_events (wallet_id, status, imported_count, message)
+    VALUES (?, ?, ?, ?)
+  `).run(walletId, status, importedCount, message);
+}
+
+app.get("/api/system-status", (_request, response, next) => {
+  try {
+    const wallets = db.prepare(`
+      SELECT w.id, w.chain, w.label, w.address, w.last_synced_at,
+        event.status AS last_status, event.imported_count AS last_imported_count,
+        event.message AS last_message, event.created_at AS last_event_at
+      FROM wallets w
+      LEFT JOIN sync_events event ON event.id = (
+        SELECT id FROM sync_events WHERE wallet_id = w.id ORDER BY id DESC LIMIT 1
+      )
+      ORDER BY w.last_synced_at ASC, w.id ASC
+    `).all();
+    const retries = db.prepare(`
+      SELECT COUNT(*) AS count, MIN(next_attempt_at) AS next_attempt_at
+      FROM historical_price_retries
+    `).get();
+    response.json({
+      wallets,
+      priceRetry: {
+        pending: pendingHistoricalPriceCount(),
+        delayed: Number(retries.count || 0),
+        nextAttemptAt: retries.next_attempt_at || null,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+function transactionQualityRows(condition, limit = 100) {
+  return db.prepare(`
+    SELECT t.id, t.hash, t.timestamp, t.direction, t.asset, t.asset_symbol, t.amount,
+      t.price_transaction_eur, t.price_source, t.purpose, t.purpose_origin, w.chain, w.label AS wallet_label
+    FROM transactions t
+    JOIN wallets w ON w.id = t.wallet_id
+    WHERE ${condition}
+    ORDER BY t.timestamp ASC
+    LIMIT ?
+  `).all(limit);
+}
+
+app.get("/api/data-quality", (_request, response, next) => {
+  try {
+    const missingHistoricPrices = transactionQualityRows(`
+      t.timestamp IS NOT NULL
+      AND t.price_source <> 'manual'
+      AND (t.price_transaction_eur IS NULL OR t.price_transaction_eur <= 0)
+    `, 150);
+    const unassignedPurposes = transactionQualityRows("t.purpose IS NULL OR trim(t.purpose) = ''", 150);
+    const counts = {
+      missingHistoricPrices: pendingHistoricalPriceCount(),
+      unassignedPurposes: Number(db.prepare("SELECT COUNT(*) AS count FROM transactions WHERE purpose IS NULL OR trim(purpose) = ''").get().count || 0),
+      manualHistoricPrices: Number(db.prepare("SELECT COUNT(*) AS count FROM transactions WHERE price_source = 'manual'").get().count || 0),
+    };
+    const possibleTransfers = db.prepare(`
+      SELECT a.id AS outgoing_id, b.id AS incoming_id, a.asset, a.amount, a.timestamp AS outgoing_at, b.timestamp AS incoming_at,
+        aw.label AS outgoing_wallet, bw.label AS incoming_wallet
+      FROM transactions a
+      JOIN transactions b ON b.asset = a.asset AND b.direction = 'in' AND a.direction = 'out'
+        AND ABS(b.amount - a.amount) <= MAX(0.00000001, ABS(a.amount) * 0.002)
+        AND ABS(strftime('%s', b.timestamp) - strftime('%s', a.timestamp)) <= 172800
+      JOIN wallets aw ON aw.id = a.wallet_id JOIN wallets bw ON bw.id = b.wallet_id
+      WHERE a.wallet_id <> b.wallet_id AND (a.purpose IS NULL OR a.purpose <> 'Transfer') AND (b.purpose IS NULL OR b.purpose <> 'Transfer')
+      ORDER BY a.timestamp DESC LIMIT 80
+    `).all();
+    const possibleDuplicates = db.prepare(`
+      SELECT hash, asset, amount, COUNT(*) AS occurrences, GROUP_CONCAT(id) AS transaction_ids
+      FROM transactions WHERE hash <> '' GROUP BY hash, asset, amount HAVING COUNT(*) > 1 ORDER BY occurrences DESC LIMIT 80
+    `).all();
+    response.json({ counts, missingHistoricPrices, unassignedPurposes, possibleTransfers, possibleDuplicates });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/jobs/:id", (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    const job = db.prepare("SELECT * FROM background_jobs WHERE id = ?").get(id);
+    if (!job) throw makeError("Hintergrundjob nicht gefunden.", 404);
+    response.json({ ...job, result: job.result_json ? JSON.parse(job.result_json) : null });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/jobs/sync", (request, response, next) => {
+  try {
+    const ids = [...new Set((Array.isArray(request.body?.walletIds) ? request.body.walletIds : [request.body?.walletId]).map(asPositiveId).filter(Boolean))];
+    if (!ids.length) throw makeError("Bitte mindestens eine Wallet auswählen.");
+    const jobs = ids.map((id) => { getWallet(id); return enqueueJob("wallet_sync", { walletId: id }); });
+    response.status(202).json({ jobs });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/jobs/price-backfill", (request, response, next) => {
+  try { response.status(202).json({ job: enqueueJob("price_backfill", { force: Boolean(request.body?.force) }) }); } catch (error) { next(error); }
+});
+
+app.get("/api/notifications", (_request, response, next) => {
+  try {
+    const notifications = db.prepare("SELECT * FROM notifications ORDER BY is_read ASC, id DESC LIMIT 40").all();
+    response.json({ notifications, unread: notifications.filter((item) => !item.is_read).length });
+  } catch (error) { next(error); }
+});
+
+app.patch("/api/notifications/read", (request, response, next) => {
+  try {
+    const ids = Array.isArray(request.body?.ids) ? request.body.ids.map(asPositiveId).filter(Boolean) : [];
+    if (ids.length) db.prepare(`UPDATE notifications SET is_read = 1 WHERE id IN (${ids.map(() => "?").join(",")})`).run(...ids);
+    else db.prepare("UPDATE notifications SET is_read = 1 WHERE is_read = 0").run();
+    response.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
+function reportYear(value) {
+  const year = Number(value || new Date().getFullYear());
+  if (!Number.isInteger(year) || year < 2009 || year > 2100) throw makeError("Bitte ein gültiges Kalenderjahr angeben.");
+  return year;
+}
+
+function taxReportResponse(year) {
+  const transactions = db.prepare("SELECT * FROM transactions WHERE timestamp IS NOT NULL ORDER BY timestamp ASC").all();
+  const report = calculateTaxReport(transactions, year, runtimeSettings());
+  const availableYears = db.prepare(`
+    SELECT DISTINCT substr(timestamp, 1, 4) AS year
+    FROM transactions
+    WHERE timestamp IS NOT NULL AND length(timestamp) >= 4
+    ORDER BY year DESC
+  `).all().map((row) => Number(row.year)).filter(Number.isInteger);
+  return { ...report, availableYears };
+}
+
+function csvCell(value) {
+  const text = value === null || value === undefined ? "" : String(value);
+  return /[;"\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+app.get("/api/tax-report", (request, response, next) => {
+  try {
+    response.json(taxReportResponse(reportYear(request.query.year)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/tax-report.csv", (request, response, next) => {
+  try {
+    const report = taxReportResponse(reportYear(request.query.year));
+    const rows = [
+      ["Kategorie", "Asset", "Menge", "Datum", "Anschaffungsdatum", "Erlös EUR", "Kosten EUR", "Gebühr EUR", "Gewinn EUR", "Haltedauer Tage", "Vollständig"],
+      ...report.sales.map((sale) => ["Verkauf", sale.asset, sale.amount, sale.soldAt, sale.acquiredAt, sale.proceedsEur, sale.costEur, sale.feeEur, sale.profitEur, sale.holdingDays, sale.complete ? "ja" : "nein"]),
+      ...report.income.map((entry) => [entry.type, entry.asset, entry.amount, entry.receivedAt, "", entry.valueEur, "", "", "", "", entry.complete ? "ja" : "nein"]),
+    ];
+    response
+      .type("text/csv")
+      .attachment(`cryptobuch-steuerreport-${report.year}.csv`)
+      .send(rows.map((row) => row.map(csvCell).join(";")).join("\n"));
   } catch (error) {
     next(error);
   }
@@ -1756,6 +2299,7 @@ app.post("/api/wallets", (request, response, next) => {
     const result = db.prepare(
       "INSERT INTO wallets (chain, address, label, source_type, xpub_address_type) VALUES (?, ?, ?, ?, ?)",
     ).run(chain, address, label, sourceType, sourceType === "xpub" ? xpubAddressType : null);
+    updateWalletMetadata(Number(result.lastInsertRowid), request.body?.groupName, request.body?.tags);
     const wallet = getWallet(Number(result.lastInsertRowid));
     response.status(201).json(wallet);
   } catch (error) {
@@ -1765,6 +2309,59 @@ app.post("/api/wallets", (request, response, next) => {
     }
     next(error);
   }
+});
+
+app.patch("/api/wallets/:id", (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültige Wallet-ID.");
+    getWallet(id);
+    const label = cleanLabel(request.body?.label, 80);
+    db.prepare("UPDATE wallets SET label = ? WHERE id = ?").run(label, id);
+    updateWalletMetadata(id, request.body?.groupName, request.body?.tags);
+    response.json(getWallet(id));
+  } catch (error) { next(error); }
+});
+
+function parseCsvRows(text) {
+  const lines = String(text || "").replace(/^\uFEFF/, "").split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2) throw makeError("Die CSV benötigt eine Kopfzeile und mindestens eine Transaktion.");
+  const split = (line) => line.split(line.includes(";") ? ";" : ",").map((value) => value.trim().replace(/^"|"$/g, "").replaceAll('""', '"'));
+  const columns = split(lines.shift()).map((column) => column.toLowerCase());
+  const required = ["timestamp", "direction", "asset", "amount"];
+  if (required.some((column) => !columns.includes(column))) throw makeError("CSV-Spalten erforderlich: timestamp, direction, asset, amount. Optional: fee, purpose, price_eur, hash.");
+  return lines.map((line) => Object.fromEntries(split(line).map((value, index) => [columns[index], value])));
+}
+
+app.post("/api/import/csv", (request, response, next) => {
+  try {
+    const walletId = asPositiveId(request.body?.walletId);
+    if (!walletId) throw makeError("Bitte eine Ziel-Wallet auswählen.");
+    const wallet = getWallet(walletId);
+    const rows = parseCsvRows(request.body?.csv);
+    if (rows.length > 2500) throw makeError("Maximal 2.500 CSV-Transaktionen gleichzeitig importieren.");
+    const insert = db.prepare(`INSERT INTO transactions (wallet_id, external_id, hash, timestamp, direction, asset, asset_symbol, asset_name, asset_decimals, amount, fee, fee_asset, counterparty, price_transaction_eur, price_source, purpose, purpose_origin, raw_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, 'manual', ?)
+      ON CONFLICT(wallet_id, external_id) DO UPDATE SET timestamp=excluded.timestamp, direction=excluded.direction, amount=excluded.amount, fee=excluded.fee, price_transaction_eur=excluded.price_transaction_eur, purpose=excluded.purpose, purpose_origin='manual', raw_json=excluded.raw_json, updated_at=datetime('now')`);
+    let imported = 0;
+    db.exec("BEGIN");
+    try {
+      for (const [index, row] of rows.entries()) {
+        const direction = String(row.direction || "").toLowerCase();
+        const amount = Number(String(row.amount || "").replace(",", "."));
+        const timestamp = new Date(row.timestamp).toISOString();
+        if (!['in', 'out', 'self'].includes(direction) || !Number.isFinite(amount) || amount <= 0 || Number.isNaN(new Date(row.timestamp).getTime())) throw makeError(`Ungültige CSV-Zeile ${index + 2}.`);
+        const asset = cleanLabel(row.asset, 48).toUpperCase();
+        const price = row.price_eur === undefined || row.price_eur === "" ? null : Number(String(row.price_eur).replace(",", "."));
+        if (!asset || (price !== null && (!Number.isFinite(price) || price <= 0))) throw makeError(`Ungültige CSV-Zeile ${index + 2}.`);
+        const externalId = cleanLabel(row.external_id || row.hash || `csv-${wallet.id}-${index}-${timestamp}`, 180);
+        insert.run(wallet.id, externalId, cleanLabel(row.hash || externalId, 180), timestamp, direction, asset, asset, asset, 8, amount, Number(String(row.fee || 0).replace(",", ".")) || 0, asset, cleanLabel(row.counterparty, 160) || null, price, cleanPurpose(row.purpose), JSON.stringify({ source: "csv", row }));
+        imported += 1;
+      }
+      db.exec("COMMIT");
+    } catch (error) { db.exec("ROLLBACK"); throw error; }
+    response.status(201).json({ imported, walletId: wallet.id });
+  } catch (error) { next(error); }
 });
 
 app.delete("/api/wallets/:id", (request, response, next) => {
@@ -1780,12 +2377,16 @@ app.delete("/api/wallets/:id", (request, response, next) => {
 });
 
 app.post("/api/wallets/:id/sync", async (request, response, next) => {
+  let wallet = null;
   try {
     const id = asPositiveId(request.params.id);
     if (!id) throw makeError("Ungültige Wallet-ID.");
-    const result = await syncWallet(getWallet(id));
+    wallet = getWallet(id);
+    const result = await syncWallet(wallet);
+    recordSyncEvent(wallet.id, "success", result.imported);
     response.json(result);
   } catch (error) {
+    if (wallet) recordSyncEvent(wallet.id, "error", 0, String(error.message || "Synchronisierung fehlgeschlagen.").slice(0, 500));
     next(error);
   }
 });
@@ -1806,6 +2407,59 @@ app.patch("/api/transactions/bulk", (request, response, next) => {
   }
 });
 
+app.patch("/api/transactions/:id/historical-price", (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültige Transaktions-ID.");
+    const rawPrice = request.body?.priceTransactionEur;
+    const note = cleanLabel(request.body?.note, 240) || null;
+    if (rawPrice === null || rawPrice === undefined || rawPrice === "") {
+      const result = db.prepare(`
+        UPDATE transactions
+        SET price_transaction_eur = NULL, price_source = 'auto', updated_at = datetime('now')
+        WHERE id = ?
+      `).run(id);
+      if (!result.changes) throw makeError("Transaktion nicht gefunden.", 404);
+      db.prepare("DELETE FROM historical_price_retries WHERE transaction_id = ?").run(id);
+      db.prepare("INSERT INTO transaction_price_audit (transaction_id, price_eur, source, note) VALUES (?, ?, ?, ?)").run(id, null, "auto", note || "Automatische Preisermittlung wieder aktiviert");
+      response.json({ id, price_transaction_eur: null, price_source: "auto" });
+      return;
+    }
+    const price = positiveNumber(rawPrice);
+    if (!price || price > 1000000000000) throw makeError("Der historische Preis muss eine positive EUR-Zahl sein.");
+    const result = db.prepare(`
+      UPDATE transactions
+      SET price_transaction_eur = ?, price_source = 'manual', updated_at = datetime('now')
+      WHERE id = ?
+    `).run(price, id);
+    if (!result.changes) throw makeError("Transaktion nicht gefunden.", 404);
+    db.prepare("DELETE FROM historical_price_retries WHERE transaction_id = ?").run(id);
+    db.prepare("INSERT INTO transaction_price_audit (transaction_id, price_eur, source, note) VALUES (?, ?, ?, ?)").run(id, price, "manual", note);
+    response.json({ id, price_transaction_eur: price, price_source: "manual" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/transactions/:id/price-history", (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültige Transaktions-ID.");
+    const transaction = db.prepare("SELECT id, price_transaction_eur, price_source, updated_at FROM transactions WHERE id = ?").get(id);
+    if (!transaction) throw makeError("Transaktion nicht gefunden.", 404);
+    const changes = db.prepare(`
+      SELECT price_eur, source, note, changed_at
+      FROM transaction_price_audit
+      WHERE transaction_id = ?
+      ORDER BY id DESC
+      LIMIT 20
+    `).all(id);
+    response.json({ transaction, changes });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.patch("/api/transactions/:id", (request, response, next) => {
   try {
     const id = asPositiveId(request.params.id);
@@ -1819,6 +2473,29 @@ app.patch("/api/transactions/:id", (request, response, next) => {
   }
 });
 
+app.get("/api/wallets/:id/qr", async (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültige Wallet-ID.");
+    const wallet = getWallet(id);
+    const dataUrl = await QRCode.toDataURL(wallet.address, { errorCorrectionLevel: "M", margin: 1, width: 320, color: { dark: "#10271f", light: "#fdfcf8" } });
+    response.json({ label: wallet.label || wallet.address, address: wallet.address, dataUrl });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/bitcoin/psbt-preview", (request, response, next) => {
+  try {
+    const parsed = z.object({ psbt: z.string().trim().min(20).max(1_000_000) }).safeParse(request.body || {});
+    if (!parsed.success) throw makeError("Bitte eine gültige PSBT im Base64-Format einfügen.");
+    response.json(previewPsbt(parsed.data.psbt));
+  } catch (error) {
+    if (/PSBT|base64|magic|format/i.test(String(error.message))) return next(makeError("PSBT konnte nicht gelesen werden. Es werden ausschließlich Base64-PSBTs gelesen; signiert oder gesendet wird nichts."));
+    next(error);
+  }
+});
+
 app.get("/api/explorer/:chain/address/:address", (request, response, next) => {
   try {
     const chain = String(request.params.chain || "").toUpperCase();
@@ -1828,6 +2505,9 @@ app.get("/api/explorer/:chain/address/:address", (request, response, next) => {
     next(error);
   }
 });
+
+app.get("/vendor/uplot.js", (_request, response) => response.sendFile(path.join(__dirname, "node_modules", "uplot", "dist", "uPlot.iife.min.js")));
+app.get("/vendor/uplot.css", (_request, response) => response.sendFile(path.join(__dirname, "node_modules", "uplot", "dist", "uPlot.min.css")));
 
 app.use(express.static(path.join(__dirname, "public"), {
   extensions: ["html"],
@@ -1843,6 +2523,13 @@ app.use((error, _request, response, _next) => {
   if (status >= 500) console.error(error);
   response.status(status).json({ error: status >= 500 ? "Der Vorgang konnte nicht abgeschlossen werden." : error.message });
 });
+
+// Runs without an open browser, but only processes one bounded batch. Historic
+// requests are serialized above, so a provider is never hit in parallel.
+const historicalPriceScheduler = setInterval(scheduleHistoricalPriceBackfill, 60000);
+historicalPriceScheduler.unref();
+const initialHistoricalPriceRetry = setTimeout(scheduleHistoricalPriceBackfill, 15000);
+initialHistoricalPriceRetry.unref();
 
 if (require.main === module) {
   app.listen(PORT, "0.0.0.0", () => {

@@ -5,9 +5,12 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
+COPY public ./public
+COPY client ./client
+RUN npm run build:ledger
+
 COPY server.js ./
 COPY lib ./lib
-COPY public ./public
 
 ENV NODE_ENV=production \
     PORT=3000 \

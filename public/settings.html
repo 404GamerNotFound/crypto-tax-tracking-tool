@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
     <title>CryptoBuch · Einstellungen</title>
-    <link rel="stylesheet" href="/styles.css?v=20260920-10" />
+    <link rel="stylesheet" href="/styles.css?v=20260922-15" />
   </head>
   <body>
     <div class="shell settings-shell">
@@ -17,6 +17,9 @@
         <nav class="topbar-nav" aria-label="Hauptnavigation">
           <a class="topbar-link" href="/">Dashboard</a>
           <a class="topbar-link" href="/wallets.html">Wallets</a>
+          <a class="topbar-link" href="/quality.html">Datenqualität</a>
+          <a class="topbar-link" href="/tax.html">Steuerreport</a>
+          <a class="topbar-link" href="/maintenance.html">Betrieb</a>
           <a class="topbar-link is-active" href="/settings.html">Einstellungen</a>
         </nav>
       </header>
@@ -47,6 +50,23 @@
               <input id="bulk-purpose-limit" name="bulkPurposeLimit" type="number" min="1" max="2500" step="1" required />
               <small>Aus Sicherheits- und Bedienungsgründen sind höchstens 2.500 möglich.</small>
             </label>
+            <div class="form-grid settings-grid">
+              <label>
+                <span>Wiederholung fehlender historischer Kurse</span>
+                <input id="historical-price-retry-interval" name="historicalPriceRetryIntervalMinutes" type="number" min="5" max="1440" step="1" required />
+                <small>Minuten zwischen automatischen Durchläufen. Fehlgeschlagene Werte erhalten zusätzlich eine steigende Wartezeit.</small>
+              </label>
+              <label>
+                <span>Historische Kurse je Durchlauf</span>
+                <input id="historical-price-batch-size" name="historicalPriceBackfillBatchSize" type="number" min="1" max="250" step="1" required />
+                <small>Begrenzt die Nachbearbeitung; historische Provider-Anfragen laufen einzeln und gedrosselt.</small>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-card" aria-labelledby="tax-profile-title">
+            <div class="settings-heading"><div><p class="eyebrow">STEUERPROFIL</p><h2 id="tax-profile-title">Persönlicher Steuersatz</h2></div><span class="settings-mark">02</span></div>
+            <label><span>Geschätzter persönlicher Steuersatz in Prozent</span><input id="personal-tax-rate" name="personalTaxRatePercent" type="number" min="0" max="100" step="0.01" required /><small>Wird nur für eine unverbindliche Steuer-Schätzung im Jahresreport verwendet. Steuerregeln, Freigrenzen, Verlustverrechnung und Haltefristen bleiben deine bzw. die Aufgabe einer Steuerberatung.</small></label>
           </section>
 
           <section class="settings-card" aria-labelledby="bitcoin-title">
@@ -154,6 +174,11 @@
               <span>Etherscan-API-Basisadresse</span>
               <input id="etherscan-api" name="etherscanApiBaseUrl" type="url" inputmode="url" required />
               <small>Standard: Etherscan API V2 für Ethereum Mainnet (Chain-ID 1).</small>
+            </label>
+            <label>
+              <span>Ethereum Read-only RPC <small>optional</small></span>
+              <input id="ethereum-rpc" name="ethereumRpcUrl" type="url" inputmode="url" required />
+              <small>Wird ausschließlich für ERC-20-Metadaten per Contract-Multicall verwendet; Transaktionen und Signaturen bleiben bei Etherscan bzw. vollständig read-only.</small>
             </label>
             <label>
               <span>Etherscan-API-Key</span>
@@ -325,6 +350,6 @@
       </main>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/settings.js?v=20260920-10" defer></script>
+    <script src="/settings.js?v=20260922-16" defer></script>
   </body>
 </html>

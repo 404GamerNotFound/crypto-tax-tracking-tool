@@ -25,6 +25,8 @@ services:
       # Etherscan API V2 liefert native ETH- sowie ERC-20-Transfers.
       ETHERSCAN_API_BASE_URL: ${ETHERSCAN_API_BASE_URL:-https://api.etherscan.io/v2/api}
       ETHERSCAN_API_KEY: ${ETHERSCAN_API_KEY:-}
+      # Ausschließlich read-only für ERC-20-Contract-Metadaten via viem.
+      ETHEREUM_RPC_URL: ${ETHEREUM_RPC_URL:-https://cloudflare-eth.com}
       # Weitere Netzwerke verwenden bewusst eigene Explorer-/Indexerdienste.
       BSCSCAN_API_BASE_URL: ${BSCSCAN_API_BASE_URL:-https://api.bscscan.com/api}
       BSCSCAN_API_KEY: ${BSCSCAN_API_KEY:-}
@@ -47,6 +49,9 @@ services:
       BITVAVO_API_BASE_URL: ${BITVAVO_API_BASE_URL:-https://api.bitvavo.com/v2}
       # Für nicht verfügbare Märkte und historische ERC-20-Kurse kann CoinGecko Pro nötig sein.
       COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+      # Die automatische Preisergänzung ist gedrosselt und verarbeitet kleine Batches.
+      HISTORICAL_PRICE_RETRY_INTERVAL_MINUTES: ${HISTORICAL_PRICE_RETRY_INTERVAL_MINUTES:-15}
+      HISTORICAL_PRICE_BACKFILL_BATCH_SIZE: ${HISTORICAL_PRICE_BACKFILL_BATCH_SIZE:-60}
       # Exakt so benannte, vertrauenswürdige TzKT-Payout-Konten werden automatisch als Staking markiert.
       XTZ_STAKING_PAYOUT_ALIASES: ${XTZ_STAKING_PAYOUT_ALIASES:-Stake.fish Payouts}
       # BIP44-Scan für Bitcoin-xPubs: 20 aufeinanderfolgende unbenutzte Adressen pro Zweig.

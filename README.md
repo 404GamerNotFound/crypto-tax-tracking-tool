@@ -27,11 +27,19 @@ docker compose down
 - Bitcoin-xPubs importieren und daraus abgeleitete Empfangs- sowie Wechselgeldadressen mit BIP44-Gap-Limit erkennen
 - Historien mit dedizierten Netzwerkadaptern synchronisieren: Blockstream Esplora (BTC), TzKT (XTZ), TronGrid (TRX), Blockfrost (ADA), Etherscan (ETH/ERC-20), BscScan (BNB), Solscan (SOL), XRPL JSON-RPC (XRP), Stellar Horizon (XLM), BlockCypher (DOGE/LTC), Blockchair (BCH/ZEC), NearBlocks (NEAR), Snowtrace (AVAX) und TonAPI (TON)
 - Ein- und Ausgänge, eigene Transfers, Gebühren und Gegenadressen in einer Tabelle darstellen
+- Datenqualität getrennt prüfen: fehlende historische Kurse, Transaktionen ohne Zweck und manuell fixierte Kurse
+- Historische EUR-Kurse je Transaktion manuell hinterlegen, mit Quelle, Begründung und vollständiger Änderungs-Historie; manuelle Werte werden bei späteren Synchronisierungen nicht überschrieben
+- Jahresreport mit FIFO-Verkaufssegmenten, historischen Erlösen/Kosten, Haltedauer, bewertbaren Gebühren sowie Staking-, Mining-, Airdrop-, Lending- und DeFi-Erträgen erstellen; CSV- und druckoptimierter PDF-Export inklusive
+- Lokale Datenbank-Backups im Docker-Volume erstellen, herunterladen und nach ausdrücklicher Bestätigung wiederherstellen
+- Betriebsseite mit dem letzten Import je Wallet, Fehlermeldungen, Importanzahl und Preis-Retry-Status
 - Aktuellen EUR-Marktpreis sowie EUR-Preis zum Transaktionsdatum anzeigen; Tezos verwendet dafür den von TzKT zum Blockzeitpunkt gelieferten EUR-Kurs, andere native Coins CoinGecko mit EUR-Tageskurs-Fallback und erkannte ERC-20-Token CoinGecko-Contract-Kurse
 - Transaktionen einzeln oder gesammelt mit Zwecken wie `Kauf`, `Verkauf`, `Staking Rewards` oder `Transfer` versehen – eigene Zwecke sind ebenfalls möglich
 - Bis zu 2.500 Transaktionen in einem Sammelvorgang bearbeiten
 - Suchen sowie nach Blockchain und Bewegungsrichtung filtern
 - Bestätigte XTZ-Eingänge von vertrauenswürdig benannten Payout-Konten automatisch als `Staking Rewards` markieren; manuelle Zwecke bleiben dabei unangetastet
+- Interaktive Coin-Charts mit Zoom und Cursor, QR-Codes für gespeicherte öffentliche Wallet-Adressen sowie eine reine Bitcoin-PSBT-Vorschau ohne Signieren oder Speichern
+- Direkter, read-only Ledger-Import für Bitcoin und Ethereum: Die öffentliche Empfangsadresse wird im Browser vom Gerät gelesen und auf dem Ledger bestätigt; Private Keys, Seed-Phrases und Signaturfunktionen bleiben ausgeschlossen
+- Cardano-Stake-Wallets zusätzlich um die von Blockfrost gelieferte Reward-Historie erweitern und ERC-20-Metadaten mit read-only Ethereum-RPC-Multicalls prüfen
 
 ## Datenquellen und Grenzen
 
@@ -42,10 +50,20 @@ docker compose down
 - Ethereum-Transaktionen werden über die [Etherscan API V2](https://docs.etherscan.io/) abgerufen. Der Adapter importiert bestätigte native ETH-Transfers und ERC-20-Transfer-Events einer Ethereum-Mainnet-Adresse. Interne Transaktionen sowie ERC-721/1155-NFTs sind nicht Teil dieses Umfangs.
 - Weitere Top-30-Netzwerke nutzen absichtlich keinen universellen Multi-Chain-Importer. Ihre Quellen und optionalen Zugangsdaten werden getrennt unter **Einstellungen → Weitere Netzwerke** verwaltet. Die Adapter beziehen aktuell native Transfers; ERC-20-Token werden bereits beim Ethereum-Import erkannt.
 - Monero kann ohne privaten View-Key nicht aus einer öffentlichen Adresse synchronisiert werden. Shielded-Zcash-Adressen, Canton und Figure HELOC haben ebenfalls keine für diesen read-only Ansatz passende, frei zugängliche Adresshistorie; sie werden deshalb nicht als voll synchronisierbare Wallet angeboten.
-- Aktuelle EUR-Kurse kommen von [CoinGecko](https://www.coingecko.com/en/api). Historische Kurse werden pro Kalendertag in der lokalen Datenbank zwischengespeichert. Für native Coins ergänzt CryptoBuch fehlende CoinGecko-Historie automatisch mit EUR-Tageskerzen von Bitvavo. Die öffentliche CoinGecko-API beschränkt historische Abrufe auf die letzten 365 Tage; für nicht verfügbare Märkte oder historische ERC-20-Preise kann eine CoinGecko-Pro-Basisadresse samt Pro-Key erforderlich sein. Falls keine Quelle einen Kurs kennt, bleiben Transaktionen sichtbar und zeigen `k. A.`.
+- Aktuelle EUR-Kurse kommen von [CoinGecko](https://www.coingecko.com/en/api). Historische Kurse werden pro Kalendertag in der lokalen Datenbank zwischengespeichert. Für native Coins ergänzt CryptoBuch fehlende CoinGecko-Historie automatisch mit EUR-Tageskerzen von Bitvavo. Fehlende Werte werden auch ohne geöffnete Browserseite in kleinen, seriellen Batches wiederholt; fehlgeschlagene Werte erhalten ein exponentiell wachsendes Retry-Intervall. Die öffentliche CoinGecko-API beschränkt historische Abrufe auf die letzten 365 Tage; für nicht verfügbare Märkte oder historische ERC-20-Preise kann eine CoinGecko-Pro-Basisadresse samt Pro-Key erforderlich sein. Falls keine Quelle einen Kurs kennt, bleiben Transaktionen sichtbar und zeigen `k. A.`.
 - Die Top-30-Marktansicht bezieht ebenfalls CoinGecko-Marktdaten und wird für fünf Minuten im Speicher zwischengespeichert. Die Rangfolge ist daher stets aktuell und nicht als feste Coin-Liste im Programm hinterlegt.
 - TzKT liefert zu Tezos-Operationen neben dem Blockzeitstempel auch den zum Blockzeitpunkt errechneten EUR-Kurs. Deshalb kann die Anwendung für XTZ eine präzisere historische Zuordnung verwenden als den Tageskurs.
 - Die Anwendung ist eine Organisationshilfe und keine steuerliche Beratung. Für eine Steuererklärung sollten Zuordnungen und Kursdaten fachlich geprüft werden.
+
+## Datenqualität und Steuerreport
+
+Unter **Datenqualität** werden fehlende historische Kurse sowie Transaktionen ohne Zweck als Arbeitsliste angezeigt. Ein manueller historischer Kurs lässt sich dort oder direkt in der Coin-Detailansicht hinterlegen. Diese Werte tragen die Quelle `manual` und sind damit gegen künftige automatische Preisimporte geschützt; „Automatik verwenden“ hebt den Schutz wieder auf.
+
+Der **Steuerreport** ist eine lokale Buchungsübersicht, keine steuerliche Beratung. Er verwendet die als `Kauf` und `Verkauf` markierten Transaktionen in zeitlicher FIFO-Reihenfolge, weist Haltedauer und bewertbare Gebühren aus und zeigt nur vollständig bewertete Verkaufssegmente in den EUR-Summen. Fehlende Kauf-, Verkaufs- oder Gebührenkurse werden ausdrücklich als unvollständig gekennzeichnet. Staking-, Mining-, Airdrop-, Lending- und DeFi-Erträge werden zum historischen Empfangswert separat aufgelistet. Der CSV-Export enthält alle vollständigen und unvollständigen Positionen; die Druckansicht lässt sich im Browser als PDF speichern.
+
+Unter **Einstellungen → Steuerprofil** kann ein persönlicher Steuersatz hinterlegt werden. Der Jahresreport zeigt daraus eine ausdrücklich unverbindliche Schätzung auf positive, vollständig bewertete Gewinne und Erträge. Sie bildet weder länderspezifische Regeln noch Freigrenzen, Verlustverrechnung, Haltefristen oder individuelle Abzüge ab und ersetzt keine steuerliche Beratung.
+
+Unter **Betrieb & Backups** lassen sich Datenbank-Snapshots erstellen und herunterladen. Die Wiederherstellung ersetzt bewusst die aktuelle SQLite-Datenbank und startet den Container neu; sie verlangt deshalb eine separate Bestätigung. Dieselbe Seite zeigt außerdem den letzten Erfolg oder Fehler jeder Wallet-Synchronisierung sowie ausstehende, gedrosselte Preis-Retries.
 
 ## Konfiguration
 
@@ -77,6 +95,24 @@ Falls die öffentliche Blockstream-API Anfragen begrenzt, kann ein eigener Esplo
 ```dotenv
 BITCOIN_EXPLORER_BASE_URL=https://dein-esplora.example/api
 ```
+
+### Direkte Ledger-Verbindung
+
+Auf der Seite **Wallets** öffnet **Ledger verbinden** einen rein lokalen Geräte-Dialog. Er unterstützt zunächst die Ledger-Apps **Bitcoin** und **Ethereum** und liest nach Bestätigung auf dem Hardware-Wallet die erste Empfangsadresse des gewählten Kontos. Die BIP32-Pfade sind für Bitcoin je nach Format `m/84'/0'/Konto'/0/0` (Native SegWit), `m/49'/0'/Konto'/0/0` (Nested SegWit) oder `m/44'/0'/Konto'/0/0` (Legacy); Ethereum verwendet `m/44'/60'/Konto'/0/0`.
+
+Die Gerätekommunikation geschieht ausschließlich zwischen Browser und Ledger über WebHID mit WebUSB-Fallback. Docker, der CryptoBuch-Server und die SQLite-Datenbank erhalten nur die danach bestätigte öffentliche Adresse. Es werden keine Signaturen ausgelöst und weder Private Keys noch Seed-Phrases oder xPrvs verarbeitet. Voraussetzung ist eine aktuelle Chrome-/Chromium-Version, die geöffnete passende Ledger-App und bei Portainer eine HTTPS-URL (für lokale Zugriffe gilt auch `localhost`).
+
+Der Bitcoin-Import per Ledger fügt bewusst eine einzelne Empfangsadresse hinzu. Für die vollständige Historie eines Bitcoin-Kontos inklusive Wechselgeldadressen verwende weiterhin den vorhandenen xPub-/yPub-/zPub-Import.
+
+Der Ledger-Dialog kann nun auch das komplette Bitcoin-Konto als xPub übernehmen. Dabei wird der öffentliche Konto-Schlüssel nach BIP44/49/84 aus der Bitcoin-App gelesen und anschließend mit dem bestehenden Gap-Limit synchronisiert. Für EVM-Netze kann dieselbe öffentliche Adresse über die Ethereum-App getrennt als Ethereum-, BNB-Smart-Chain- oder Avalanche-C-Chain-Wallet angelegt werden.
+
+### Jobs, Datenqualität und CSV-Nachträge
+
+Wallet-Synchronisierungen und die Nachbearbeitung historischer Kurse laufen als lokale Hintergrundjobs. Die Oberfläche wartet mit Statusmeldung auf den Abschluss, während der Server die Jobs seriell verarbeitet – Explorer und Preis-APIs werden so nicht parallel überlastet.
+
+Unter **Datenqualität** schlägt CryptoBuch gegenläufige, zeitlich und mengenmäßig ähnliche Bewegungen zwischen eigenen Wallets als mögliche Transfers vor. CSV-Nachträge können dort einer bestehenden Wallet zugeordnet werden. Das CSV-Format benötigt die Spalten `timestamp`, `direction`, `asset` und `amount`; optional sind `fee`, `purpose`, `price_eur`, `hash` und `counterparty`. Manuell importierte Preise und Zwecke werden nicht von einer Blockchain-Synchronisierung überschrieben. Eine CSV-Übernahme ist auf 2.500 Zeilen begrenzt.
+
+Wallets lassen sich beim Anlegen mit einer Gruppe und bis zu zwölf Tags strukturieren. Das Dashboard ergänzt die Bestandskarten um eine Allokationsansicht und eine historische Buchwertentwicklung auf Basis der erfassten historischen Transaktionswerte.
 
 ### TRON / TronGrid
 
@@ -123,6 +159,8 @@ COINGECKO_API_KEY=dein_coingecko_pro_key
 
 Die Anwendung verwendet dann automatisch den Header `x-cg-pro-api-key`; beim öffentlichen Standard-Endpunkt wird ein optionaler Key als Demo-Key übermittelt. Der Key bleibt serverseitig gespeichert und wird nicht an den Browser zurückgegeben.
 
+Die automatische Nachbearbeitung läuft standardmäßig alle 15 Minuten, verarbeitet höchstens 60 fehlende Transaktionen je Durchlauf und startet historische HTTP-Anfragen mindestens 1,75 Sekunden versetzt. Beide Werte können unter **Einstellungen → Synchronisierung** oder beim ersten Start über `HISTORICAL_PRICE_RETRY_INTERVAL_MINUTES` und `HISTORICAL_PRICE_BACKFILL_BATCH_SIZE` angepasst werden. Der Button **Historische Kurse ergänzen** stößt denselben gedrosselten Durchlauf sofort an.
+
 ### Weitere Top-30-Netzwerke
 
 Die Wallet-Auswahl enthält alle derzeit über öffentliche Quellen synchronisierbaren Top-30-Netzwerke. Im Marktüberblick öffnen die Badges **Wallet-Import verfügbar** direkt den passenden Wallet-Dialog. API-Keys gehören ausschließlich in die Einstellungsseite oder in die entsprechenden Portainer-Variablen; sie werden nie an den Browser ausgeliefert.
@@ -143,7 +181,7 @@ Beim ersten Start lassen sich die entsprechenden Variablen in Portainer setzen, 
 
 ### Dashboard-Logik
 
-Das Dashboard trennt Bestände nach Coin. Als gekauft zählt ein Eingang, der mit `Kauf` markiert wurde. Ausgänge mit `Verkauf` reduzieren diese Kauf-Chargen in zeitlicher Reihenfolge (FIFO). Der dargestellte Gewinn ist der aktuelle Wert der verbleibenden Kauf-Chargen abzüglich ihrer historischen Kaufwerte. Staking-Ertrag zeigt die Summe der mit `Staking Rewards` markierten Eingänge sowie deren aktuellen Wert. Für belastbare Werte müssen Käufe und Verkäufe deshalb zugeordnet sein; fehlende historische Kurse führen zu `k. A.` statt zu einer Schätzung.
+Das Dashboard trennt Bestände nach Coin. Als gekauft zählt ein Eingang, der mit `Kauf` markiert wurde. Ausgänge mit `Verkauf` reduzieren diese Kauf-Chargen in zeitlicher Reihenfolge (FIFO). Der dargestellte Gewinn ist der aktuelle Wert der verbleibenden Kauf-Chargen abzüglich ihrer historischen Kaufwerte. Fehlen nur einzelne noch gehaltene Kaufchargen, zeigt CryptoBuch den Gewinn der bepreisten Chargen mit dem Hinweis **teilweise**; fehlen alle Kaufkurse, bleibt der Wert `k. A.`. Staking-Ertrag zeigt die Summe der mit `Staking Rewards` markierten Eingänge sowie deren aktuellen Wert.
 
 ### Weitere Netzwerke ergänzen
 

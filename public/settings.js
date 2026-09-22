@@ -22,11 +22,15 @@ async function api(url, options = {}) {
 function render(settings) {
   el("max-transactions").value = settings.maxTransactionsPerSync;
   el("bulk-purpose-limit").value = settings.bulkPurposeLimit;
+  el("historical-price-retry-interval").value = settings.historicalPriceRetryIntervalMinutes;
+  el("historical-price-batch-size").value = settings.historicalPriceBackfillBatchSize;
+  el("personal-tax-rate").value = settings.personalTaxRatePercent;
   el("bitcoin-explorer").value = settings.bitcoinExplorerBaseUrl;
   el("tzkt-api").value = settings.tzktApiBaseUrl;
   el("trongrid-api").value = settings.tronGridBaseUrl;
   el("blockfrost-api").value = settings.blockfrostBaseUrl;
   el("etherscan-api").value = settings.etherscanApiBaseUrl;
+  el("ethereum-rpc").value = settings.ethereumRpcUrl;
   el("bscscan-api").value = settings.bscScanApiBaseUrl;
   el("snowtrace-api").value = settings.snowtraceApiBaseUrl;
   el("solscan-api").value = settings.solscanApiBaseUrl;
@@ -89,11 +93,15 @@ el("settings-form").addEventListener("submit", async (event) => {
       body: JSON.stringify({
         maxTransactionsPerSync: form.get("maxTransactionsPerSync"),
         bulkPurposeLimit: form.get("bulkPurposeLimit"),
+        historicalPriceRetryIntervalMinutes: form.get("historicalPriceRetryIntervalMinutes"),
+        historicalPriceBackfillBatchSize: form.get("historicalPriceBackfillBatchSize"),
+        personalTaxRatePercent: form.get("personalTaxRatePercent"),
         bitcoinExplorerBaseUrl: form.get("bitcoinExplorerBaseUrl"),
         tzktApiBaseUrl: form.get("tzktApiBaseUrl"),
         tronGridBaseUrl: form.get("tronGridBaseUrl"),
         blockfrostBaseUrl: form.get("blockfrostBaseUrl"),
         etherscanApiBaseUrl: form.get("etherscanApiBaseUrl"),
+        ethereumRpcUrl: form.get("ethereumRpcUrl"),
         bscScanApiBaseUrl: form.get("bscScanApiBaseUrl"),
         snowtraceApiBaseUrl: form.get("snowtraceApiBaseUrl"),
         solscanApiBaseUrl: form.get("solscanApiBaseUrl"),

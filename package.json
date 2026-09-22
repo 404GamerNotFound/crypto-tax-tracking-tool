@@ -7,16 +7,29 @@
   "scripts": {
     "start": "node --experimental-sqlite server.js",
     "dev": "node --watch --experimental-sqlite server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "build:ledger": "esbuild client/ledger-connect.js --bundle --format=iife --target=es2022 --inject:client/ledger-shim.js --alias:stream=stream-browserify --alias:crypto=crypto-browserify --outfile=public/ledger-connect.js"
   },
   "engines": {
     "node": ">=22.5.0"
   },
   "dependencies": {
+    "@blockfrost/blockfrost-js": "^6.2.0",
+    "@ledgerhq/hw-app-btc": "^11.5.0",
+    "@ledgerhq/hw-transport-webhid": "^6.36.0",
+    "@ledgerhq/hw-transport-webusb": "^6.35.0",
     "bip32": "5.0.1",
     "bitcoinjs-lib": "7.0.2",
     "bs58check": "4.0.0",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
+    "esbuild": "^0.28.2",
     "express": "5.1.0",
-    "tiny-secp256k1": "2.2.4"
+    "qrcode": "^1.5.4",
+    "stream-browserify": "^3.0.0",
+    "tiny-secp256k1": "2.2.4",
+    "uplot": "^1.6.32",
+    "viem": "^2.56.8",
+    "zod": "^4.6.5"
   }
 }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Wallet-Verwaltung für CryptoBuch" />
     <title>CryptoBuch · Wallets</title>
-    <link rel="stylesheet" href="/styles.css?v=20260920-10" />
+    <link rel="stylesheet" href="/styles.css?v=20260922-15" />
   </head>
   <body>
     <div class="shell wallet-page-shell">
@@ -17,6 +17,9 @@
         <nav class="topbar-nav" aria-label="Hauptnavigation">
           <a class="topbar-link" href="/">Dashboard</a>
           <a class="topbar-link is-active" href="/wallets.html">Wallets</a>
+          <a class="topbar-link" href="/quality.html">Datenqualität</a>
+          <a class="topbar-link" href="/tax.html">Steuerreport</a>
+          <a class="topbar-link" href="/maintenance.html">Betrieb</a>
           <a class="topbar-link" href="/settings.html">Einstellungen</a>
         </nav>
         <div class="topbar-status" id="wallet-status" aria-live="polite">Wallets werden geladen …</div>
@@ -31,6 +34,8 @@
           </div>
           <div class="hero-actions">
             <button class="button button-primary" id="open-wallet-modal">+ Wallet hinzufügen</button>
+            <button class="button button-secondary" id="open-ledger-modal">Ledger verbinden</button>
+            <button class="button button-secondary" id="open-psbt-modal">PSBT prüfen</button>
             <button class="button button-secondary" id="refresh-all">Alles aktualisieren</button>
           </div>
         </section>
@@ -73,6 +78,10 @@
             <span>Name <small>optional</small></span>
             <input name="label" maxlength="80" placeholder="z. B. Ledger" />
           </label>
+        </div>
+        <div class="form-grid">
+          <label><span>Gruppe <small>optional</small></span><input name="groupName" maxlength="48" placeholder="z. B. Hardware-Wallet" /></label>
+          <label><span>Tags <small>kommagetrennt</small></span><input name="tags" maxlength="160" placeholder="Langfristig, Privat" /></label>
         </div>
         <div class="form-grid" id="bitcoin-source-fields" hidden>
           <label>
@@ -118,7 +127,32 @@
       </form>
     </dialog>
 
+    <dialog id="qr-modal" aria-labelledby="qr-modal-title"><form method="dialog"><div class="modal-head"><div><p class="eyebrow">WALLET-ADRESSE</p><h2 id="qr-modal-title">QR-Code</h2></div><button class="modal-close" aria-label="Dialog schließen">×</button></div><img id="wallet-qr-image" class="wallet-qr-image" alt="QR-Code der Wallet-Adresse" /><p class="modal-copy" id="wallet-qr-address"></p></form></dialog>
+    <dialog id="psbt-modal" aria-labelledby="psbt-modal-title"><form id="psbt-form"><div class="modal-head"><div><p class="eyebrow">BITCOIN · NUR VORSCHAU</p><h2 id="psbt-modal-title">PSBT prüfen</h2></div><button class="modal-close" type="button" id="close-psbt-modal" aria-label="Dialog schließen">×</button></div><p class="modal-copy">Die PSBT wird ausschließlich lokal gelesen. CryptoBuch signiert, speichert oder sendet keine Transaktion.</p><label><span>PSBT im Base64-Format</span><textarea id="psbt-input" rows="6" required spellcheck="false" placeholder="cHNidP8BA…"></textarea></label><p class="form-error" id="psbt-error" hidden></p><div class="modal-actions"><button class="button button-primary" type="submit">Vorschau erzeugen</button></div><div id="psbt-result" class="psbt-result" hidden></div></form></dialog>
+    <dialog id="ledger-modal" aria-labelledby="ledger-modal-title">
+      <form id="ledger-form">
+        <div class="modal-head">
+          <div><p class="eyebrow">HARDWARE-WALLET · NUR LESEN</p><h2 id="ledger-modal-title">Ledger verbinden</h2></div>
+          <button class="modal-close" type="button" id="close-ledger-modal" aria-label="Dialog schließen">×</button>
+        </div>
+        <p class="modal-copy">CryptoBuch liest ausschließlich eine öffentliche Empfangsadresse direkt aus deinem Ledger. Die Adresse wird zur Kontrolle auf dem Gerät angezeigt. Es werden weder Seed-Phrase noch Private Keys gelesen, gespeichert oder zum Signieren verwendet.</p>
+        <p class="ledger-notice"><strong>Voraussetzungen:</strong> Chrome oder Chromium, eine aktuelle Ledger-Firmware sowie die geöffnete Bitcoin- bzw. Ethereum-App. Bei einer Portainer-Installation muss die Seite über HTTPS (oder lokal über <code>localhost</code>) geöffnet werden.</p>
+        <div class="form-grid">
+          <label><span>Ledger-App / Zielnetzwerk</span><select id="ledger-chain" name="chain"><option value="BTC">Bitcoin</option><option value="ETH">Ethereum</option><option value="BNB">BNB Smart Chain · Ethereum-App</option><option value="AVAX">Avalanche C-Chain · Ethereum-App</option></select></label>
+          <label><span>Kontoindex</span><input id="ledger-account-index" name="accountIndex" type="number" min="0" max="99" value="0" required /><small>0 entspricht dem ersten Konto in Ledger Live.</small></label>
+        </div>
+        <div class="form-grid" id="ledger-bitcoin-options">
+          <label><span>Bitcoin-Adressformat</span><select id="ledger-btc-format" name="bitcoinFormat"><option value="bech32">Native SegWit · bc1…</option><option value="p2sh">Nested SegWit · 3…</option><option value="legacy">Legacy · 1…</option></select></label>
+          <label><span>Bitcoin-Import</span><select id="ledger-btc-source" name="bitcoinSource"><option value="xpub">Gesamtes Konto · xPub</option><option value="address">Eine Empfangsadresse</option></select><small id="ledger-btc-source-help">Erfasst Empfangs- und Wechselgeldadressen bis zum konfigurierten Gap-Limit.</small></label>
+        </div>
+        <label><span>Verbindung</span><select id="ledger-transport" name="transport"><option value="hid">WebHID bevorzugt</option><option value="usb">WebUSB bevorzugt</option></select></label>
+        <p class="form-error" id="ledger-error" role="alert" hidden></p>
+        <p class="ledger-result" id="ledger-result" hidden></p>
+        <div class="modal-actions"><button type="button" class="button button-secondary" id="cancel-ledger">Abbrechen</button><button type="submit" class="button button-primary" id="connect-ledger">Adresse prüfen &amp; importieren</button></div>
+      </form>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/wallets.js?v=20260920-10" defer></script>
+    <script src="/wallets.js?v=20260922-16" defer></script>
   </body>
 </html>

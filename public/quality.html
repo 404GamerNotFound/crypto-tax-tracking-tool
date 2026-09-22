@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Datenqualität für historische Kurse und Zuordnungen" />
+    <title>CryptoBuch · Datenqualität</title>
+    <link rel="stylesheet" href="/styles.css?v=20260922-14" />
+  </head>
+  <body>
+    <div class="shell report-shell">
+      <header class="topbar">
+        <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">₿</span><span>CryptoBuch</span></a>
+        <nav class="topbar-nav" aria-label="Hauptnavigation">
+          <a class="topbar-link" href="/">Dashboard</a><a class="topbar-link" href="/wallets.html">Wallets</a>
+          <a class="topbar-link is-active" href="/quality.html">Datenqualität</a><a class="topbar-link" href="/tax.html">Steuerreport</a><a class="topbar-link" href="/maintenance.html">Betrieb</a><a class="topbar-link" href="/settings.html">Einstellungen</a>
+        </nav>
+      </header>
+      <main class="report-main">
+        <section class="page-hero compact-hero">
+          <div><p class="eyebrow">DATENQUALITÄT</p><h1>Offene <em>Fälle.</em></h1><p>Prüfe fehlende historische Kurse und noch nicht zugeordnete Bewegungen. Manuelle Kurse bleiben bei jeder Synchronisierung geschützt.</p></div>
+          <div class="hero-actions"><button class="button button-primary" id="retry-prices">Kurse jetzt ergänzen</button><button class="button button-secondary" id="reload-quality">Neu laden</button></div>
+        </section>
+        <section class="summary-grid quality-summary" aria-label="Datenqualitätsübersicht">
+          <article class="summary-card"><span class="card-label">Fehlende Kaufkurse</span><strong id="missing-price-count">—</strong><span class="muted">werden automatisch wiederholt</span></article>
+          <article class="summary-card"><span class="card-label">Ohne Zweck</span><strong id="unassigned-count">—</strong><span class="muted">für Auswertung prüfen</span></article>
+          <article class="summary-card"><span class="card-label">Manuelle Kurse</span><strong id="manual-price-count">—</strong><span class="muted">vor Automatik geschützt</span></article>
+        </section>
+        <section class="transactions-panel report-panel"><div class="section-heading transactions-title"><div><p class="eyebrow">HISTORISCHE PREISE</p><h2>Fehlende Kurse</h2></div></div><div class="table-wrap"><table><thead><tr><th>Datum</th><th>Coin</th><th>Wallet</th><th>Betrag</th><th>Aktion</th></tr></thead><tbody id="missing-price-list"></tbody></table></div><p class="data-note" id="missing-price-empty" hidden>Keine offenen historischen Kurse.</p></section>
+        <section class="transactions-panel report-panel"><div class="section-heading transactions-title"><div><p class="eyebrow">ZUORDNUNGEN</p><h2>Noch ohne Zweck</h2></div></div><div class="table-wrap"><table><thead><tr><th>Datum</th><th>Coin</th><th>Wallet</th><th>Betrag</th><th>Aktion</th></tr></thead><tbody id="unassigned-list"></tbody></table></div><p class="data-note" id="unassigned-empty" hidden>Alle Transaktionen haben einen Zweck.</p></section>
+        <section class="transactions-panel report-panel"><div class="section-heading transactions-title"><div><p class="eyebrow">VORSCHLÄGE</p><h2>Mögliche eigene Transfers</h2></div></div><div class="table-wrap"><table><thead><tr><th>Ausgang</th><th>Eingang</th><th>Coin</th><th>Betrag</th><th>Aktion</th></tr></thead><tbody id="transfer-suggestion-list"></tbody></table></div><p class="data-note" id="transfer-suggestion-empty" hidden>Keine ähnlichen Gegenbewegungen gefunden.</p></section>
+        <section class="transactions-panel report-panel"><div class="section-heading transactions-title"><div><p class="eyebrow">DUBLETTEN-CHECK</p><h2>Mehrfach importierte Hashes</h2></div></div><div class="table-wrap"><table><thead><tr><th>Hash</th><th>Coin</th><th>Betrag</th><th>Vorkommen</th></tr></thead><tbody id="duplicate-list"></tbody></table></div><p class="data-note" id="duplicate-empty" hidden>Keine mehrfachen Transaktionshashes gefunden.</p></section>
+        <section class="transactions-panel report-panel"><div class="section-heading transactions-title"><div><p class="eyebrow">CSV-NACHTRAG</p><h2>Börsen- oder manuelle Transaktionen</h2></div></div><p class="data-note">CSV mit <code>timestamp, direction, asset, amount</code>; optional <code>fee, purpose, price_eur, hash, counterparty</code>. Maximal 2.500 Zeilen. Die Werte werden als manuell gepflegte Transaktionen geschützt.</p><form id="csv-import-form"><div class="form-grid"><label><span>Ziel-Wallet</span><select id="csv-wallet" required></select></label><label><span>CSV-Datei</span><input id="csv-file" type="file" accept=".csv,text/csv" required /></label></div><div class="modal-actions"><button class="button button-primary" type="submit">CSV importieren</button></div></form></section>
+      </main>
+    </div>
+    <dialog id="quality-price-modal"><form id="quality-price-form"><div class="modal-head"><div><p class="eyebrow">MANUELLE KURSKORREKTUR</p><h2>Kurs setzen</h2></div><button class="modal-close" id="close-quality-price" type="button">×</button></div><p class="modal-copy" id="quality-price-copy"></p><label><span>Preis je Coin in EUR</span><input id="quality-price-input" type="number" min="0.00000001" step="any" required /></label><p class="form-error" id="quality-price-error" hidden></p><div class="modal-actions"><button class="button button-secondary" id="quality-price-auto" type="button">Automatik verwenden</button><button class="button button-primary" type="submit">Kurs speichern</button></div></form></dialog>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div><script src="/quality.js?v=20260922-16" defer></script>
+  </body>
+</html>

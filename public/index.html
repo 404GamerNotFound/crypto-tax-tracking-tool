@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokales Crypto-Portfolio für öffentliche Blockchain-Wallets" />
     <title>CryptoBuch · Dashboard</title>
-    <link rel="stylesheet" href="/styles.css?v=20260920-10" />
+    <link rel="stylesheet" href="/styles.css?v=20260922-14" />
   </head>
   <body>
     <div class="shell dashboard-shell">
@@ -17,6 +17,9 @@
         <nav class="topbar-nav" aria-label="Hauptnavigation">
           <a class="topbar-link is-active" href="/">Dashboard</a>
           <a class="topbar-link" href="/wallets.html">Wallets</a>
+          <a class="topbar-link" href="/quality.html">Datenqualität</a>
+          <a class="topbar-link" href="/tax.html">Steuerreport</a>
+          <a class="topbar-link" href="/maintenance.html">Betrieb</a>
           <a class="topbar-link" href="/settings.html">Einstellungen</a>
         </nav>
         <div class="topbar-status" id="price-status" aria-live="polite">Preise werden geladen …</div>
@@ -31,9 +34,15 @@
           </div>
           <div class="hero-actions">
             <a class="button button-primary" href="/wallets.html">Wallets verwalten</a>
+            <a class="button button-secondary" href="/maintenance.html">Betrieb &amp; Backups</a>
             <button class="button button-secondary" id="backfill-historical-prices" title="Fehlende historische EUR-Kurse ohne erneuten Blockchain-Import ergänzen">Historische Kurse ergänzen</button>
             <button class="button button-secondary" id="refresh-all" title="Alle gespeicherten Wallets neu synchronisieren">Alles aktualisieren</button>
           </div>
+        </section>
+
+        <section class="insight-grid" aria-label="Portfolio-Analyse">
+          <article class="insight-panel"><div class="section-heading"><div><p class="eyebrow">ALLOKATION</p><h2>Aktuelle Verteilung</h2></div></div><div id="allocation-chart" class="allocation-chart"></div></article>
+          <article class="insight-panel"><div class="section-heading"><div><p class="eyebrow">BUCHWERT</p><h2>Historische Entwicklung</h2></div></div><div id="portfolio-history-chart" class="portfolio-history-chart"></div><p class="data-note">Basiert auf den historischen Kursen der importierten Ein- und Ausgänge, nicht auf rückwirkenden Marktwerten.</p></article>
         </section>
 
         <section class="dashboard-overview" aria-label="Portfolio-Gesamtwert">
@@ -52,7 +61,27 @@
             <strong id="transaction-count">0</strong>
             <span class="muted">Importiert aus der Blockchain</span>
           </article>
+          <article class="overview-stat">
+            <span class="card-label">Kaufgewinn · bekannte Werte</span>
+            <strong id="purchase-profit">—</strong>
+            <span class="muted" id="purchase-profit-help">FIFO-Kaufchargen</span>
+          </article>
+          <article class="overview-stat earnings-overview">
+            <span class="card-label">Erträge · aktueller Wert</span>
+            <strong id="earnings-value">—</strong>
+            <span class="muted">Staking und weitere Ertragsarten</span>
+          </article>
+          <article class="overview-stat quality-overview">
+            <span class="card-label">Offene Datenpunkte</span>
+            <strong id="data-issues">0</strong>
+            <span class="muted">Kurse oder Zwecke prüfen</span>
+          </article>
+          <article class="overview-stat"><span class="card-label">Unrealisierter Gewinn</span><strong id="unrealized-profit">—</strong><span class="muted" id="purchase-return">bekannte Kaufchargen</span></article>
+          <article class="overview-stat"><span class="card-label">Realisierter Gewinn · Jahr</span><strong id="realized-year">—</strong><span class="muted">vollständig bewertete FIFO-Segmente</span></article>
+          <article class="overview-stat"><span class="card-label">Netto-Kapitalzufluss</span><strong id="net-investment">—</strong><span class="muted">Käufe minus Verkäufe · bekannte Kurse</span></article>
         </section>
+
+        <section class="notifications-panel" aria-labelledby="notification-title"><div class="section-heading"><div><p class="eyebrow">HINWEISE</p><h2 id="notification-title">Benachrichtigungen <span id="notification-count" class="count-badge" hidden>0</span></h2></div><button id="mark-notifications-read" class="text-button">Als gelesen markieren</button></div><div id="notification-list" class="notification-list"></div><p id="notification-empty" class="data-note" hidden>Keine offenen Hinweise.</p></section>
 
         <section class="asset-section" aria-labelledby="asset-section-title">
           <div class="section-heading asset-section-heading">
@@ -89,11 +118,11 @@
 
         <aside class="analytics-note">
           <strong>So wird der Kaufgewinn berechnet</strong>
-          <p>Berücksichtigt werden Eingänge mit Zweck <em>Kauf</em>; als <em>Verkauf</em> markierte Ausgänge reduzieren diese Chargen nach FIFO. Transfers und nicht zugeordnete Bewegungen werden nicht als Kauf oder Verkauf gewertet. Fehlen historische Kurse, bleibt der Gewinn offen.</p>
+          <p>Berücksichtigt werden Eingänge mit Zweck <em>Kauf</em>; als <em>Verkauf</em> markierte Ausgänge reduzieren diese Chargen nach FIFO. Transfers und nicht zugeordnete Bewegungen werden nicht als Kauf oder Verkauf gewertet. Fehlen nur einzelne Kaufkurse, wird der Gewinn der bepreisten Restchargen als teilweise ausgewiesen.</p>
         </aside>
       </main>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/app.js?v=20260920-10" defer></script>
+    <script src="/app.js?v=20260922-17" defer></script>
   </body>
 </html>

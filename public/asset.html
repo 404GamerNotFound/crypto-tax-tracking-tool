@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Coin-Auswertung und Transaktionen in CryptoBuch" />
     <title>CryptoBuch · Coin</title>
-    <link rel="stylesheet" href="/styles.css?v=20260920-10" />
+    <link rel="stylesheet" href="/styles.css?v=20260922-14" />
+    <link rel="stylesheet" href="/vendor/uplot.css" />
   </head>
   <body>
     <div class="shell asset-page-shell">
@@ -17,6 +18,9 @@
         <nav class="topbar-nav" aria-label="Hauptnavigation">
           <a class="topbar-link" href="/">Dashboard</a>
           <a class="topbar-link" href="/wallets.html">Wallets</a>
+          <a class="topbar-link" href="/quality.html">Datenqualität</a>
+          <a class="topbar-link" href="/tax.html">Steuerreport</a>
+          <a class="topbar-link" href="/maintenance.html">Betrieb</a>
           <a class="topbar-link" href="/settings.html">Einstellungen</a>
         </nav>
         <div class="topbar-status" id="price-status" aria-live="polite">Daten werden geladen …</div>
@@ -40,6 +44,16 @@
         </section>
 
         <section id="asset-metrics" class="asset-metrics" aria-label="Coin-Auswertung"></section>
+        <section class="asset-chart-panel" aria-labelledby="asset-chart-title">
+          <div class="section-heading chart-heading">
+            <div>
+              <p class="eyebrow">BESTANDSENTWICKLUNG</p>
+              <h2 id="asset-chart-title">Wertverlauf</h2>
+            </div>
+            <p class="section-copy" id="asset-chart-copy">Auf Basis importierter Bewegungen und historischer Kurse.</p>
+          </div>
+          <div class="asset-chart" id="asset-chart" role="img" aria-label="Wertverlauf wird geladen"></div>
+        </section>
         <aside class="analytics-note asset-analytics-note">
           <strong>Kaufgewinn auf Basis deiner Zuordnungen</strong>
           <p>Eingänge mit Zweck <em>Kauf</em> bilden Anschaffungs-Chargen. Ausgänge mit Zweck <em>Verkauf</em> reduzieren sie nach FIFO. Nicht markierte Ausgänge und Transfers beeinflussen den ausgewiesenen Kaufgewinn nicht.</p>
@@ -109,7 +123,35 @@
         </section>
       </main>
     </div>
+    <dialog id="historic-price-modal" aria-labelledby="historic-price-modal-title">
+      <form id="historic-price-form">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">MANUELLE KURSKORREKTUR</p>
+            <h2 id="historic-price-modal-title">Historischen Kurs setzen</h2>
+          </div>
+          <button class="modal-close" type="button" id="close-historic-price-modal" aria-label="Dialog schließen">×</button>
+        </div>
+        <p class="modal-copy" id="historic-price-modal-copy">Der manuelle EUR-Kurs wird bei späteren Synchronisierungen nicht überschrieben.</p>
+        <label>
+          <span>Preis je Coin in EUR</span>
+          <input id="historic-price-input" type="number" min="0.00000001" step="any" inputmode="decimal" required />
+          <small>Leer lassen und „Automatik verwenden“ wählen, um die Preisabfrage wieder zu aktivieren.</small>
+        </label>
+        <label>
+          <span>Notiz <small>optional</small></span>
+          <input id="historic-price-note" maxlength="240" placeholder="z. B. Börsenbeleg vom 18.05.2023" />
+        </label>
+        <p class="data-note" id="historic-price-history" hidden></p>
+        <p class="form-error" id="historic-price-error" role="alert" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="button button-secondary" id="restore-historic-price">Automatik verwenden</button>
+          <button type="submit" class="button button-primary" id="save-historic-price">Kurs speichern</button>
+        </div>
+      </form>
+    </dialog>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/asset.js?v=20260920-10" defer></script>
+    <script src="/vendor/uplot.js" defer></script>
+    <script src="/asset.js?v=20260922-15" defer></script>
   </body>
 </html>

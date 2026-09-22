@@ -1,7 +1,7 @@
 const params = new URLSearchParams(window.location.search);
 const requestedChain = String(params.get("chain") || "BTC").toUpperCase();
 const requestedAsset = String(params.get("asset") || "");
-const state = { portfolio: null, selected: new Set(), filters: { search: "", direction: "" } };
+const state = { portfolio: null, selected: new Set(), editingHistoricPriceTransaction: null, chart: null, filters: { search: "", direction: "" } };
 const el = (id) => document.getElementById(id);
 const currency = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
 const price = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 4 });
@@ -43,7 +43,7 @@ function shorten(value, start = 10, end = 7) {
 function purposeInfo(transaction) {
   const defaults = {
     "Staking Rewards": ["✦", "staking", "Staking-Ertrag"], Kauf: ["↗", "purchase", "Kauf"], Verkauf: ["↘", "sale", "Verkauf"],
-    "Mining Reward": ["⛏", "mining", "Mining-Ertrag"], Transfer: ["↔", "transfer", "Transfer"], Geschenk: ["◇", "gift", "Geschenk"],
+    "Mining Reward": ["⛏", "mining", "Mining-Ertrag"], Airdrop: ["◇", "gift", "Airdrop"], "Lending-Ertrag": ["✦", "staking", "Lending-Ertrag"], "DeFi-Ertrag": ["✦", "staking", "DeFi-Ertrag"], Transfer: ["↔", "transfer", "Transfer"], Geschenk: ["◇", "gift", "Geschenk"],
     Gebühr: ["−", "fee", "Gebühr"], Sonstiges: ["•", "other", "Sonstiges"],
   };
   const [icon, tone, label] = defaults[transaction.purpose] || (transaction.purpose ? ["•", "custom", transaction.purpose] : ["?", "unassigned", "Noch nicht zugeordnet"]);
@@ -96,15 +96,128 @@ function metric(label, value, help = "", tone = "") {
 
 function renderMetrics() {
   const report = state.portfolio.assetAnalytics?.[activeAssetId()];
+  const purchases = report?.purchases || {};
+  const partialProfit = Boolean(purchases.profitIsPartial);
+  const missingLotHint = purchases.unknownCostLotCount
+    ? `Unvollständig · ${purchases.unknownCostLotCount} verbleibende Kaufcharge${purchases.unknownCostLotCount === 1 ? "" : "n"} ohne Kurs`
+    : "Historischer Kaufkurs fehlt";
   const metrics = el("asset-metrics");
   metrics.replaceChildren();
   metrics.append(
     metric("Aktueller Bestand", formatAmount(report?.holdingAmount || 0), `Marktwert ${formatCurrency(report?.holdingValueEur)}`, "highlight"),
-    metric("Als Kauf erfasst", formatAmount(report?.purchases?.acquiredAmount || 0), `${report?.purchases?.count || 0} Kauf-Transaktionen`),
-    metric("Noch aus Käufen gehalten", formatAmount(report?.purchases?.remainingAmount || 0), report?.purchases?.hasUnknownCost ? "Kaufkurs teilweise nicht verfügbar" : `Kosten ${formatCurrency(report?.purchases?.remainingCostEur)}`),
-    metric("Gewinn ggü. Kauf", formatCurrency(report?.purchases?.profitEur), report?.purchases?.profitEur === null ? "Historischer Kaufkurs fehlt" : "Aktueller Wert minus FIFO-Kaufkosten", Number(report?.purchases?.profitEur) >= 0 ? "positive" : "negative"),
+    metric("Als Kauf erfasst", formatAmount(purchases.acquiredAmount || 0), `${purchases.count || 0} Kauf-Transaktionen`),
+    metric("Noch aus Käufen gehalten", formatAmount(purchases.remainingAmount || 0), purchases.hasUnknownCost ? missingLotHint : `Kosten ${formatCurrency(purchases.remainingCostEur)}`),
+    metric(partialProfit ? "Gewinn ggü. Kauf · teilweise" : "Gewinn ggü. Kauf", formatCurrency(purchases.profitEur), purchases.profitEur === null ? missingLotHint : partialProfit ? `Berechnet aus ${formatAmount(purchases.knownRemainingAmount || 0)} mit Kaufkurs` : "Aktueller Wert minus FIFO-Kaufkosten", Number(purchases.profitEur) >= 0 ? "positive" : "negative"),
     metric("Staking-Ertrag", formatAmount(report?.staking?.amount || 0), `${report?.staking?.count || 0} Ertrags-Transaktionen · aktuell ${formatCurrency(report?.staking?.currentValueEur)}`, "staking"),
   );
+}
+
+function chartTransactions() {
+  return (state.portfolio?.transactions || [])
+    .filter((transaction) => transaction.asset === activeAssetId() && Number.isFinite(Date.parse(transaction.timestamp)))
+    .sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
+}
+
+function renderChart() {
+  const container = el("asset-chart");
+  const copy = el("asset-chart-copy");
+  const report = state.portfolio.assetAnalytics?.[activeAssetId()];
+  let holding = 0;
+  const points = [];
+  for (const transaction of chartTransactions()) {
+    const amount = Number(transaction.amount || 0);
+    if (!Number.isFinite(amount)) continue;
+    if (transaction.direction === "in") holding += amount;
+    if (transaction.direction === "out") holding -= amount;
+    if (hasPrice(transaction.price_transaction_eur)) {
+      points.push({ timestamp: Date.parse(transaction.timestamp), value: Math.max(0, holding) * Number(transaction.price_transaction_eur) });
+    }
+  }
+  if (hasPrice(report?.currentPriceEur) && Number.isFinite(Number(report?.holdingAmount))) {
+    points.push({ timestamp: Date.now(), value: Math.max(0, Number(report.holdingAmount)) * Number(report.currentPriceEur), current: true });
+  }
+  state.chart?.destroy();
+  state.chart = null;
+  container.replaceChildren();
+  if (points.length < 2) {
+    const empty = document.createElement("p");
+    empty.className = "chart-empty";
+    empty.textContent = "Für einen Verlauf werden mindestens zwei Bewegungen mit historischen Kursen benötigt.";
+    container.append(empty);
+    copy.textContent = "Historische Kurse werden automatisch ergänzt, sobald sie verfügbar sind.";
+    return;
+  }
+
+  const currentPoint = points.at(-1)?.current;
+  if (window.uPlot) {
+    const values = points.map((point) => point.value);
+    state.chart = new window.uPlot({
+      width: Math.max(360, container.clientWidth), height: 250,
+      cursor: { drag: { x: true, y: false } },
+      legend: { show: false },
+      scales: { x: { time: true }, value: { auto: true } },
+      axes: [
+        { stroke: "#768178", grid: { stroke: "#dce4dc", width: 1, dash: [3, 5] }, values: (_u, ticks) => ticks.map((tick) => new Intl.DateTimeFormat("de-DE", { month: "short", year: "2-digit" }).format(new Date(tick * 1000))) },
+        { stroke: "#768178", grid: { stroke: "#dce4dc", width: 1, dash: [3, 5] }, values: (_u, ticks) => ticks.map((tick) => formatCurrency(tick)) },
+      ],
+      series: [{}, { label: "Bestandswert", stroke: "#0b704a", width: 2.5, fill: "rgba(11,112,74,.16)", points: { show: false } }],
+    }, [points.map((point) => point.timestamp / 1000), values], container);
+    copy.textContent = `${points.length - Number(Boolean(currentPoint))} bewertete Bewegungen${currentPoint ? " · mit Zoom und Cursor erkundbar." : "."}`;
+    return;
+  }
+
+  const width = 820;
+  const height = 270;
+  const padding = { top: 22, right: 24, bottom: 38, left: 66 };
+  const values = points.map((point) => point.value);
+  const times = points.map((point) => point.timestamp);
+  const valueMin = Math.min(...values);
+  const valueMax = Math.max(...values);
+  const spread = Math.max(valueMax - valueMin, Math.max(valueMax * 0.12, 1));
+  const minY = Math.max(0, valueMin - spread * 0.18);
+  const maxY = valueMax + spread * 0.18;
+  const minX = Math.min(...times);
+  const maxX = Math.max(...times);
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const x = (point) => padding.left + ((point.timestamp - minX) / Math.max(maxX - minX, 1)) * plotWidth;
+  const y = (point) => padding.top + (1 - (point.value - minY) / Math.max(maxY - minY, 1)) * plotHeight;
+  const svgNode = (name, attributes = {}) => {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+    for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+    return node;
+  };
+  const svg = svgNode("svg", { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: "none", "aria-hidden": "true" });
+  const defs = svgNode("defs");
+  const gradient = svgNode("linearGradient", { id: "chart-fill", x1: "0", y1: "0", x2: "0", y2: "1" });
+  gradient.append(svgNode("stop", { offset: "0%", "stop-color": "#0b704a", "stop-opacity": ".26" }), svgNode("stop", { offset: "100%", "stop-color": "#0b704a", "stop-opacity": "0" }));
+  defs.append(gradient);
+  svg.append(defs);
+  for (let index = 0; index < 4; index += 1) {
+    const value = minY + ((maxY - minY) * index) / 3;
+    const yPosition = padding.top + (plotHeight * index) / 3;
+    svg.append(svgNode("line", { x1: padding.left, x2: width - padding.right, y1: yPosition, y2: yPosition, class: "chart-grid-line" }));
+    const label = svgNode("text", { x: padding.left - 10, y: yPosition + 4, class: "chart-axis-label", "text-anchor": "end" });
+    label.textContent = formatCurrency(value);
+    svg.append(label);
+  }
+  const line = points.map((point, index) => `${index ? "L" : "M"}${x(point).toFixed(2)},${y(point).toFixed(2)}`).join(" ");
+  const area = `${line} L${x(points.at(-1)).toFixed(2)},${(height - padding.bottom).toFixed(2)} L${x(points[0]).toFixed(2)},${(height - padding.bottom).toFixed(2)} Z`;
+  svg.append(svgNode("path", { d: area, class: "chart-area" }), svgNode("path", { d: line, class: "chart-line" }));
+  for (const point of [points[0], points.at(-1)]) {
+    const marker = svgNode("circle", { cx: x(point), cy: y(point), r: 4, class: "chart-point" });
+    const title = svgNode("title");
+    title.textContent = `${dateTime.format(new Date(point.timestamp))}: ${formatCurrency(point.value)}`;
+    marker.append(title);
+    svg.append(marker);
+  }
+  for (const [alignment, point] of [["start", points[0]], ["end", points.at(-1)]]) {
+    const label = svgNode("text", { x: x(point), y: height - 12, class: "chart-axis-label", "text-anchor": alignment });
+    label.textContent = new Intl.DateTimeFormat("de-DE", { month: "short", year: "numeric" }).format(new Date(point.timestamp));
+    svg.append(label);
+  }
+  container.append(svg);
+  copy.textContent = `${points.length - Number(Boolean(currentPoint))} bewertete Bewegungen${currentPoint ? " · aktueller Marktwert als letzter Punkt." : "."}`;
 }
 
 function getTransactions() {
@@ -181,13 +294,16 @@ function renderTransactions() {
     direction.textContent = transaction.direction === "in" ? "↓" : transaction.direction === "out" ? "↑" : "↔";
     const operationCopy = document.createElement("div");
     operationCopy.className = "operation-text";
-    const hash = document.createElement("a");
-    hash.href = explorerUrl("transaction", transaction.hash);
-    hash.target = "_blank";
-    hash.rel = "noreferrer";
-    hash.textContent = shorten(transaction.hash);
+    const isCardanoReward = String(transaction.hash || "").startsWith("cardano-reward:");
+    const hash = document.createElement(isCardanoReward ? "strong" : "a");
+    if (!isCardanoReward) {
+      hash.href = explorerUrl("transaction", transaction.hash);
+      hash.target = "_blank";
+      hash.rel = "noreferrer";
+    }
+    hash.textContent = isCardanoReward ? "Cardano Staking Reward" : shorten(transaction.hash);
     const when = document.createElement("small");
-    when.textContent = transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : "Unbestätigt";
+    when.textContent = transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : isCardanoReward ? `Cardano-Epoche ${String(transaction.hash).split(":")[1]}` : "Unbestätigt";
     operationCopy.append(hash, when);
     operation.append(direction, operationCopy);
 
@@ -221,7 +337,14 @@ function renderTransactions() {
     const historicValue = hasPrice(transaction.price_transaction_eur) ? Number(transaction.price_transaction_eur) * Number(transaction.amount) : null;
     const historicDetail = document.createElement("small");
     historicDetail.textContent = historicValue === null ? "Nicht verfügbar" : `Wert: ${formatCurrency(historicValue)}`;
-    historic.append(historicDetail);
+    const historicSource = document.createElement("small");
+    historicSource.textContent = transaction.price_source === "manual" ? "Manuell festgelegt" : "Automatische Preisquelle";
+    const editHistoricPrice = document.createElement("button");
+    editHistoricPrice.type = "button";
+    editHistoricPrice.className = "text-button historic-price-edit";
+    editHistoricPrice.textContent = "Kurs bearbeiten";
+    editHistoricPrice.addEventListener("click", () => openHistoricPriceModal(transaction));
+    historic.append(historicDetail, historicSource, editHistoricPrice);
     row.append(selectCell, operation, wallet, amount, now, historic, renderPurpose(transaction));
     body.append(row);
   }
@@ -300,6 +423,7 @@ function renderPage() {
   const prices = state.portfolio.currentPrices || {};
   el("price-status").textContent = prices.warning ? "Preisabfrage momentan nicht verfügbar" : hasPrice(report?.currentPriceEur) ? `1 ${asset.symbol} · ${formatPrice(report.currentPriceEur)}` : "Aktueller Preis nicht verfügbar";
   renderMetrics();
+  renderChart();
   renderTransactions();
 }
 
@@ -334,6 +458,55 @@ async function syncChain() {
   }
 }
 
+async function openHistoricPriceModal(transaction) {
+  state.editingHistoricPriceTransaction = transaction;
+  el("historic-price-error").hidden = true;
+  el("historic-price-input").value = hasPrice(transaction.price_transaction_eur) ? String(transaction.price_transaction_eur) : "";
+  el("historic-price-note").value = "";
+  el("historic-price-history").hidden = true;
+  el("historic-price-modal-copy").textContent = `${assetInfo(transaction.asset).symbol} · ${transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : "ohne Zeitstempel"}. Ein manueller EUR-Kurs wird nicht automatisch überschrieben.`;
+  el("historic-price-modal").showModal();
+  setTimeout(() => el("historic-price-input").focus(), 0);
+  try {
+    const history = await api(`/api/transactions/${transaction.id}/price-history`);
+    if (history.changes.length) {
+      const latest = history.changes[0];
+      el("historic-price-history").textContent = `Letzte Änderung: ${latest.source === "manual" ? "manuell" : "automatisch"} · ${dateTime.format(new Date(latest.changed_at))}${latest.note ? ` · ${latest.note}` : ""}`;
+      el("historic-price-history").hidden = false;
+    }
+  } catch (_) {
+    // The editor remains usable even if older audit data is unavailable.
+  }
+}
+
+function closeHistoricPriceModal() {
+  el("historic-price-modal").close();
+  state.editingHistoricPriceTransaction = null;
+}
+
+async function saveHistoricPrice(useAutomatic = false) {
+  const transaction = state.editingHistoricPriceTransaction;
+  if (!transaction) return;
+  const error = el("historic-price-error");
+  error.hidden = true;
+  try {
+    const result = await api(`/api/transactions/${transaction.id}/historical-price`, {
+      method: "PATCH",
+      body: JSON.stringify({ priceTransactionEur: useAutomatic ? null : el("historic-price-input").value, note: el("historic-price-note").value }),
+    });
+    transaction.price_transaction_eur = result.price_transaction_eur;
+    transaction.price_source = result.price_source;
+    closeHistoricPriceModal();
+    renderMetrics();
+    renderChart();
+    renderTransactions();
+    toast(result.price_source === "manual" ? "Historischer Kurs manuell gespeichert." : "Automatische Preisergänzung wieder aktiviert.");
+  } catch (requestError) {
+    error.textContent = requestError.message;
+    error.hidden = false;
+  }
+}
+
 el("transaction-search").addEventListener("input", (event) => { state.filters.search = event.target.value; renderTransactions(); });
 el("direction-filter").addEventListener("change", (event) => { state.filters.direction = event.target.value; renderTransactions(); });
 el("select-all").addEventListener("change", (event) => {
@@ -344,4 +517,7 @@ el("clear-selection").addEventListener("click", () => { state.selected.clear(); 
 el("apply-bulk-purpose").addEventListener("click", applyBulkPurpose);
 el("reload-portfolio").addEventListener("click", () => loadPortfolio());
 el("refresh-chain").addEventListener("click", syncChain);
+el("close-historic-price-modal").addEventListener("click", closeHistoricPriceModal);
+el("historic-price-form").addEventListener("submit", (event) => { event.preventDefault(); saveHistoricPrice(); });
+el("restore-historic-price").addEventListener("click", () => saveHistoricPrice(true));
 loadPortfolio();
