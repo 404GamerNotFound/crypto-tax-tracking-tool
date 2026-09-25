@@ -34,7 +34,7 @@ test("berücksichtigt bewertbare Gebühren, Haltedauer und weitere Ertragsarten"
 
 test("berechnet eine klar als Schätzung gekennzeichnete Steuerbasis mit persönlichem Satz", () => {
   const report = calculateTaxReport([
-    { asset: "BTC", timestamp: "2024-01-01T00:00:00Z", direction: "in", purpose: "Kauf", amount: 1, price_transaction_eur: 10000 },
+    { asset: "BTC", timestamp: "2024-06-01T00:00:00Z", direction: "in", purpose: "Kauf", amount: 1, price_transaction_eur: 10000 },
     { asset: "BTC", timestamp: "2025-01-01T00:00:00Z", direction: "out", purpose: "Verkauf", amount: 1, price_transaction_eur: 16000 },
     { asset: "XTZ", timestamp: "2025-02-01T00:00:00Z", direction: "in", purpose: "Staking Rewards", amount: 10, price_transaction_eur: 1 },
   ], 2025, { personalTaxRatePercent: 30 });
@@ -42,4 +42,25 @@ test("berechnet eine klar als Schätzung gekennzeichnete Steuerbasis mit persön
   assert.equal(report.summary.taxableEstimateBaseEur, 6010);
   assert.equal(report.summary.estimatedTaxEur, 1803);
   assert.equal(report.summary.personalTaxRatePercent, 30);
+});
+
+test("wendet ein anpassbares Steuerprofil mit Haltefrist, Freigrenze und getrennten Sätzen an", () => {
+  const report = calculateTaxReport([
+    { id: 1, asset: "BTC", timestamp: "2024-01-01T00:00:00Z", direction: "in", purpose: "Kauf", amount: 1, price_transaction_eur: 10000 },
+    { id: 2, asset: "BTC", timestamp: "2025-01-02T00:00:00Z", direction: "out", purpose: "Verkauf", amount: 0.5, price_transaction_eur: 20000 },
+    { id: 3, asset: "ETH", timestamp: "2025-02-01T00:00:00Z", direction: "in", purpose: "Staking Rewards", amount: 1, price_transaction_eur: 1000 },
+    { id: 4, asset: "SOL", timestamp: "2024-12-01T00:00:00Z", direction: "in", purpose: "Kauf", amount: 1, price_transaction_eur: 100 },
+    { id: 5, asset: "SOL", timestamp: "2025-01-01T00:00:00Z", direction: "out", purpose: "Verkauf", amount: 1, price_transaction_eur: 500 },
+  ], 2025, { taxProfile: {
+    id: "CUSTOM", countryCode: "XX", label: "Eigene Regel", holdingPeriodEnabled: true, holdingPeriodDays: 365,
+    exemptionThresholdEnabled: true, exemptionThresholdEur: 500, lossOffsetEnabled: true,
+    disposalTaxEnabled: true, disposalTaxRatePercent: 25, incomeTaxEnabled: true, incomeTaxRatePercent: 30,
+  } });
+
+  assert.equal(report.sales.find((sale) => sale.asset === "BTC").holdingPeriodMet, true);
+  assert.equal(report.summary.taxableSaleProfitBeforeThresholdEur, 400);
+  assert.equal(report.summary.exemptionApplied, true);
+  assert.equal(report.summary.taxableSaleProfitEur, 0);
+  assert.equal(report.summary.estimatedIncomeTaxEur, 300);
+  assert.equal(report.summary.estimatedTaxEur, 300);
 });

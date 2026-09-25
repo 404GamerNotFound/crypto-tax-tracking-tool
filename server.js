@@ -1,6 +1,7 @@
 const express = require("express");
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { DatabaseSync } = require("node:sqlite");
 const QRCode = require("qrcode");
 const { z } = require("zod");
@@ -23,6 +24,7 @@ const { normalizeEthereumTransaction, normalizeErc20Transfer } = require("./lib/
 const { buildTopMarketCatalog } = require("./lib/market-catalog");
 const { calculateAssetAnalytics } = require("./lib/portfolio-analytics");
 const { calculateTaxReport } = require("./lib/tax-report");
+const { germanyProfile, normalizeTaxProfile } = require("./lib/tax-profile");
 const {
   bitvavoDailyClosePrices,
   coinGeckoDate,
@@ -213,6 +215,15 @@ db.exec(`
     is_read INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS tax_report_snapshots (
+    id INTEGER PRIMARY KEY,
+    year INTEGER NOT NULL,
+    profile_id TEXT NOT NULL,
+    profile_label TEXT NOT NULL,
+    report_json TEXT NOT NULL,
+    report_checksum TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE INDEX IF NOT EXISTS idx_transactions_wallet_timestamp
     ON transactions(wallet_id, timestamp DESC);
   CREATE INDEX IF NOT EXISTS idx_transactions_purpose
@@ -229,6 +240,8 @@ db.exec(`
     ON background_jobs(status, created_at);
   CREATE INDEX IF NOT EXISTS idx_notifications_read_created
     ON notifications(is_read, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_tax_report_snapshots_year_created
+    ON tax_report_snapshots(year, created_at DESC);
   PRAGMA optimize;
 `);
 
@@ -358,15 +371,28 @@ function rawSettings() {
   return { ...Object.fromEntries(Object.entries(SETTINGS_DEFAULTS).map(([key, value]) => [key, String(value)])), ...values };
 }
 
+function storedTaxProfile(value, personalTaxRatePercent) {
+  const fallback = germanyProfile(personalTaxRatePercent);
+  if (!value) return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    return normalizeTaxProfile(parsed, fallback);
+  } catch (_) {
+    return fallback;
+  }
+}
+
 function runtimeSettings() {
   const values = rawSettings();
   const xpubGapLimit = boundedInteger(values.xpubGapLimit, SETTINGS_DEFAULTS.xpubGapLimit, 1, 50);
+  const personalTaxRatePercent = Math.min(100, Math.max(0, Number(values.personalTaxRatePercent) || 0));
   return {
     maxTransactionsPerSync: boundedInteger(values.maxTransactionsPerSync, SETTINGS_DEFAULTS.maxTransactionsPerSync, 0, 100000),
     bulkPurposeLimit: boundedInteger(values.bulkPurposeLimit, SETTINGS_DEFAULTS.bulkPurposeLimit, 1, 2500),
     historicalPriceRetryIntervalMinutes: boundedInteger(values.historicalPriceRetryIntervalMinutes, SETTINGS_DEFAULTS.historicalPriceRetryIntervalMinutes, 5, 1440),
     historicalPriceBackfillBatchSize: boundedInteger(values.historicalPriceBackfillBatchSize, SETTINGS_DEFAULTS.historicalPriceBackfillBatchSize, 1, 250),
-    personalTaxRatePercent: Math.min(100, Math.max(0, Number(values.personalTaxRatePercent) || 0)),
+    personalTaxRatePercent,
+    taxProfile: storedTaxProfile(values.taxProfileJson, personalTaxRatePercent),
     bitcoinExplorerBaseUrl: values.bitcoinExplorerBaseUrl || SETTINGS_DEFAULTS.bitcoinExplorerBaseUrl,
     tzktApiBaseUrl: values.tzktApiBaseUrl || SETTINGS_DEFAULTS.tzktApiBaseUrl,
     tronGridBaseUrl: values.tronGridBaseUrl || SETTINGS_DEFAULTS.tronGridBaseUrl,
@@ -409,6 +435,7 @@ function settingsResponse() {
     historicalPriceRetryIntervalMinutes: settings.historicalPriceRetryIntervalMinutes,
     historicalPriceBackfillBatchSize: settings.historicalPriceBackfillBatchSize,
     personalTaxRatePercent: settings.personalTaxRatePercent,
+    taxProfile: settings.taxProfile,
     bitcoinExplorerBaseUrl: settings.bitcoinExplorerBaseUrl,
     tzktApiBaseUrl: settings.tzktApiBaseUrl,
     tronGridBaseUrl: settings.tronGridBaseUrl,
@@ -469,6 +496,12 @@ function updateSettings(input) {
   if (!Number.isFinite(personalTaxRatePercent) || personalTaxRatePercent < 0 || personalTaxRatePercent > 100) {
     throw makeError("Der persönliche Steuersatz muss zwischen 0 und 100 Prozent liegen.");
   }
+  const suppliedTaxProfile = input.taxProfile && typeof input.taxProfile === "object" ? input.taxProfile : {};
+  const taxProfile = normalizeTaxProfile({
+    ...current.taxProfile,
+    ...suppliedTaxProfile,
+    incomePurposes: suppliedTaxProfile.incomePurposes ?? current.taxProfile.incomePurposes,
+  }, current.taxProfile);
 
   const next = {
     maxTransactionsPerSync,
@@ -476,6 +509,7 @@ function updateSettings(input) {
     historicalPriceRetryIntervalMinutes,
     historicalPriceBackfillBatchSize,
     personalTaxRatePercent,
+    taxProfileJson: JSON.stringify(taxProfile),
     bitcoinExplorerBaseUrl: cleanServiceUrl(input.bitcoinExplorerBaseUrl, "Die Bitcoin-Explorer-URL"),
     tzktApiBaseUrl: cleanServiceUrl(input.tzktApiBaseUrl, "Die TzKT-URL"),
     tronGridBaseUrl: cleanServiceUrl(input.tronGridBaseUrl, "Die TronGrid-URL"),
@@ -2236,6 +2270,15 @@ function taxReportResponse(year) {
   return { ...report, availableYears };
 }
 
+function taxReportSnapshots(year) {
+  return db.prepare(`
+    SELECT id, year, profile_id AS profileId, profile_label AS profileLabel, report_checksum AS checksum, created_at AS createdAt
+    FROM tax_report_snapshots
+    WHERE year = ?
+    ORDER BY id DESC
+  `).all(year);
+}
+
 function csvCell(value) {
   const text = value === null || value === undefined ? "" : String(value);
   return /[;"\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
@@ -2249,13 +2292,58 @@ app.get("/api/tax-report", (request, response, next) => {
   }
 });
 
+app.get("/api/tax-report/snapshots", (request, response, next) => {
+  try {
+    const year = reportYear(request.query.year);
+    response.json({ year, snapshots: taxReportSnapshots(year) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/tax-report/snapshots/:id", (request, response, next) => {
+  try {
+    const id = Number(request.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) throw makeError("Ungültige Snapshot-ID.");
+    const snapshot = db.prepare(`
+      SELECT id, year, profile_id AS profileId, profile_label AS profileLabel, report_json AS reportJson, report_checksum AS checksum, created_at AS createdAt
+      FROM tax_report_snapshots WHERE id = ?
+    `).get(id);
+    if (!snapshot) throw makeError("Der Jahres-Snapshot wurde nicht gefunden.", 404);
+    const checksumValid = crypto.createHash("sha256").update(snapshot.reportJson).digest("hex") === snapshot.checksum;
+    response.json({ ...snapshot, report: JSON.parse(snapshot.reportJson), checksumValid });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/tax-report/snapshots", (request, response, next) => {
+  try {
+    const year = reportYear(request.body?.year);
+    const report = taxReportResponse(year);
+    const reportJson = JSON.stringify({
+      report: { year: report.year, profile: report.profile, summary: report.summary, sales: report.sales, income: report.income },
+      generatedAt: new Date().toISOString(),
+    });
+    const checksum = crypto.createHash("sha256").update(reportJson).digest("hex");
+    const result = db.prepare(`
+      INSERT INTO tax_report_snapshots (year, profile_id, profile_label, report_json, report_checksum)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(year, report.profile.id, report.profile.label, reportJson, checksum);
+    createNotification("success", "Steuerreport archiviert", `Jahres-Snapshot ${year} wurde lokal mit Prüfsumme gespeichert.`);
+    response.status(201).json({ id: Number(result.lastInsertRowid), year, profileId: report.profile.id, profileLabel: report.profile.label, checksum });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/tax-report.csv", (request, response, next) => {
   try {
     const report = taxReportResponse(reportYear(request.query.year));
     const rows = [
-      ["Kategorie", "Asset", "Menge", "Datum", "Anschaffungsdatum", "Erlös EUR", "Kosten EUR", "Gebühr EUR", "Gewinn EUR", "Haltedauer Tage", "Vollständig"],
-      ...report.sales.map((sale) => ["Verkauf", sale.asset, sale.amount, sale.soldAt, sale.acquiredAt, sale.proceedsEur, sale.costEur, sale.feeEur, sale.profitEur, sale.holdingDays, sale.complete ? "ja" : "nein"]),
-      ...report.income.map((entry) => [entry.type, entry.asset, entry.amount, entry.receivedAt, "", entry.valueEur, "", "", "", "", entry.complete ? "ja" : "nein"]),
+      ["Kategorie", "Asset", "Menge", "Datum", "Anschaffungsdatum", "Erlös EUR", "Kosten EUR", "Gebühr EUR", "Gewinn EUR", "Haltedauer Tage", "Haltefrist erfüllt", "Transaktions-ID", "Anschaffungs-ID", "Vollständig"],
+      ...report.sales.map((sale) => ["Verkauf", sale.asset, sale.amount, sale.soldAt, sale.acquiredAt, sale.proceedsEur, sale.costEur, sale.feeEur, sale.profitEur, sale.holdingDays, sale.holdingPeriodMet === null ? "" : sale.holdingPeriodMet ? "ja" : "nein", sale.transactionId, sale.acquisitionTransactionId, sale.complete ? "ja" : "nein"]),
+      ...report.income.map((entry) => [entry.type, entry.asset, entry.amount, entry.receivedAt, "", entry.valueEur, "", "", "", "", "", entry.transactionId, "", entry.complete ? "ja" : "nein"]),
     ];
     response
       .type("text/csv")

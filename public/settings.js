@@ -24,7 +24,21 @@ function render(settings) {
   el("bulk-purpose-limit").value = settings.bulkPurposeLimit;
   el("historical-price-retry-interval").value = settings.historicalPriceRetryIntervalMinutes;
   el("historical-price-batch-size").value = settings.historicalPriceBackfillBatchSize;
-  el("personal-tax-rate").value = settings.personalTaxRatePercent;
+  const profile = settings.taxProfile;
+  el("personal-tax-rate").value = profile.incomeTaxRatePercent;
+  el("tax-profile-label").value = profile.label;
+  el("tax-country-code").value = profile.countryCode;
+  el("tax-disposal-rate").value = profile.disposalTaxRatePercent;
+  el("tax-income-rate").value = profile.incomeTaxRatePercent;
+  el("tax-holding-days").value = profile.holdingPeriodDays;
+  el("tax-threshold").value = profile.exemptionThresholdEur;
+  el("tax-disposal-enabled").checked = profile.disposalTaxEnabled;
+  el("tax-holding-enabled").checked = profile.holdingPeriodEnabled;
+  el("tax-threshold-enabled").checked = profile.exemptionThresholdEnabled;
+  el("tax-loss-offset-enabled").checked = profile.lossOffsetEnabled;
+  el("tax-income-enabled").checked = profile.incomeTaxEnabled;
+  el("tax-income-purposes").value = profile.incomePurposes.join(", ");
+  el("tax-rule-note").value = profile.ruleNote;
   el("bitcoin-explorer").value = settings.bitcoinExplorerBaseUrl;
   el("tzkt-api").value = settings.tzktApiBaseUrl;
   el("trongrid-api").value = settings.tronGridBaseUrl;
@@ -95,7 +109,23 @@ el("settings-form").addEventListener("submit", async (event) => {
         bulkPurposeLimit: form.get("bulkPurposeLimit"),
         historicalPriceRetryIntervalMinutes: form.get("historicalPriceRetryIntervalMinutes"),
         historicalPriceBackfillBatchSize: form.get("historicalPriceBackfillBatchSize"),
-        personalTaxRatePercent: form.get("personalTaxRatePercent"),
+        personalTaxRatePercent: el("tax-income-rate").value,
+        taxProfile: {
+          id: `${String(el("tax-country-code").value || "CUSTOM").trim().toUpperCase()}-CUSTOM`,
+          countryCode: el("tax-country-code").value,
+          label: el("tax-profile-label").value,
+          disposalTaxRatePercent: el("tax-disposal-rate").value,
+          incomeTaxRatePercent: el("tax-income-rate").value,
+          holdingPeriodDays: el("tax-holding-days").value,
+          exemptionThresholdEur: el("tax-threshold").value,
+          disposalTaxEnabled: el("tax-disposal-enabled").checked,
+          holdingPeriodEnabled: el("tax-holding-enabled").checked,
+          exemptionThresholdEnabled: el("tax-threshold-enabled").checked,
+          lossOffsetEnabled: el("tax-loss-offset-enabled").checked,
+          incomeTaxEnabled: el("tax-income-enabled").checked,
+          incomePurposes: el("tax-income-purposes").value.split(",").map((value) => value.trim()).filter(Boolean),
+          ruleNote: el("tax-rule-note").value,
+        },
         bitcoinExplorerBaseUrl: form.get("bitcoinExplorerBaseUrl"),
         tzktApiBaseUrl: form.get("tzktApiBaseUrl"),
         tronGridBaseUrl: form.get("tronGridBaseUrl"),

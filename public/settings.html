@@ -65,8 +65,15 @@
           </section>
 
           <section class="settings-card" aria-labelledby="tax-profile-title">
-            <div class="settings-heading"><div><p class="eyebrow">STEUERPROFIL</p><h2 id="tax-profile-title">Persönlicher Steuersatz</h2></div><span class="settings-mark">02</span></div>
-            <label><span>Geschätzter persönlicher Steuersatz in Prozent</span><input id="personal-tax-rate" name="personalTaxRatePercent" type="number" min="0" max="100" step="0.01" required /><small>Wird nur für eine unverbindliche Steuer-Schätzung im Jahresreport verwendet. Steuerregeln, Freigrenzen, Verlustverrechnung und Haltefristen bleiben deine bzw. die Aufgabe einer Steuerberatung.</small></label>
+            <div class="settings-heading"><div><p class="eyebrow">STEUERPROFIL</p><h2 id="tax-profile-title">Regelwerk &amp; Steuerreserve</h2></div><span class="settings-mark">02</span></div>
+            <p class="settings-inline-note">Die Deutschland-Vorlage ist ein Startwert, keine Rechtsberatung. Alle Felder können für dein Steuerland, Steuerjahr oder nach Rücksprache mit einer Fachperson angepasst werden. Es wird ausschließlich in EUR gerechnet.</p>
+            <div class="form-grid settings-grid"><label><span>Profilname</span><input id="tax-profile-label" type="text" maxlength="160" required /></label><label><span>Land / Region (Code)</span><input id="tax-country-code" type="text" maxlength="8" placeholder="DE" required /></label></div>
+            <div class="form-grid settings-grid"><label><span>Steuersatz Veräußerungen in Prozent</span><input id="tax-disposal-rate" type="number" min="0" max="100" step="0.01" required /></label><label><span>Steuersatz Erträge in Prozent</span><input id="tax-income-rate" type="number" min="0" max="100" step="0.01" required /><small>Die Steuerreserve wird getrennt für Veräußerungen und Erträge geschätzt.</small></label></div>
+            <input id="personal-tax-rate" name="personalTaxRatePercent" type="hidden" />
+            <div class="form-grid settings-grid"><label><span>Haltefrist in Tagen</span><input id="tax-holding-days" type="number" min="0" max="36500" step="1" required /></label><label><span>Freigrenze / Schwelle in EUR</span><input id="tax-threshold" type="number" min="0" max="1000000000" step="0.01" required /></label></div>
+            <div class="form-grid settings-grid"><label class="check-setting"><input id="tax-disposal-enabled" type="checkbox" /><span>Veräußerungsgewinne in Steuerreserve einbeziehen</span></label><label class="check-setting"><input id="tax-holding-enabled" type="checkbox" /><span>Haltefrist auf Veräußerungen anwenden</span></label><label class="check-setting"><input id="tax-threshold-enabled" type="checkbox" /><span>Freigrenze / Schwelle anwenden</span></label><label class="check-setting"><input id="tax-loss-offset-enabled" type="checkbox" /><span>Bekannte Verluste mit Gewinnen verrechnen</span></label><label class="check-setting"><input id="tax-income-enabled" type="checkbox" /><span>Erträge in Steuerreserve einbeziehen</span></label></div>
+            <label><span>Als Ertrag behandeln</span><input id="tax-income-purposes" type="text" maxlength="500" /><small>Kommagetrennte Zwecke, z. B. <code>Staking Rewards, Mining Reward, Airdrop</code>. Nur Eingänge mit diesen Zwecken erscheinen als Ertrag.</small></label>
+            <label><span>Eigener Hinweis zum Regelwerk</span><textarea id="tax-rule-note" rows="3" maxlength="500"></textarea></label>
           </section>
 
           <section class="settings-card" aria-labelledby="bitcoin-title">

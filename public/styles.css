@@ -185,6 +185,20 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
 .report-panel { margin-top: 18px; }
 .report-note { margin: 0 0 20px; }
 .report-year select { min-height: 42px; min-width: 100px; }
+.tax-workflow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin: 0 0 25px; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--line); }
+.tax-workflow article { display: grid; grid-template-columns: auto 1fr; gap: 2px 9px; padding: 14px 16px; background: var(--cream); }
+.tax-workflow span { grid-row: span 2; color: var(--green); font-family: var(--mono); font-size: 11px; font-weight: 700; }
+.tax-workflow strong { font-size: 13px; }
+.tax-workflow small { color: var(--muted); font-size: 10px; }
+.tax-profile-panel { display: grid; grid-template-columns: minmax(220px, 1.2fr) minmax(260px, 1.5fr) auto; gap: 24px; align-items: center; padding: 22px 24px; margin: 0 0 20px; border: 1px solid var(--line); border-radius: 9px; background: var(--cream); }
+.tax-profile-panel h2 { margin: 3px 0 6px; font-size: 24px; }
+.tax-profile-panel p { margin: 0; }
+.tax-profile-panel dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.tax-profile-panel dl div { min-width: 0; }
+.tax-profile-panel dt { color: var(--muted); font-family: var(--mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.tax-profile-panel dd { margin: 4px 0 0; color: var(--ink); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.tax-snapshot-list { display: grid; gap: 9px; padding: 0; margin: 0; list-style: none; }
+.tax-snapshot-list li { padding: 11px 13px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); font-family: var(--mono); font-size: 11px; }
 .quality-action { margin-left: 12px; }
 .historic-price-edit { display: block; margin-top: 7px; font-size: 10px; }
 
@@ -412,6 +426,8 @@ a.market-availability:hover { text-decoration: underline; }
   .asset-chart { min-height: 205px; overflow-x: auto; }
   .asset-chart svg { min-width: 620px; height: 205px; }
   .report-main { padding-top: 35px; }
+  .tax-workflow { grid-template-columns: 1fr 1fr; }
+  .tax-profile-panel { grid-template-columns: 1fr; gap: 16px; padding: 18px; }
   .asset-hero-heading { align-items: flex-start; }
   .asset-hero-icon { width: 52px; height: 52px; font-size: 30px; }
   .asset-metrics { grid-template-columns: repeat(2, minmax(175px, 1fr)); padding-bottom: 3px; }
@@ -423,6 +439,8 @@ a.market-availability:hover { text-decoration: underline; }
 }
 @media (max-width: 440px) {
   .summary-grid { gap: 8px; }
+  .tax-workflow { grid-template-columns: 1fr; }
+  .tax-profile-panel dl { grid-template-columns: 1fr; gap: 9px; }
   .summary-card { min-width: 0; }
   .card-label { letter-spacing: .04em; font-size: 8px; }
   .muted { font-size: 10px; }
