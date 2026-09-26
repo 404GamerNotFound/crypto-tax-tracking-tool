@@ -1,4 +1,4 @@
-const state = { portfolio: null, market: null, notifications: [] };
+const state = { portfolio: null, market: null };
 const el = (id) => document.getElementById(id);
 const currency = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
@@ -135,23 +135,6 @@ function render() {
   dashboard.hidden = !hasWallets;
   el("dashboard-empty").hidden = hasWallets;
   renderInsights(portfolio.insights || {});
-}
-
-function renderNotifications() {
-  const list = el("notification-list"); list.replaceChildren();
-  const unread = state.notifications.filter((item) => !item.is_read);
-  const count = el("notification-count"); count.textContent = unread.length; count.hidden = !unread.length;
-  for (const item of state.notifications.slice(0, 8)) {
-    const row = document.createElement("article"); row.className = `notification-item ${item.level}${item.is_read ? " is-read" : ""}`;
-    const title = document.createElement("strong"); title.textContent = item.title;
-    const message = document.createElement("p"); message.textContent = item.message;
-    row.append(title, message); list.append(row);
-  }
-  el("notification-empty").hidden = state.notifications.length > 0;
-}
-
-async function loadNotifications() {
-  try { const data = await api("/api/notifications"); state.notifications = data.notifications || []; renderNotifications(); } catch (_) { /* Portfolio bleibt ohne Hinweise nutzbar. */ }
 }
 
 function renderInsights(insights) {
@@ -308,7 +291,5 @@ async function backfillHistoricalPrices() {
 
 el("refresh-all").addEventListener("click", syncAll);
 el("backfill-historical-prices").addEventListener("click", backfillHistoricalPrices);
-el("mark-notifications-read").addEventListener("click", async () => { await api("/api/notifications/read", { method: "PATCH", body: JSON.stringify({}) }); await loadNotifications(); });
 loadPortfolio();
 loadMarketCatalog();
-loadNotifications();

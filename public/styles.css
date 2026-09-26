@@ -24,7 +24,7 @@ button, select { cursor: pointer; }
 button:disabled { cursor: wait; opacity: .65; }
 a { color: inherit; }
 .shell { max-width: 1540px; margin: 0 auto; padding: 0 34px 44px; }
-.topbar { height: 86px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.topbar { position: relative; height: 86px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .topbar-actions { display: flex; align-items: center; gap: 18px; }
 .topbar-nav { display: flex; align-items: center; gap: 18px; margin-left: auto; }
 .topbar-link { color: var(--green); font-size: 12px; font-weight: 600; text-decoration: none; }
@@ -33,6 +33,16 @@ a { color: inherit; }
 .brand { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; font-weight: 700; letter-spacing: -.03em; font-size: 20px; }
 .brand-mark { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--orange); color: #fffaf2; font-family: Georgia, serif; font-size: 22px; font-weight: 700; box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .12); }
 .topbar-status { color: var(--muted); font-family: "DM Mono", monospace; font-size: 11px; letter-spacing: -.03em; }
+.notification-menu { position: relative; }
+.notification-bell { position: relative; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); color: var(--green-dark); cursor: pointer; font-size: 16px; line-height: 1; }
+.notification-bell:hover, .notification-bell[aria-expanded="true"] { border-color: var(--green); background: var(--mint); }
+.notification-bell i { position: absolute; top: -7px; right: -8px; min-width: 17px; padding: 2px 4px; border: 2px solid var(--paper); border-radius: 999px; background: var(--red); color: #fff; font: 700 9px "DM Mono", monospace; font-style: normal; }
+.notification-popover { position: absolute; z-index: 20; top: calc(100% + 9px); right: 0; width: min(380px, calc(100vw - 32px)); padding: 15px; border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 16px 38px rgba(15, 39, 29, .16); background: var(--cream); }
+.notification-popover[hidden] { display: none; }
+.notification-popover-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.notification-popover-head .eyebrow { margin: 0 0 3px; }
+.notification-popover-head strong { font-size: 18px; }
+.notification-popover-list { display: grid; gap: 8px; max-height: min(54vh, 450px); padding-top: 12px; overflow: auto; }
 .hero { padding: 68px 0 56px; display: flex; align-items: flex-end; justify-content: space-between; gap: 36px; }
 .eyebrow { margin: 0 0 11px; font: 500 10px "DM Mono", monospace; letter-spacing: .13em; color: var(--green); }
 h1, h2, p { margin-top: 0; }
@@ -390,6 +400,7 @@ a.market-availability:hover { text-decoration: underline; }
   .topbar { flex-wrap: wrap; height: auto; min-height: 68px; padding: 12px 0; }
   .topbar-nav { order: 3; width: 100%; flex-wrap: wrap; justify-content: flex-start; gap: 8px 14px; margin: 0; }
   .topbar-status { margin-left: auto; }
+  .notification-menu { margin-left: auto; }
   .hero { padding: 42px 0 35px; display: block; }
   h1 { font-size: clamp(45px, 14vw, 66px); }
   .hero-actions { justify-content: flex-start; margin-top: 25px; }
@@ -488,6 +499,9 @@ a.market-availability:hover { text-decoration: underline; }
   .topbar-link:hover { color: var(--green-dark); text-decoration: none; background: #e8f2e9; }
   .topbar-link.is-active { color: var(--green-dark); text-decoration: none; background: var(--mint); }
   .topbar-status { margin-top: auto; padding: 11px 0; border-top: 1px solid var(--line); line-height: 1.5; }
+  .notification-menu { margin: 0; }
+  .notification-bell { width: 100%; justify-items: start; padding-left: 11px; }
+  .notification-popover { position: absolute; top: -10px; right: auto; left: calc(100% + 22px); width: min(390px, calc(100vw - 290px)); }
   .dashboard-hero { padding-top: 58px; }
   .hero h1 { font-size: clamp(46px, 4.65vw, 72px); }
   .compact-hero h1, .asset-hero h1 { font-size: clamp(42px, 4.2vw, 64px); }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokales Crypto-Portfolio für öffentliche Blockchain-Wallets" />
     <title>CryptoBuch · Dashboard</title>
-    <link rel="stylesheet" href="/styles.css?v=20260922-14" />
+    <link rel="stylesheet" href="/styles.css?v=20260925-2" />
   </head>
   <body>
     <div class="shell dashboard-shell">
@@ -81,8 +81,6 @@
           <article class="overview-stat"><span class="card-label">Netto-Kapitalzufluss</span><strong id="net-investment">—</strong><span class="muted">Käufe minus Verkäufe · bekannte Kurse</span></article>
         </section>
 
-        <section class="notifications-panel" aria-labelledby="notification-title"><div class="section-heading"><div><p class="eyebrow">HINWEISE</p><h2 id="notification-title">Benachrichtigungen <span id="notification-count" class="count-badge" hidden>0</span></h2></div><button id="mark-notifications-read" class="text-button">Als gelesen markieren</button></div><div id="notification-list" class="notification-list"></div><p id="notification-empty" class="data-note" hidden>Keine offenen Hinweise.</p></section>
-
         <section class="asset-section" aria-labelledby="asset-section-title">
           <div class="section-heading asset-section-heading">
             <div>
@@ -123,6 +121,7 @@
       </main>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/app.js?v=20260922-17" defer></script>
+    <script src="/notifications.js?v=20260925-1" defer></script>
+    <script src="/app.js?v=20260925-1" defer></script>
   </body>
 </html>
