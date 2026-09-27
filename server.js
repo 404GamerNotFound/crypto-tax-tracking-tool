@@ -143,7 +143,7 @@ db.exec(`
     chain TEXT NOT NULL,
     address TEXT NOT NULL,
     label TEXT NOT NULL DEFAULT '',
-    source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub', 'stake')),
+    source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub', 'stake', 'exchange')),
     xpub_address_type TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_synced_at TEXT,
@@ -308,7 +308,8 @@ function migrateWalletSchemaForChains() {
   // Older versions used UNIQUE(address), which prevents the same EVM address
   // from being added to ETH, BNB and AVAX independently. Rebuild both that
   // schema and the former fixed chain CHECK constraint without touching data.
-  if (!walletSql.includes("CHECK (chain IN") && hasChainScopedUniqueAddress) return;
+  const needsExchangeSourceType = !walletSql.includes("'exchange'");
+  if (!walletSql.includes("CHECK (chain IN") && hasChainScopedUniqueAddress && !needsExchangeSourceType) return;
   const walletColumns = new Set(db.prepare("PRAGMA table_info(wallets)").all().map((column) => column.name));
   const sourceType = walletColumns.has("source_type") ? "source_type" : "'address'";
   const xpubAddressType = walletColumns.has("xpub_address_type") ? "xpub_address_type" : "NULL";
@@ -321,7 +322,7 @@ function migrateWalletSchemaForChains() {
       chain TEXT NOT NULL,
       address TEXT NOT NULL,
       label TEXT NOT NULL DEFAULT '',
-      source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub', 'stake')),
+      source_type TEXT NOT NULL DEFAULT 'address' CHECK (source_type IN ('address', 'xpub', 'stake', 'exchange')),
       xpub_address_type TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       last_synced_at TEXT,
@@ -430,6 +431,43 @@ migrateExchangeConnectionSchema();
 const walletColumnNames = new Set(db.prepare("PRAGMA table_info(wallets)").all().map((column) => column.name));
 if (!walletColumnNames.has("source_type")) db.exec("ALTER TABLE wallets ADD COLUMN source_type TEXT NOT NULL DEFAULT 'address'");
 if (!walletColumnNames.has("xpub_address_type")) db.exec("ALTER TABLE wallets ADD COLUMN xpub_address_type TEXT");
+
+function exchangeAccountLabel(provider, label) {
+  return cleanLabel(label, 80) || (provider === "binance" ? "Binance Spot" : "Bitvavo");
+}
+
+function createExchangeAccountWallet(provider, label, identifier = crypto.randomUUID()) {
+  const address = "exchange:" + provider + ":" + identifier;
+  const result = db.prepare(
+    "INSERT INTO wallets (chain, address, label, source_type) VALUES ('EXCHANGE', ?, ?, 'exchange')",
+  ).run(address, exchangeAccountLabel(provider, label));
+  return Number(result.lastInsertRowid);
+}
+
+function migrateExchangeConnectionsToDedicatedAccounts() {
+  const connections = db.prepare(
+    "SELECT c.id, c.provider, c.label, c.wallet_id FROM exchange_connections c JOIN wallets w ON w.id = c.wallet_id WHERE w.source_type <> 'exchange'",
+  ).all();
+  if (!connections.length) return;
+  db.exec("BEGIN");
+  try {
+    for (const connection of connections) {
+      const accountWalletId = createExchangeAccountWallet(connection.provider, connection.label, connection.id);
+      // Exchange records were formerly placed in an arbitrary wallet. Move
+      // only rows that carry the explicit API-source marker, preserving their
+      // IDs, manual purpose/price overrides, documents and transfer links.
+      db.prepare("UPDATE transactions SET wallet_id = ? WHERE wallet_id = ? AND raw_json LIKE ?")
+        .run(accountWalletId, connection.wallet_id, '%\"source\":\"' + connection.provider + '-api\"%');
+      db.prepare("UPDATE exchange_connections SET wallet_id = ? WHERE id = ?").run(accountWalletId, connection.id);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+migrateExchangeConnectionsToDedicatedAccounts();
 
 const transactionColumnNames = new Set(db.prepare("PRAGMA table_info(transactions)").all().map((column) => column.name));
 if (!transactionColumnNames.has("purpose_origin")) {
@@ -1813,6 +1851,9 @@ function enqueueJob(type, payload) {
 }
 
 async function syncWallet(wallet) {
+  if (wallet.source_type === "exchange") {
+    throw makeError("Börsenkonten werden ausschließlich über ihre Read-only-Börsenverbindung synchronisiert.");
+  }
   const adapter = CHAIN_ADAPTERS[wallet.chain];
   if (!adapter) throw makeError("Für diese Blockchain ist keine Synchronisierung eingerichtet.");
   const settings = runtimeSettings();
@@ -2161,7 +2202,8 @@ function assetDescriptorFromTransaction(transaction) {
 
 async function portfolioResponse() {
   const wallets = db.prepare(`SELECT w.*, COALESCE(m.group_name, '') AS group_name, COALESCE(m.tags, '[]') AS tags
-    FROM wallets w LEFT JOIN wallet_metadata m ON m.wallet_id = w.id ORDER BY w.created_at DESC`).all()
+    FROM wallets w LEFT JOIN wallet_metadata m ON m.wallet_id = w.id
+    WHERE w.source_type <> 'exchange' ORDER BY w.created_at DESC`).all()
     .map((wallet) => ({ ...wallet, tags: (() => { try { return JSON.parse(wallet.tags); } catch { return []; } })() }));
   const transactions = db.prepare(`
     SELECT t.*, w.chain, w.address, w.source_type, w.label AS wallet_label
@@ -2390,6 +2432,7 @@ app.get("/api/system-status", (_request, response, next) => {
       LEFT JOIN sync_events event ON event.id = (
         SELECT id FROM sync_events WHERE wallet_id = w.id ORDER BY id DESC LIMIT 1
       )
+      WHERE w.source_type <> 'exchange'
       ORDER BY w.last_synced_at ASC, w.id ASC
     `).all();
     const retries = db.prepare(`
@@ -2969,7 +3012,7 @@ function importExternalRows(wallet, rows, { source, profile = null, purposeOrigi
 
 function getExchangeConnection(id) {
   const connection = db.prepare(`
-    SELECT c.*, w.label AS wallet_label, w.chain AS wallet_chain, w.address AS wallet_address
+    SELECT c.*, w.label AS account_label
     FROM exchange_connections c JOIN wallets w ON w.id = c.wallet_id WHERE c.id = ?
   `).get(id);
   if (!connection) throw makeError("Börsenverbindung nicht gefunden.", 404);
@@ -2981,10 +3024,7 @@ function exchangeConnectionView(connection) {
     id: connection.id,
     provider: connection.provider,
     label: connection.label,
-    walletId: connection.wallet_id,
-    walletLabel: connection.wallet_label,
-    walletChain: connection.wallet_chain,
-    walletAddress: connection.wallet_address,
+    accountLabel: connection.account_label,
     symbols: connection.symbols || "",
     lastSyncedAt: connection.last_synced_at,
     createdAt: connection.created_at,
@@ -3027,7 +3067,7 @@ app.get("/api/import/csv-profiles", (_request, response) => {
 app.get("/api/exchange-connections", (_request, response, next) => {
   try {
     const connections = db.prepare(`
-      SELECT c.*, w.label AS wallet_label, w.chain AS wallet_chain, w.address AS wallet_address
+      SELECT c.*, w.label AS account_label
       FROM exchange_connections c JOIN wallets w ON w.id = c.wallet_id ORDER BY c.id DESC
     `).all().map(exchangeConnectionView);
     response.json({ providers: [
@@ -3040,18 +3080,27 @@ app.get("/api/exchange-connections", (_request, response, next) => {
 app.post("/api/exchange-connections", (request, response, next) => {
   try {
     const provider = String(request.body?.provider || "").trim().toLowerCase();
-    const walletId = asPositiveId(request.body?.walletId);
     const label = cleanLabel(request.body?.label, 80) || (provider === "binance" ? "Binance Spot" : "Bitvavo");
     const apiKey = String(request.body?.apiKey || "").trim();
     const apiSecret = String(request.body?.apiSecret || "").trim();
     const symbols = parseSymbols(request.body?.symbols).join(",");
     if (!['bitvavo', 'binance'].includes(provider)) throw makeError("Bitte eine unterstützte Börse auswählen.");
-    if (!walletId) throw makeError("Bitte eine Ziel-Wallet auswählen.");
-    getWallet(walletId);
     if (apiKey.length < 8 || apiKey.length > 512 || apiSecret.length < 8 || apiSecret.length > 512) throw makeError("API-Key und Secret müssen zwischen 8 und 512 Zeichen lang sein.");
     if (containsForbiddenKeyMaterial(apiKey) || containsForbiddenKeyMaterial(apiSecret)) throw makeError("Private Keys, xPrvs und Seed-Phrases werden niemals akzeptiert. Bitte ausschließlich einen Börsen-API-Key und dessen Secret verwenden.");
-    const result = db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret, symbols) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(provider, walletId, label, apiKey, apiSecret, symbols);
+    if (db.prepare("SELECT id FROM exchange_connections WHERE provider = ? AND label = ?").get(provider, label)) {
+      throw makeError("Diese Börsenverbindung ist bereits hinterlegt.", 409);
+    }
+    db.exec("BEGIN");
+    let result;
+    try {
+      const accountWalletId = createExchangeAccountWallet(provider, label);
+      result = db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret, symbols) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(provider, accountWalletId, label, apiKey, apiSecret, symbols);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
     const connection = exchangeConnectionView(getExchangeConnection(Number(result.lastInsertRowid)));
     // A newly saved Read-only connection contains no local exchange rows yet.
     // Start its regular serial sync immediately; the follow-up transfer check
@@ -3059,7 +3108,7 @@ app.post("/api/exchange-connections", (request, response, next) => {
     const job = enqueueJob("exchange_sync", { connectionId: connection.id });
     response.status(201).json({ ...connection, job });
   } catch (error) {
-    if (String(error.message).includes("UNIQUE constraint failed")) return next(makeError("Diese Börsenverbindung ist für die Ziel-Wallet bereits hinterlegt."));
+    if (String(error.message).includes("UNIQUE constraint failed")) return next(makeError("Diese Börsenverbindung ist bereits hinterlegt."));
     next(error);
   }
 });
@@ -3088,6 +3137,7 @@ app.post("/api/import/csv", (request, response, next) => {
     const walletId = asPositiveId(request.body?.walletId);
     if (!walletId) throw makeError("Bitte eine Ziel-Wallet auswählen.");
     const wallet = getWallet(walletId);
+    if (wallet.source_type === "exchange") throw makeError("CSV-Dateien bitte einer Blockchain-Wallet zuordnen. Börsenbuchungen werden über die Read-only-Börsenverbindung importiert.");
     const { profile, rows } = parseCsvRows(request.body?.csv, String(request.body?.profile || "generic").toLowerCase());
     if (rows.length > 2500) throw makeError("Maximal 2.500 CSV-Transaktionen gleichzeitig importieren.");
     const imported = importExternalRows(wallet, rows, { source: "csv", profile: profile.id, purposeOrigin: "manual" });

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Datenqualität für historische Kurse, Zwecke und Börsenabgleiche" />
     <title>CryptoBuch · Datenqualität</title>
-    <link rel="stylesheet" href="/styles.css?v=20260927-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260927-2" />
   </head>
   <body>
     <div class="shell report-shell">
@@ -90,7 +90,7 @@
             <div class="form-grid">
               <label><span>Börse</span><select id="exchange-provider" required></select></label>
               <label><span>Name <small>optional</small></span><input id="exchange-label" maxlength="80" placeholder="z. B. Binance Spot" /></label>
-              <label class="form-wide"><span>Buchungsquelle für den Import</span><select id="exchange-wallet" required></select><small>Ordnet die importierten Buchungen organisatorisch ein. Der Transfer-Abgleich berücksichtigt trotzdem alle lokalen Wallets.</small></label>
+              <div class="exchange-account-explanation form-wide"><span aria-hidden="true">⇄</span><p><strong>Eigenes Börsenkonto</strong><br />Die Börsenbuchungen werden automatisch einem separaten Börsenkonto zugeordnet – nie einer Blockchain-Wallet. Für Transfer-Vorschläge werden weiterhin alle lokalen Wallets abgeglichen.</p></div>
               <label><span>Read-only API-Key</span><input id="exchange-api-key" autocomplete="off" minlength="8" maxlength="512" required /></label>
               <label><span>API-Secret</span><input id="exchange-api-secret" type="password" autocomplete="new-password" minlength="8" maxlength="512" required /></label>
               <label class="form-wide" id="exchange-symbols-field" hidden><span>Binance Spot-Märkte <small>optional</small></span><input id="exchange-symbols" maxlength="1600" placeholder="z. B. BTCEUR, BTCUSDT, ETHEUR" /><small>Leer: Märkte der aktuell gehaltenen Assets werden automatisch ermittelt. Ergänze frühere Märkte für deren Handelshistorie.</small></label>
@@ -109,6 +109,6 @@
     <dialog id="quality-price-modal"><form id="quality-price-form"><div class="modal-head"><div><p class="eyebrow">MANUELLE KURSKORREKTUR</p><h2>Kurs setzen</h2></div><button class="modal-close" id="close-quality-price" type="button">×</button></div><p class="modal-copy" id="quality-price-copy"></p><label><span>Preis je Coin in EUR</span><input id="quality-price-input" type="number" min="0.00000001" step="any" required /></label><p class="form-error" id="quality-price-error" hidden></p><div class="modal-actions"><button class="button button-secondary" id="quality-price-auto" type="button">Automatik verwenden</button><button class="button button-primary" type="submit">Kurs speichern</button></div></form></dialog>
     <dialog id="quality-document-modal"><div class="modal-head"><div><p class="eyebrow">NACHWEISARCHIV</p><h2>Belege zur Transaktion</h2></div><button class="modal-close" id="close-quality-document" type="button">×</button></div><p class="modal-copy" id="quality-document-copy"></p><form id="quality-document-form"><label><span>PDF, PNG, JPEG oder CSV · max. 5 MB</span><input id="quality-document-file" type="file" accept="application/pdf,image/png,image/jpeg,text/csv,.csv" required /></label><p class="form-error" id="quality-document-error" hidden></p><div class="modal-actions"><button class="button button-primary" type="submit">Nachweis lokal anhängen</button></div></form><ul id="quality-document-list" class="tax-snapshot-list"><li class="muted">Nachweise werden geladen …</li></ul><p class="data-note">Anhänge bleiben ausschließlich im lokalen Datenverzeichnis und werden nicht an Blockchain- oder Kursanbieter übertragen.</p></dialog>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/notifications.js?v=20260925-1" defer></script><script src="/quality.js?v=20260927-4" defer></script>
+    <script src="/notifications.js?v=20260925-1" defer></script><script src="/quality.js?v=20260927-5" defer></script>
   </body>
 </html>

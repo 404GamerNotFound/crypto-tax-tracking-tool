@@ -155,11 +155,11 @@ function connectionCard(connection) {
   const status = node("span", "sync-status" + (connection.lastSyncedAt ? " is-synced" : ""), connection.lastSyncedAt ? "Synchronisiert" : "Bereit");
   head.append(mark, name, status);
   const details = node("dl", "exchange-connection-details");
-  const source = node("div");
-  source.append(node("dt", "", "Buchungsquelle"), node("dd", "", (connection.walletLabel || connection.walletAddress || "—") + " · " + (connection.walletChain || "—")));
+  const account = node("div");
+  account.append(node("dt", "", "Börsenkonto"), node("dd", "", connection.accountLabel || connection.label || "Separates Börsenkonto"));
   const synced = node("div");
   synced.append(node("dt", "", "Letzter Import"), node("dd", "", connection.lastSyncedAt ? readableDateTime(connection.lastSyncedAt) : "Noch nicht synchronisiert"));
-  details.append(source, synced);
+  details.append(account, synced);
   if (connection.provider === "binance" && connection.symbols) {
     const markets = node("div");
     markets.append(node("dt", "", "Märkte"), node("dd", "", connection.symbols));
@@ -205,7 +205,6 @@ function renderExchangeConnections() {
   provider.replaceChildren(...state.exchange.providers.map((item) => new Option(item.label, item.id)));
   provider.value = previous || state.exchange.providers[0]?.id || "";
   updateExchangeProviderForm();
-  walletOptions("exchange-wallet");
   const connections = state.exchange.connections || [];
   if (!connections.length) {
     const empty = node("li", "exchange-connection-empty");
@@ -354,7 +353,7 @@ el("exchange-connection-form").addEventListener("submit", async (event) => {
     submit.disabled = true;
     submit.textContent = "Verbindung wird eingerichtet …";
     const result = await api("/api/exchange-connections", { method: "POST", body: JSON.stringify({
-      provider: el("exchange-provider").value, walletId: el("exchange-wallet").value, label: el("exchange-label").value,
+      provider: el("exchange-provider").value, label: el("exchange-label").value,
       apiKey: el("exchange-api-key").value, apiSecret: el("exchange-api-secret").value, symbols: el("exchange-symbols").value,
     }) });
     form.reset();

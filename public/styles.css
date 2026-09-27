@@ -267,6 +267,10 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
 .exchange-connect-intro b { color: var(--green-dark); }
 .exchange-connect-form { padding-top: 22px; }
 .form-wide { grid-column: 1 / -1; }
+.exchange-account-explanation { display: grid; grid-template-columns: 31px minmax(0, 1fr); gap: 9px; align-items: center; padding: 11px; border: 1px solid #c6ddd0; border-radius: 6px; background: #f3faf4; }
+.exchange-account-explanation > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; color: var(--green-dark); background: var(--mint); font: 600 16px "DM Mono", monospace; }
+.exchange-account-explanation p { margin: 0; color: #506d5a; font-size: 10px; line-height: 1.45; }
+.exchange-account-explanation strong { color: var(--green-dark); font-size: 11px; }
 .exchange-security-notice { display: grid; grid-template-columns: 29px minmax(0, 1fr); gap: 9px; align-items: center; margin: 1px 0 18px; padding: 10px 11px; border: 1px solid #b9dac5; border-radius: 6px; background: #eff9f1; }
 .exchange-security-notice > span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: var(--green-dark); background: #d5eddf; font: 600 17px "DM Mono", monospace; }
 .exchange-security-notice p { margin: 0; color: #4b6958; font-size: 10px; line-height: 1.45; }
