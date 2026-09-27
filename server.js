@@ -20,11 +20,15 @@ const { CHAIN_CONFIG, cleanLabel, isValidAddress, isValidCardanoStakeAddress } =
 const { isConfirmedStakingPayout, trustedPayoutAliases } = require("./lib/tezos-staking");
 const { normalizeTronNativeTransfer } = require("./lib/tron");
 const { normalizeCardanoTransaction } = require("./lib/cardano");
-const { normalizeEthereumTransaction, normalizeErc20Transfer } = require("./lib/ethereum");
+const { normalizeEthereumTransaction, normalizeErc20Transfer, normalizeNftTransfer } = require("./lib/ethereum");
 const { buildTopMarketCatalog } = require("./lib/market-catalog");
 const { calculateAssetAnalytics } = require("./lib/portfolio-analytics");
 const { calculateTaxReport } = require("./lib/tax-report");
 const { germanyProfile, normalizeTaxProfile } = require("./lib/tax-profile");
+const { buildTaxOptimizer, simulateSale } = require("./lib/tax-optimizer");
+const { classifyEvmTransaction, isLikelySpamAsset } = require("./lib/defi");
+const { EXCHANGE_CSV_PROFILES, normalizeExchangeRows } = require("./lib/exchange-import");
+const { fetchBitvavoHistory } = require("./lib/bitvavo");
 const {
   bitvavoDailyClosePrices,
   coinGeckoDate,
@@ -52,6 +56,7 @@ const PORT = Number(process.env.PORT || 3000);
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DB_PATH = path.join(DATA_DIR, "cryptobuch.sqlite");
 const BACKUP_DIR = path.join(DATA_DIR, "backups");
+const DOCUMENT_DIR = path.join(DATA_DIR, "documents");
 const DEFAULT_XPUB_GAP_LIMIT = boundedInteger(process.env.XPUB_GAP_LIMIT, 20, 1, 50);
 const HISTORICAL_PRICE_REQUEST_GAP_MS = 1750;
 const SETTINGS_DEFAULTS = Object.freeze({
@@ -100,6 +105,11 @@ const PURPOSE_PRESETS = [
   "Airdrop",
   "Lending-Ertrag",
   "DeFi-Ertrag",
+  "DeFi Swap",
+  "Liquidity Pool",
+  "Bridge",
+  "NFT",
+  "Spam",
   "Transfer",
   "Geschenk",
   "Gebühr",
@@ -108,6 +118,7 @@ const PURPOSE_PRESETS = [
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
+fs.mkdirSync(DOCUMENT_DIR, { recursive: true });
 const db = new DatabaseSync(DB_PATH);
 
 db.exec(`
@@ -136,6 +147,7 @@ db.exec(`
     asset_name TEXT,
     asset_decimals INTEGER,
     asset_contract TEXT,
+    asset_type TEXT NOT NULL DEFAULT 'native' CHECK (asset_type IN ('native', 'erc20', 'nft')),
     amount REAL NOT NULL,
     fee REAL NOT NULL DEFAULT 0,
     fee_asset TEXT,
@@ -196,7 +208,7 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS background_jobs (
     id INTEGER PRIMARY KEY,
-    type TEXT NOT NULL CHECK (type IN ('wallet_sync', 'price_backfill')),
+    type TEXT NOT NULL CHECK (type IN ('wallet_sync', 'price_backfill', 'exchange_sync')),
     payload_json TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'success', 'error')),
     progress_current INTEGER NOT NULL DEFAULT 0,
@@ -224,6 +236,25 @@ db.exec(`
     report_checksum TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS transfer_links (
+    id INTEGER PRIMARY KEY,
+    outgoing_transaction_id INTEGER NOT NULL UNIQUE REFERENCES transactions(id) ON DELETE CASCADE,
+    incoming_transaction_id INTEGER NOT NULL UNIQUE REFERENCES transactions(id) ON DELETE CASCADE,
+    match_origin TEXT NOT NULL DEFAULT 'manual' CHECK (match_origin IN ('manual', 'suggested')),
+    note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (outgoing_transaction_id <> incoming_transaction_id)
+  );
+  CREATE TABLE IF NOT EXISTS transaction_documents (
+    id INTEGER PRIMARY KEY,
+    transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    original_name TEXT NOT NULL,
+    stored_name TEXT NOT NULL UNIQUE,
+    mime_type TEXT NOT NULL,
+    byte_size INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE INDEX IF NOT EXISTS idx_transactions_wallet_timestamp
     ON transactions(wallet_id, timestamp DESC);
   CREATE INDEX IF NOT EXISTS idx_transactions_purpose
@@ -242,6 +273,10 @@ db.exec(`
     ON notifications(is_read, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_tax_report_snapshots_year_created
     ON tax_report_snapshots(year, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_transfer_links_incoming
+    ON transfer_links(incoming_transaction_id);
+  CREATE INDEX IF NOT EXISTS idx_transaction_documents_transaction
+    ON transaction_documents(transaction_id, id DESC);
   PRAGMA optimize;
 `);
 
@@ -289,6 +324,36 @@ function migrateWalletSchemaForChains() {
 
 migrateWalletSchemaForChains();
 
+function migrateBackgroundJobSchema() {
+  const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'background_jobs'").get()?.sql || "";
+  if (sql.includes("exchange_sync")) return;
+  db.exec(`
+    BEGIN;
+    CREATE TABLE background_jobs_migration (
+      id INTEGER PRIMARY KEY,
+      type TEXT NOT NULL CHECK (type IN ('wallet_sync', 'price_backfill', 'exchange_sync')),
+      payload_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'success', 'error')),
+      progress_current INTEGER NOT NULL DEFAULT 0,
+      progress_total INTEGER NOT NULL DEFAULT 0,
+      result_json TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      started_at TEXT,
+      finished_at TEXT
+    );
+    INSERT INTO background_jobs_migration
+      SELECT id, type, payload_json, status, progress_current, progress_total, result_json, error_message, created_at, started_at, finished_at
+      FROM background_jobs;
+    DROP TABLE background_jobs;
+    ALTER TABLE background_jobs_migration RENAME TO background_jobs;
+    COMMIT;
+    CREATE INDEX IF NOT EXISTS idx_background_jobs_status_created ON background_jobs(status, created_at);
+  `);
+}
+
+migrateBackgroundJobSchema();
+
 // Erst nach einer möglichen Wallet-Tabellenmigration anlegen, damit bestehende
 // Datenbanken mit älterem UNIQUE-Schema ohne Fremdschlüssel-Konflikt migrieren.
 db.exec(`
@@ -298,6 +363,19 @@ db.exec(`
     tags TEXT NOT NULL DEFAULT '[]',
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS exchange_connections (
+    id INTEGER PRIMARY KEY,
+    provider TEXT NOT NULL CHECK (provider IN ('bitvavo')),
+    wallet_id INTEGER NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+    label TEXT NOT NULL DEFAULT '',
+    api_key TEXT NOT NULL,
+    api_secret TEXT NOT NULL,
+    last_synced_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(provider, wallet_id, label)
+  );
+  CREATE INDEX IF NOT EXISTS idx_exchange_connections_wallet
+    ON exchange_connections(wallet_id, id DESC);
 `);
 
 // Existing installations predate automatic purpose assignment. Preserve manual
@@ -315,6 +393,7 @@ if (!transactionColumnNames.has("asset_symbol")) db.exec("ALTER TABLE transactio
 if (!transactionColumnNames.has("asset_name")) db.exec("ALTER TABLE transactions ADD COLUMN asset_name TEXT");
 if (!transactionColumnNames.has("asset_decimals")) db.exec("ALTER TABLE transactions ADD COLUMN asset_decimals INTEGER");
 if (!transactionColumnNames.has("asset_contract")) db.exec("ALTER TABLE transactions ADD COLUMN asset_contract TEXT");
+if (!transactionColumnNames.has("asset_type")) db.exec("ALTER TABLE transactions ADD COLUMN asset_type TEXT NOT NULL DEFAULT 'native'");
 if (!transactionColumnNames.has("fee_asset")) db.exec("ALTER TABLE transactions ADD COLUMN fee_asset TEXT");
 if (!transactionColumnNames.has("price_source")) db.exec("ALTER TABLE transactions ADD COLUMN price_source TEXT NOT NULL DEFAULT 'auto'");
 
@@ -1361,14 +1440,16 @@ async function fetchBlockchairTransactions(address, chain, settings) {
 }
 
 async function fetchEthereumTransactions(address, settings) {
-  const [native, erc20] = await Promise.all([
+  const [native, erc20, nfts] = await Promise.all([
     fetchEtherscanRecords(address, "txlist", settings),
     fetchEtherscanRecords(address, "tokentx", settings),
+    fetchEtherscanRecords(address, "tokennfttx", settings).catch(() => []),
   ]);
   const enrichedErc20 = await enrichErc20Metadata(erc20, settings);
   const rows = [
     ...native.map((transaction) => ({ type: "native", transaction })),
     ...enrichedErc20.map((transaction) => ({ type: "erc20", transaction })),
+    ...nfts.map((transaction) => ({ type: "nft", transaction })),
   ].sort((left, right) => Number(right.transaction.timeStamp || 0) - Number(left.transaction.timeStamp || 0));
   return settings.maxTransactionsPerSync ? rows.slice(0, settings.maxTransactionsPerSync) : rows;
 }
@@ -1475,7 +1556,9 @@ const CHAIN_ADAPTERS = {
       return { rawTransactions: await fetchEthereumTransactions(wallet.address, settings), context: wallet.address, xpubCapped: false };
     },
     normalize(item, address) {
-      return item.type === "erc20" ? normalizeErc20Transfer(item.transaction, address) : normalizeEthereumTransaction(item.transaction, address);
+      if (item.type === "erc20") return normalizeErc20Transfer(item.transaction, address);
+      if (item.type === "nft") return normalizeNftTransfer(item.transaction, address);
+      return normalizeEthereumTransaction(item.transaction, address);
     },
   },
   BNB: {
@@ -1605,10 +1688,16 @@ function scheduleJobWorker() {
         result = await syncWallet(wallet);
         recordSyncEvent(wallet.id, "success", result.imported);
         createNotification("success", "Wallet synchronisiert", `${wallet.label || wallet.address}: ${result.imported.toLocaleString("de-DE")} Transaktionen verarbeitet.`);
-      } else {
+      } else if (job.type === "price_backfill") {
         result = await backfillHistoricalPrices({ force: Boolean(payload.force) });
         if (result.remaining > 0) createNotification("warning", "Historische Kurse offen", `${result.remaining.toLocaleString("de-DE")} historische Kurse werden weiter automatisch geprüft.`);
         else createNotification("success", "Historische Kurse ergänzt", `${result.updated.toLocaleString("de-DE")} Kurse wurden ergänzt.`);
+      } else if (job.type === "exchange_sync") {
+        const connection = getExchangeConnection(payload.connectionId);
+        result = await syncExchangeConnection(connection);
+        createNotification("success", "Börse synchronisiert", `${connection.label || "Bitvavo"}: ${result.imported.toLocaleString("de-DE")} Buchungen importiert.`);
+      } else {
+        throw makeError("Unbekannter Hintergrundjob.");
       }
       db.prepare("UPDATE background_jobs SET status = 'success', progress_current = 1, progress_total = 1, result_json = ?, finished_at = datetime('now') WHERE id = ?")
         .run(JSON.stringify(result), job.id);
@@ -1639,12 +1728,13 @@ async function syncWallet(wallet) {
     assetName: transaction.assetName || transaction.asset,
     assetDecimals: Number.isInteger(transaction.assetDecimals) ? transaction.assetDecimals : CHAIN_CONFIG[wallet.chain].decimals,
     assetContract: transaction.assetContract || null,
+    assetType: transaction.assetType || (transaction.assetContract ? "erc20" : "native"),
     feeAsset: transaction.feeAsset || transaction.asset,
     priceKind: transaction.priceKind || "native",
   }));
   const pricesByDate = await hydrateHistoricalPrices(
     wallet.chain,
-    transactions.filter((transaction) => transaction.priceKind !== "erc20" && !positiveNumber(transaction.historicalPrice)).map((transaction) => transaction.timestamp),
+    transactions.filter((transaction) => transaction.priceKind === "native" && !positiveNumber(transaction.historicalPrice)).map((transaction) => transaction.timestamp),
     settings,
   );
   const tokenDates = new Map();
@@ -1662,9 +1752,10 @@ async function syncWallet(wallet) {
   const upsert = db.prepare(`
     INSERT INTO transactions (
       wallet_id, external_id, hash, timestamp, direction, asset, asset_symbol, asset_name, asset_decimals, asset_contract,
+      asset_type,
       amount, fee, fee_asset, counterparty,
       price_transaction_eur, purpose, purpose_origin, raw_json, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(wallet_id, external_id) DO UPDATE SET
       hash = excluded.hash,
       timestamp = excluded.timestamp,
@@ -1674,6 +1765,7 @@ async function syncWallet(wallet) {
       asset_name = excluded.asset_name,
       asset_decimals = excluded.asset_decimals,
       asset_contract = excluded.asset_contract,
+      asset_type = excluded.asset_type,
       amount = excluded.amount,
       fee = excluded.fee,
       fee_asset = excluded.fee_asset,
@@ -1709,7 +1801,7 @@ async function syncWallet(wallet) {
         ?? positiveNumber(existing?.price_transaction_eur)
         ?? (transaction.timestamp && transaction.priceKind === "erc20"
           ? positiveNumber(tokenPricesByContract.get(transaction.assetContract)?.get(isoDay(transaction.timestamp)))
-          : transaction.timestamp ? positiveNumber(pricesByDate.get(isoDay(transaction.timestamp))) : null);
+          : transaction.timestamp && transaction.priceKind === "native" ? positiveNumber(pricesByDate.get(isoDay(transaction.timestamp)) ) : null);
       upsert.run(
         wallet.id,
         transaction.externalId,
@@ -1721,6 +1813,7 @@ async function syncWallet(wallet) {
         transaction.assetName,
         transaction.assetDecimals,
         transaction.assetContract,
+        transaction.assetType,
         transaction.amount,
         transaction.fee,
         transaction.feeAsset,
@@ -1750,6 +1843,7 @@ function pendingHistoricalPriceCount() {
     SELECT COUNT(*) AS count
     FROM transactions
     WHERE timestamp IS NOT NULL
+      AND asset_type <> 'nft'
       AND price_source <> 'manual'
       AND (price_transaction_eur IS NULL OR price_transaction_eur <= 0)
   `).get().count || 0);
@@ -1760,11 +1854,12 @@ async function backfillHistoricalPrices({ force = false } = {}) {
   const totalPending = pendingHistoricalPriceCount();
   const retryFilter = force ? "1 = 1" : "(retry.next_attempt_at IS NULL OR retry.next_attempt_at <= ?)";
   const candidates = db.prepare(`
-    SELECT t.id, t.timestamp, t.asset_contract, w.chain, retry.attempt_count AS retry_attempt_count
+    SELECT t.id, t.timestamp, t.asset_contract, t.asset_type, w.chain, retry.attempt_count AS retry_attempt_count
     FROM transactions t
     JOIN wallets w ON w.id = t.wallet_id
     LEFT JOIN historical_price_retries retry ON retry.transaction_id = t.id
     WHERE t.timestamp IS NOT NULL
+      AND t.asset_type <> 'nft'
       AND t.price_source <> 'manual'
       AND (t.price_transaction_eur IS NULL OR t.price_transaction_eur <= 0)
       AND ${retryFilter}
@@ -1902,6 +1997,16 @@ function nativeAssetDescriptors() {
 
 function assetDescriptorFromTransaction(transaction) {
   const native = CHAIN_CONFIG[transaction.chain];
+  if (transaction.asset_type === "nft") return {
+    id: transaction.asset,
+    chain: transaction.chain,
+    name: transaction.asset_name || "NFT",
+    symbol: transaction.asset_symbol || "NFT",
+    decimals: 0,
+    icon: "▣",
+    kind: "nft",
+    contractAddress: transaction.asset_contract || null,
+  };
   if (!transaction.asset_contract) return nativeAssetDescriptors()[transaction.asset] || {
     id: transaction.asset,
     chain: transaction.chain,
@@ -1949,7 +2054,7 @@ async function portfolioResponse() {
   );
   const pricesByAsset = Object.fromEntries(Object.entries(assets).map(([assetId, asset]) => [
     assetId,
-    asset.kind === "erc20" ? tokenPrices[asset.contractAddress] || null : currentPrices[asset.chain] || null,
+    asset.kind === "erc20" ? tokenPrices[asset.contractAddress] || null : asset.kind === "nft" ? null : currentPrices[asset.chain] || null,
   ]));
   const enriched = transactions.map((transaction) => ({
     ...transaction,
@@ -2201,7 +2306,10 @@ app.get("/api/data-quality", (_request, response, next) => {
         AND ABS(b.amount - a.amount) <= MAX(0.00000001, ABS(a.amount) * 0.002)
         AND ABS(strftime('%s', b.timestamp) - strftime('%s', a.timestamp)) <= 172800
       JOIN wallets aw ON aw.id = a.wallet_id JOIN wallets bw ON bw.id = b.wallet_id
+      LEFT JOIN transfer_links linked_out ON linked_out.outgoing_transaction_id = a.id
+      LEFT JOIN transfer_links linked_in ON linked_in.incoming_transaction_id = b.id
       WHERE a.wallet_id <> b.wallet_id AND (a.purpose IS NULL OR a.purpose <> 'Transfer') AND (b.purpose IS NULL OR b.purpose <> 'Transfer')
+        AND linked_out.id IS NULL AND linked_in.id IS NULL
       ORDER BY a.timestamp DESC LIMIT 80
     `).all();
     const possibleDuplicates = db.prepare(`
@@ -2212,6 +2320,25 @@ app.get("/api/data-quality", (_request, response, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+app.post("/api/transfers/link", (request, response, next) => {
+  try {
+    const outgoingId = asPositiveId(request.body?.outgoingTransactionId);
+    const incomingId = asPositiveId(request.body?.incomingTransactionId);
+    if (!outgoingId || !incomingId || outgoingId === incomingId) throw makeError("Bitte zwei unterschiedliche Transaktionen auswählen.");
+    const outgoing = db.prepare("SELECT id, direction, asset FROM transactions WHERE id = ?").get(outgoingId);
+    const incoming = db.prepare("SELECT id, direction, asset FROM transactions WHERE id = ?").get(incomingId);
+    if (!outgoing || !incoming) throw makeError("Eine Transfer-Transaktion wurde nicht gefunden.", 404);
+    if (outgoing.direction !== "out" || incoming.direction !== "in" || outgoing.asset !== incoming.asset) throw makeError("Ein Transfer benötigt einen Ausgang und Eingang desselben Assets.");
+    db.exec("BEGIN");
+    try {
+      db.prepare("INSERT INTO transfer_links (outgoing_transaction_id, incoming_transaction_id, match_origin, note) VALUES (?, ?, 'suggested', ?)").run(outgoingId, incomingId, cleanLabel(request.body?.note, 240) || null);
+      db.prepare("UPDATE transactions SET purpose = 'Transfer', purpose_origin = 'manual', updated_at = datetime('now') WHERE id IN (?, ?)").run(outgoingId, incomingId);
+      db.exec("COMMIT");
+    } catch (error) { db.exec("ROLLBACK"); throw error; }
+    response.status(201).json({ outgoingTransactionId: outgoingId, incomingTransactionId: incomingId, purpose: "Transfer" });
+  } catch (error) { next(error); }
 });
 
 app.get("/api/jobs/:id", (request, response, next) => {
@@ -2270,6 +2397,12 @@ function taxReportResponse(year) {
   return { ...report, availableYears };
 }
 
+async function taxOptimizerResponse(year) {
+  const report = taxReportResponse(year);
+  const portfolio = await portfolioResponse();
+  return { year, profile: report.profile, ...buildTaxOptimizer(report, portfolio.assetPrices) };
+}
+
 function taxReportSnapshots(year) {
   return db.prepare(`
     SELECT id, year, profile_id AS profileId, profile_label AS profileLabel, report_checksum AS checksum, created_at AS createdAt
@@ -2290,6 +2423,25 @@ app.get("/api/tax-report", (request, response, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+app.get("/api/tax-optimizer", async (request, response, next) => {
+  try {
+    response.json(await taxOptimizerResponse(reportYear(request.query.year)));
+  } catch (error) { next(error); }
+});
+
+app.post("/api/tax-optimizer/simulate", async (request, response, next) => {
+  try {
+    const year = reportYear(request.body?.year);
+    const report = taxReportResponse(year);
+    const portfolio = await portfolioResponse();
+    const asset = cleanLabel(request.body?.asset, 80);
+    const priceEur = positiveNumber(request.body?.priceEur) || positiveNumber(portfolio.assetPrices[asset]);
+    const result = simulateSale(report, { asset, amount: request.body?.amount, priceEur });
+    if (!result) throw makeError("Bitte Asset, positive Menge und einen verfügbaren EUR-Preis angeben.");
+    response.json({ year, profile: report.profile, ...result });
+  } catch (error) { next(error); }
 });
 
 app.get("/api/tax-report/snapshots", (request, response, next) => {
@@ -2354,6 +2506,130 @@ app.get("/api/tax-report.csv", (request, response, next) => {
   }
 });
 
+function safeDocumentName(value) {
+  let decoded = "";
+  try { decoded = decodeURIComponent(String(value || "")); } catch (_) { decoded = String(value || ""); }
+  const name = path.basename(decoded).replace(/[^a-zA-Z0-9._ -]/g, "_").replace(/\s+/g, " ").trim();
+  return name.slice(0, 120) || "nachweis";
+}
+
+const DOCUMENT_MIME_TYPES = new Set(["application/pdf", "image/jpeg", "image/png", "text/csv", "application/octet-stream"]);
+
+app.get("/api/transactions/:id/documents", (request, response, next) => {
+  try {
+    const transactionId = asPositiveId(request.params.id);
+    if (!transactionId) throw makeError("Ungültige Transaktions-ID.");
+    if (!db.prepare("SELECT id FROM transactions WHERE id = ?").get(transactionId)) throw makeError("Transaktion nicht gefunden.", 404);
+    const documents = db.prepare(`
+      SELECT id, original_name AS originalName, mime_type AS mimeType, byte_size AS byteSize, sha256, created_at AS createdAt
+      FROM transaction_documents WHERE transaction_id = ? ORDER BY id DESC
+    `).all(transactionId);
+    response.json({ transactionId, documents });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/transactions/:id/documents", express.raw({ type: ["application/pdf", "image/jpeg", "image/png", "text/csv", "application/octet-stream"], limit: "5mb" }), (request, response, next) => {
+  try {
+    const transactionId = asPositiveId(request.params.id);
+    if (!transactionId) throw makeError("Ungültige Transaktions-ID.");
+    if (!db.prepare("SELECT id FROM transactions WHERE id = ?").get(transactionId)) throw makeError("Transaktion nicht gefunden.", 404);
+    if (!Buffer.isBuffer(request.body) || !request.body.length) throw makeError("Bitte einen nicht leeren PDF-, Bild- oder CSV-Nachweis auswählen.");
+    const mimeType = String(request.headers["content-type"] || "application/octet-stream").split(";", 1)[0].toLowerCase();
+    if (!DOCUMENT_MIME_TYPES.has(mimeType)) throw makeError("Erlaubt sind PDF, PNG, JPEG und CSV-Dateien.");
+    const originalName = safeDocumentName(request.headers["x-document-name"]);
+    const storedName = crypto.randomUUID();
+    const target = path.join(DOCUMENT_DIR, storedName);
+    const sha256 = crypto.createHash("sha256").update(request.body).digest("hex");
+    fs.writeFileSync(target, request.body, { flag: "wx", mode: 0o600 });
+    try {
+      const result = db.prepare(`
+        INSERT INTO transaction_documents (transaction_id, original_name, stored_name, mime_type, byte_size, sha256)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(transactionId, originalName, storedName, mimeType, request.body.length, sha256);
+      response.status(201).json({ id: Number(result.lastInsertRowid), transactionId, originalName, mimeType, byteSize: request.body.length, sha256 });
+    } catch (error) {
+      fs.unlinkSync(target);
+      throw error;
+    }
+  } catch (error) { next(error); }
+});
+
+app.get("/api/transaction-documents/:id/download", (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültiger Nachweis.");
+    const document = db.prepare("SELECT original_name, stored_name, mime_type FROM transaction_documents WHERE id = ?").get(id);
+    if (!document) throw makeError("Nachweis nicht gefunden.", 404);
+    const documentPath = path.join(DOCUMENT_DIR, document.stored_name);
+    if (!fs.existsSync(documentPath)) throw makeError("Die lokale Nachweisdatei fehlt. Bitte erneut anhängen.", 404);
+    response.type(document.mime_type).download(documentPath, document.original_name, (error) => { if (error) next(error); });
+  } catch (error) { next(error); }
+});
+
+app.delete("/api/transaction-documents/:id", (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültiger Nachweis.");
+    const document = db.prepare("SELECT stored_name FROM transaction_documents WHERE id = ?").get(id);
+    if (!document) throw makeError("Nachweis nicht gefunden.", 404);
+    db.prepare("DELETE FROM transaction_documents WHERE id = ?").run(id);
+    const documentPath = path.join(DOCUMENT_DIR, document.stored_name);
+    if (fs.existsSync(documentPath)) fs.unlinkSync(documentPath);
+    response.json({ id, deleted: true });
+  } catch (error) { next(error); }
+});
+
+function advisorPackage(year) {
+  const report = taxReportResponse(year);
+  const transactionIds = [...new Set([
+    ...report.sales.flatMap((sale) => [sale.transactionId, sale.acquisitionTransactionId]),
+    ...report.income.map((entry) => entry.transactionId),
+  ].map(asPositiveId).filter(Boolean))];
+  const placeholders = transactionIds.map(() => "?").join(",");
+  const evidence = transactionIds.length ? db.prepare(`
+    SELECT d.id, d.transaction_id AS transactionId, d.original_name AS originalName, d.mime_type AS mimeType,
+      d.byte_size AS byteSize, d.sha256, d.created_at AS createdAt
+    FROM transaction_documents d WHERE d.transaction_id IN (${placeholders}) ORDER BY d.transaction_id, d.id
+  `).all(...transactionIds) : [];
+  const priceAudit = transactionIds.length ? db.prepare(`
+    SELECT transaction_id AS transactionId, price_eur AS priceEur, source, note, changed_at AS changedAt
+    FROM transaction_price_audit WHERE transaction_id IN (${placeholders}) ORDER BY transaction_id, id
+  `).all(...transactionIds) : [];
+  const transfers = transactionIds.length ? db.prepare(`
+    SELECT outgoing_transaction_id AS outgoingTransactionId, incoming_transaction_id AS incomingTransactionId,
+      match_origin AS matchOrigin, note, created_at AS createdAt
+    FROM transfer_links WHERE outgoing_transaction_id IN (${placeholders}) OR incoming_transaction_id IN (${placeholders})
+  `).all(...transactionIds, ...transactionIds) : [];
+  return {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    year,
+    scope: "Lokales CryptoBuch-Steuerberater-Paket; Organisationshilfe, keine Steuerberatung.",
+    report: { year: report.year, profile: report.profile, summary: report.summary, sales: report.sales, income: report.income },
+    dataQuality: {
+      incompleteSaleSegments: report.summary.incompleteSaleSegments,
+      incompleteIncomeEntries: report.summary.incompleteIncomeEntries,
+      evidenceCount: evidence.length,
+      linkedTransfers: transfers.length,
+    },
+    evidence,
+    priceAudit,
+    transfers,
+    limitations: [
+      "Historische Kurse, Steuerwerte und Simulationen sind Schätzungen.",
+      "Anhänge bleiben lokal; dieses Paket enthält nur Metadaten und Prüfsummen.",
+      "Unvollständige Anschaffungsdaten und Kurse sind nicht stillschweigend geschätzt.",
+    ],
+  };
+}
+
+app.get("/api/tax-report/advisor-package", (request, response, next) => {
+  try {
+    const year = reportYear(request.query.year);
+    response.type("application/json").attachment(`cryptobuch-steuerberater-${year}.json`).send(JSON.stringify(advisorPackage(year), null, 2));
+  } catch (error) { next(error); }
+});
+
 app.post("/api/wallets", (request, response, next) => {
   try {
     const chain = String(request.body?.chain || "").toUpperCase();
@@ -2411,44 +2687,163 @@ app.patch("/api/wallets/:id", (request, response, next) => {
   } catch (error) { next(error); }
 });
 
-function parseCsvRows(text) {
-  const lines = String(text || "").replace(/^\uFEFF/, "").split(/\r?\n/).filter((line) => line.trim());
-  if (lines.length < 2) throw makeError("Die CSV benötigt eine Kopfzeile und mindestens eine Transaktion.");
-  const split = (line) => line.split(line.includes(";") ? ";" : ",").map((value) => value.trim().replace(/^"|"$/g, "").replaceAll('""', '"'));
-  const columns = split(lines.shift()).map((column) => column.toLowerCase());
-  const required = ["timestamp", "direction", "asset", "amount"];
-  if (required.some((column) => !columns.includes(column))) throw makeError("CSV-Spalten erforderlich: timestamp, direction, asset, amount. Optional: fee, purpose, price_eur, hash.");
-  return lines.map((line) => Object.fromEntries(split(line).map((value, index) => [columns[index], value])));
+function parseCsvRows(text, profileId) {
+  try {
+    const { profile, rows } = normalizeExchangeRows(text, profileId);
+    const required = ["timestamp", "direction", "asset", "amount"];
+    if (profile.id === "generic" && rows.some((row) => required.some((column) => !(column in row)))) {
+      throw makeError("Standard-CSV benötigt: timestamp, direction, asset, amount. Optional: fee, purpose, price_eur, hash.");
+    }
+    return { profile, rows };
+  } catch (error) {
+    throw makeError(error.message || "CSV konnte nicht verarbeitet werden.");
+  }
 }
+
+function importExternalRows(wallet, rows, { source, profile = null, purposeOrigin = "manual" }) {
+  const insert = db.prepare(`INSERT INTO transactions (wallet_id, external_id, hash, timestamp, direction, asset, asset_symbol, asset_name, asset_decimals, amount, fee, fee_asset, counterparty, price_transaction_eur, price_source, purpose, purpose_origin, raw_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?)
+    ON CONFLICT(wallet_id, external_id) DO UPDATE SET
+      timestamp=excluded.timestamp, direction=excluded.direction, amount=excluded.amount, fee=excluded.fee, fee_asset=excluded.fee_asset,
+      counterparty=excluded.counterparty, price_transaction_eur=CASE WHEN transactions.price_source='manual' THEN transactions.price_transaction_eur ELSE excluded.price_transaction_eur END,
+      purpose=CASE WHEN transactions.purpose_origin='manual' THEN transactions.purpose ELSE excluded.purpose END,
+      purpose_origin=CASE WHEN transactions.purpose_origin='manual' THEN 'manual' ELSE excluded.purpose_origin END,
+      raw_json=excluded.raw_json, updated_at=datetime('now')`);
+  let imported = 0;
+  db.exec("BEGIN");
+  try {
+    for (const [index, row] of rows.entries()) {
+      const direction = String(row.direction || "").toLowerCase();
+      const amount = Number(String(row.amount || "").replace(",", "."));
+      const timestamp = new Date(row.timestamp).toISOString();
+      if (!['in', 'out', 'self'].includes(direction) || !Number.isFinite(amount) || amount <= 0 || Number.isNaN(new Date(row.timestamp).getTime())) throw makeError(`Ungültige Importzeile ${index + 2}.`);
+      const asset = cleanLabel(row.asset, 48).toUpperCase();
+      const rawPrice = row.price_eur ?? row.priceEur;
+      const price = rawPrice === undefined || rawPrice === "" || rawPrice === null ? null : Number(String(rawPrice).replace(",", "."));
+      if (!asset || (price !== null && (!Number.isFinite(price) || price <= 0))) throw makeError(`Ungültige Importzeile ${index + 2}.`);
+      const externalId = cleanLabel(row.external_id || row.externalId || row.hash || `import-${wallet.id}-${source}-${index}-${timestamp}`, 180);
+      const fee = Number(String(row.fee || 0).replace(",", ".")) || 0;
+      const feeAsset = cleanLabel(row.fee_asset || row.feeAsset || asset, 48).toUpperCase() || asset;
+      const raw = row.raw || row;
+      insert.run(
+        wallet.id, externalId, cleanLabel(row.hash || externalId, 180), timestamp, direction, asset, asset, asset, 8,
+        amount, fee, feeAsset, cleanLabel(row.counterparty, 160) || null, price, cleanPurpose(row.purpose), purposeOrigin,
+        JSON.stringify({ source, profile, row: raw }),
+      );
+      imported += 1;
+    }
+    db.exec("COMMIT");
+  } catch (error) { db.exec("ROLLBACK"); throw error; }
+  return imported;
+}
+
+function getExchangeConnection(id) {
+  const connection = db.prepare(`
+    SELECT c.*, w.label AS wallet_label, w.chain AS wallet_chain, w.address AS wallet_address
+    FROM exchange_connections c JOIN wallets w ON w.id = c.wallet_id WHERE c.id = ?
+  `).get(id);
+  if (!connection) throw makeError("Börsenverbindung nicht gefunden.", 404);
+  return connection;
+}
+
+function exchangeConnectionView(connection) {
+  return {
+    id: connection.id,
+    provider: connection.provider,
+    label: connection.label,
+    walletId: connection.wallet_id,
+    walletLabel: connection.wallet_label,
+    walletChain: connection.wallet_chain,
+    walletAddress: connection.wallet_address,
+    lastSyncedAt: connection.last_synced_at,
+    createdAt: connection.created_at,
+    apiKeyConfigured: Boolean(connection.api_key),
+    apiSecretConfigured: Boolean(connection.api_secret),
+  };
+}
+
+function containsForbiddenKeyMaterial(value) {
+  const candidate = String(value || "").trim();
+  return /^(?:xprv|yprv|zprv|tprv|uprv|vprv)/i.test(candidate)
+    || /^(?:[a-z]+\s+){11,23}[a-z]+$/i.test(candidate);
+}
+
+async function syncExchangeConnection(connection) {
+  if (connection.provider !== "bitvavo") throw makeError("Für diese Börse ist noch kein Read-only-Adapter eingerichtet.");
+  const wallet = getWallet(connection.wallet_id);
+  const rows = await fetchBitvavoHistory({
+    apiBaseUrl: runtimeSettings().bitvavoApiBaseUrl,
+    apiKey: connection.api_key,
+    apiSecret: connection.api_secret,
+  });
+  const imported = importExternalRows(wallet, rows, { source: "bitvavo-api", purposeOrigin: "auto" });
+  db.prepare("UPDATE exchange_connections SET last_synced_at = datetime('now') WHERE id = ?").run(connection.id);
+  return { imported, provider: connection.provider, limited: rows.length >= 2500 };
+}
+
+app.get("/api/import/csv-profiles", (_request, response) => {
+  response.json({ profiles: Object.values(EXCHANGE_CSV_PROFILES) });
+});
+
+app.get("/api/exchange-connections", (_request, response, next) => {
+  try {
+    const connections = db.prepare(`
+      SELECT c.*, w.label AS wallet_label, w.chain AS wallet_chain, w.address AS wallet_address
+      FROM exchange_connections c JOIN wallets w ON w.id = c.wallet_id ORDER BY c.id DESC
+    `).all().map(exchangeConnectionView);
+    response.json({ providers: [{ id: "bitvavo", label: "Bitvavo · Read-only API" }], connections });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/exchange-connections", (request, response, next) => {
+  try {
+    const provider = String(request.body?.provider || "").trim().toLowerCase();
+    const walletId = asPositiveId(request.body?.walletId);
+    const label = cleanLabel(request.body?.label, 80) || "Bitvavo";
+    const apiKey = String(request.body?.apiKey || "").trim();
+    const apiSecret = String(request.body?.apiSecret || "").trim();
+    if (provider !== "bitvavo") throw makeError("Bitte eine unterstützte Börse auswählen.");
+    if (!walletId) throw makeError("Bitte eine Ziel-Wallet auswählen.");
+    getWallet(walletId);
+    if (apiKey.length < 8 || apiKey.length > 512 || apiSecret.length < 8 || apiSecret.length > 512) throw makeError("API-Key und Secret müssen zwischen 8 und 512 Zeichen lang sein.");
+    if (containsForbiddenKeyMaterial(apiKey) || containsForbiddenKeyMaterial(apiSecret)) throw makeError("Private Keys, xPrvs und Seed-Phrases werden niemals akzeptiert. Bitte ausschließlich einen Börsen-API-Key und dessen Secret verwenden.");
+    const result = db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret) VALUES (?, ?, ?, ?, ?)")
+      .run(provider, walletId, label, apiKey, apiSecret);
+    response.status(201).json(exchangeConnectionView(getExchangeConnection(Number(result.lastInsertRowid))));
+  } catch (error) {
+    if (String(error.message).includes("UNIQUE constraint failed")) return next(makeError("Diese Börsenverbindung ist für die Ziel-Wallet bereits hinterlegt."));
+    next(error);
+  }
+});
+
+app.post("/api/exchange-connections/:id/sync", (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültige Börsenverbindung.");
+    getExchangeConnection(id);
+    response.status(202).json({ job: enqueueJob("exchange_sync", { connectionId: id }) });
+  } catch (error) { next(error); }
+});
+
+app.delete("/api/exchange-connections/:id", (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültige Börsenverbindung.");
+    const deleted = db.prepare("DELETE FROM exchange_connections WHERE id = ?").run(id);
+    if (!deleted.changes) throw makeError("Börsenverbindung nicht gefunden.", 404);
+    response.status(204).end();
+  } catch (error) { next(error); }
+});
 
 app.post("/api/import/csv", (request, response, next) => {
   try {
     const walletId = asPositiveId(request.body?.walletId);
     if (!walletId) throw makeError("Bitte eine Ziel-Wallet auswählen.");
     const wallet = getWallet(walletId);
-    const rows = parseCsvRows(request.body?.csv);
+    const { profile, rows } = parseCsvRows(request.body?.csv, String(request.body?.profile || "generic").toLowerCase());
     if (rows.length > 2500) throw makeError("Maximal 2.500 CSV-Transaktionen gleichzeitig importieren.");
-    const insert = db.prepare(`INSERT INTO transactions (wallet_id, external_id, hash, timestamp, direction, asset, asset_symbol, asset_name, asset_decimals, amount, fee, fee_asset, counterparty, price_transaction_eur, price_source, purpose, purpose_origin, raw_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, 'manual', ?)
-      ON CONFLICT(wallet_id, external_id) DO UPDATE SET timestamp=excluded.timestamp, direction=excluded.direction, amount=excluded.amount, fee=excluded.fee, price_transaction_eur=excluded.price_transaction_eur, purpose=excluded.purpose, purpose_origin='manual', raw_json=excluded.raw_json, updated_at=datetime('now')`);
-    let imported = 0;
-    db.exec("BEGIN");
-    try {
-      for (const [index, row] of rows.entries()) {
-        const direction = String(row.direction || "").toLowerCase();
-        const amount = Number(String(row.amount || "").replace(",", "."));
-        const timestamp = new Date(row.timestamp).toISOString();
-        if (!['in', 'out', 'self'].includes(direction) || !Number.isFinite(amount) || amount <= 0 || Number.isNaN(new Date(row.timestamp).getTime())) throw makeError(`Ungültige CSV-Zeile ${index + 2}.`);
-        const asset = cleanLabel(row.asset, 48).toUpperCase();
-        const price = row.price_eur === undefined || row.price_eur === "" ? null : Number(String(row.price_eur).replace(",", "."));
-        if (!asset || (price !== null && (!Number.isFinite(price) || price <= 0))) throw makeError(`Ungültige CSV-Zeile ${index + 2}.`);
-        const externalId = cleanLabel(row.external_id || row.hash || `csv-${wallet.id}-${index}-${timestamp}`, 180);
-        insert.run(wallet.id, externalId, cleanLabel(row.hash || externalId, 180), timestamp, direction, asset, asset, asset, 8, amount, Number(String(row.fee || 0).replace(",", ".")) || 0, asset, cleanLabel(row.counterparty, 160) || null, price, cleanPurpose(row.purpose), JSON.stringify({ source: "csv", row }));
-        imported += 1;
-      }
-      db.exec("COMMIT");
-    } catch (error) { db.exec("ROLLBACK"); throw error; }
-    response.status(201).json({ imported, walletId: wallet.id });
+    const imported = importExternalRows(wallet, rows, { source: "csv", profile: profile.id, purposeOrigin: "manual" });
+    response.status(201).json({ imported, walletId: wallet.id, profile: profile.id });
   } catch (error) { next(error); }
 });
 
@@ -2457,7 +2852,15 @@ app.delete("/api/wallets/:id", (request, response, next) => {
     const id = asPositiveId(request.params.id);
     if (!id) throw makeError("Ungültige Wallet-ID.");
     getWallet(id);
+    const documents = db.prepare(`
+      SELECT d.stored_name FROM transaction_documents d
+      JOIN transactions t ON t.id = d.transaction_id WHERE t.wallet_id = ?
+    `).all(id);
     db.prepare("DELETE FROM wallets WHERE id = ?").run(id);
+    for (const document of documents) {
+      const documentPath = path.join(DOCUMENT_DIR, path.basename(document.stored_name));
+      if (fs.existsSync(documentPath)) fs.unlinkSync(documentPath);
+    }
     response.status(204).end();
   } catch (error) {
     next(error);

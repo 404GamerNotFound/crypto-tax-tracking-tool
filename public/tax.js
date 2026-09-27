@@ -1,7 +1,7 @@
 const el = (id) => document.getElementById(id);
 const currency = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
 const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" });
-const state = { report: null };
+const state = { report: null, optimizer: null };
 const money = (value) => value === null || value === undefined ? "k. A." : currency.format(Number(value));
 const amount = (value, asset) => `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 8 }).format(Number(value || 0))} ${asset}`;
 
@@ -37,6 +37,16 @@ function renderSnapshots(snapshots) {
   }));
 }
 async function loadSnapshots(year) { renderSnapshots((await api(`/api/tax-report/snapshots?year=${encodeURIComponent(year)}`)).snapshots); }
+function optimizerList(id, rows, formatter, emptyText) { const list = el(id); if (!rows.length) { list.replaceChildren(Object.assign(document.createElement("li"), { className: "muted", textContent: emptyText })); return; } list.replaceChildren(...rows.map((row) => { const item = document.createElement("li"); item.textContent = formatter(row); return item; })); }
+function renderOptimizer(data) {
+  state.optimizer = data;
+  optimizerList("holding-calendar", data.holdingCalendar || [], (lot) => `${lot.asset} · ${amount(lot.amount, lot.asset)} ab ${date.format(new Date(lot.eligibleAt))}`, "Keine offenen Haltefristen.");
+  optimizerList("loss-harvesting", data.lossHarvesting || [], (lot) => `${lot.asset} · mögliche Differenz ${money(lot.potentialLossEur)} · nur prüfen`, "Keine bewertbaren Verlustpositionen.");
+  const select = el("simulation-asset"); const previous = select.value; const assets = data.availableAssets || [];
+  if (!select.options.length || !assets.includes(previous)) { select.replaceChildren(...assets.map((asset) => new Option(asset, asset))); }
+  if (previous && assets.includes(previous)) select.value = previous;
+}
+async function loadOptimizer(year) { renderOptimizer(await api(`/api/tax-optimizer?year=${encodeURIComponent(year)}`)); }
 
 function render(report) {
   state.report = report;
@@ -56,16 +66,20 @@ function render(report) {
   el("profile-note").textContent = profile.ruleNote;
   el("profile-holding").textContent = profile.holdingPeriodEnabled ? `${profile.holdingPeriodDays} Tage` : "nicht angewendet";
   el("profile-threshold").textContent = profile.exemptionThresholdEnabled ? money(profile.exemptionThresholdEur) : "nicht angewendet";
+  el("profile-cost-basis").textContent = profile.costBasisMethod || "FIFO";
   el("profile-income-types").textContent = profile.incomePurposes.join(", ");
   const incomplete = summary.incompleteSaleSegments + summary.incompleteIncomeEntries;
   el("report-completeness").textContent = incomplete ? `${incomplete} Position${incomplete === 1 ? "" : "en"} sind unvollständig und nicht in EUR-Summen oder Steuerreserve enthalten. Prüfe historische Kurse, Gebühren und fehlende Anschaffungs-Chargen.` : "Alle im Report berücksichtigten Verkaufssegmente und Erträge besitzen die erforderlichen historischen Werte.";
   el("sales-status").textContent = `${summary.holdingPeriodExemptSaleSegments} Segmente mit erfüllter Haltefrist`;
   el("csv-export").href = `/api/tax-report.csv?year=${encodeURIComponent(report.year)}`;
+  el("advisor-export").href = `/api/tax-report/advisor-package?year=${encodeURIComponent(report.year)}`;
   el("pdf-export").href = `/tax-print.html?year=${encodeURIComponent(report.year)}`;
+  el("sales-title").textContent = `${profile.costBasisMethod || "FIFO"}-Verkaufssegmente`;
   renderRows("sales-list", report.sales, (sale) => { const row = document.createElement("tr"); row.append(cell(sale.asset), cell(date.format(new Date(sale.soldAt))), cell(sale.acquiredAt ? date.format(new Date(sale.acquiredAt)) : "k. A."), cell(sale.holdingDays === null || sale.holdingDays === undefined ? "k. A." : `${sale.holdingDays} Tage`), cell(amount(sale.amount, sale.asset)), cell(money(sale.proceedsEur)), cell(money(sale.costEur)), cell(money(sale.profitEur)), cell(salesTaxStatus(sale, profile)), cell(sale.complete ? "vollständig" : "unvollständig")); return row; });
   renderRows("staking-list", report.income, (entry) => { const row = document.createElement("tr"); row.append(cell(entry.type), cell(entry.asset), cell(date.format(new Date(entry.receivedAt))), cell(amount(entry.amount, entry.asset)), cell(money(entry.valueEur)), cell(entry.complete ? "vollständig" : "unvollständig")); return row; });
 }
-async function load(year) { try { const report = await api(`/api/tax-report?year=${encodeURIComponent(year || new Date().getFullYear())}`); render(report); await loadSnapshots(report.year); } catch (error) { toast(error.message, "error"); } }
+async function load(year) { try { const report = await api(`/api/tax-report?year=${encodeURIComponent(year || new Date().getFullYear())}`); render(report); await Promise.all([loadSnapshots(report.year), loadOptimizer(report.year)]); } catch (error) { toast(error.message, "error"); } }
 el("report-year").addEventListener("change", (event) => load(event.target.value));
 el("archive-report").addEventListener("click", async () => { if (!state.report) return; const button = el("archive-report"); button.disabled = true; try { const snapshot = await api("/api/tax-report/snapshots", { method: "POST", body: JSON.stringify({ year: state.report.year }) }); toast(`Snapshot gesichert (SHA-256 ${snapshot.checksum.slice(0, 16)}…).`); await loadSnapshots(state.report.year); } catch (error) { toast(error.message, "error"); } finally { button.disabled = false; } });
+el("sale-simulator").addEventListener("submit", async (event) => { event.preventDefault(); if (!state.report) return; try { const result = await api("/api/tax-optimizer/simulate", { method: "POST", body: JSON.stringify({ year: state.report.year, asset: el("simulation-asset").value, amount: el("simulation-amount").value, priceEur: el("simulation-price").value || null }) }); el("simulation-result").textContent = result.complete ? `Erlös ${money(result.proceedsEur)} · Gewinn ${money(result.profitEur)} · geschätzte Steuerreserve ${money(result.estimatedTaxEur)}.` : `Nicht genügend vollständig bewertete Lots vorhanden; offen: ${amount(result.missingAmount, result.asset)}.`; } catch (error) { toast(error.message, "error"); } });
 load();

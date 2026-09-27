@@ -30,6 +30,7 @@ function render(settings) {
   el("tax-country-code").value = profile.countryCode;
   el("tax-disposal-rate").value = profile.disposalTaxRatePercent;
   el("tax-income-rate").value = profile.incomeTaxRatePercent;
+  el("tax-cost-basis-method").value = profile.costBasisMethod || "FIFO";
   el("tax-holding-days").value = profile.holdingPeriodDays;
   el("tax-threshold").value = profile.exemptionThresholdEur;
   el("tax-disposal-enabled").checked = profile.disposalTaxEnabled;
@@ -116,6 +117,7 @@ el("settings-form").addEventListener("submit", async (event) => {
           label: el("tax-profile-label").value,
           disposalTaxRatePercent: el("tax-disposal-rate").value,
           incomeTaxRatePercent: el("tax-income-rate").value,
+          costBasisMethod: el("tax-cost-basis-method").value,
           holdingPeriodDays: el("tax-holding-days").value,
           exemptionThresholdEur: el("tax-threshold").value,
           disposalTaxEnabled: el("tax-disposal-enabled").checked,

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { amountFromUnits, normalizeEthereumTransaction, normalizeErc20Transfer } = require("../lib/ethereum");
+const { amountFromUnits, normalizeEthereumTransaction, normalizeErc20Transfer, normalizeNftTransfer } = require("../lib/ethereum");
 
 const wallet = "0x1111111111111111111111111111111111111111";
 const other = "0x2222222222222222222222222222222222222222";
@@ -33,4 +33,16 @@ test("normalisiert ERC-20-Transfers mit Token-Metadaten", () => {
   assert.equal(transfer.amount, 5);
   assert.equal(transfer.fee, 0);
   assert.equal(transfer.feeAsset, "ETH");
+});
+
+test("normalisiert ERC-721-Transfers getrennt von fungiblen ERC-20-Assets", () => {
+  const transfer = normalizeNftTransfer({
+    hash: `0x${"c".repeat(64)}`, logIndex: "3", timeStamp: "1700000000", from: other, to: wallet,
+    contractAddress: "0x1234567890123456789012345678901234567890", tokenID: "42", tokenName: "CryptoBuch Collectibles",
+  }, wallet);
+  assert.equal(transfer.direction, "in");
+  assert.equal(transfer.asset, "NFT:0x1234567890123456789012345678901234567890:42");
+  assert.equal(transfer.assetType, "nft");
+  assert.equal(transfer.priceKind, "nft");
+  assert.equal(transfer.autoPurpose, "NFT");
 });

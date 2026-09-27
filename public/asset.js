@@ -1,7 +1,7 @@
 const params = new URLSearchParams(window.location.search);
 const requestedChain = String(params.get("chain") || "BTC").toUpperCase();
 const requestedAsset = String(params.get("asset") || "");
-const state = { portfolio: null, selected: new Set(), editingHistoricPriceTransaction: null, chart: null, filters: { search: "", direction: "" } };
+const state = { portfolio: null, selected: new Set(), editingHistoricPriceTransaction: null, documentTransaction: null, chart: null, filters: { search: "", direction: "" } };
 const el = (id) => document.getElementById(id);
 const currency = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
 const price = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 4 });
@@ -43,7 +43,7 @@ function shorten(value, start = 10, end = 7) {
 function purposeInfo(transaction) {
   const defaults = {
     "Staking Rewards": ["✦", "staking", "Staking-Ertrag"], Kauf: ["↗", "purchase", "Kauf"], Verkauf: ["↘", "sale", "Verkauf"],
-    "Mining Reward": ["⛏", "mining", "Mining-Ertrag"], Airdrop: ["◇", "gift", "Airdrop"], "Lending-Ertrag": ["✦", "staking", "Lending-Ertrag"], "DeFi-Ertrag": ["✦", "staking", "DeFi-Ertrag"], Transfer: ["↔", "transfer", "Transfer"], Geschenk: ["◇", "gift", "Geschenk"],
+    "Mining Reward": ["⛏", "mining", "Mining-Ertrag"], Airdrop: ["◇", "gift", "Airdrop"], "Lending-Ertrag": ["✦", "staking", "Lending-Ertrag"], "DeFi-Ertrag": ["✦", "staking", "DeFi-Ertrag"], "DeFi Swap": ["⇄", "transfer", "DeFi-Swap"], "Liquidity Pool": ["◒", "staking", "Liquiditätspool"], Bridge: ["⇆", "transfer", "Bridge"], NFT: ["▣", "gift", "NFT"], Spam: ["!", "other", "Spam / ignorieren"], Transfer: ["↔", "transfer", "Transfer"], Geschenk: ["◇", "gift", "Geschenk"],
     Gebühr: ["−", "fee", "Gebühr"], Sonstiges: ["•", "other", "Sonstiges"],
   };
   const [icon, tone, label] = defaults[transaction.purpose] || (transaction.purpose ? ["•", "custom", transaction.purpose] : ["?", "unassigned", "Noch nicht zugeordnet"]);
@@ -265,7 +265,12 @@ function renderPurpose(transaction) {
     if (value === null) return (select.value = transaction.purpose || "");
     return setTransactionPurpose(transaction.id, value.trim());
   });
-  cell.append(card, select);
+  const documents = document.createElement("button");
+  documents.type = "button";
+  documents.className = "text-button historic-price-edit";
+  documents.textContent = "Nachweise";
+  documents.addEventListener("click", () => openDocumentModal(transaction));
+  cell.append(card, select, documents);
   return cell;
 }
 
@@ -507,6 +512,78 @@ async function saveHistoricPrice(useAutomatic = false) {
   }
 }
 
+function formatDocumentSize(value) {
+  return value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function renderDocuments(documents) {
+  const list = el("transaction-document-list");
+  if (!documents.length) {
+    list.replaceChildren(Object.assign(document.createElement("li"), { className: "muted", textContent: "Noch kein lokaler Nachweis angehängt." }));
+    return;
+  }
+  list.replaceChildren(...documents.map((entry) => {
+    const item = document.createElement("li");
+    const download = document.createElement("a");
+    download.href = `/api/transaction-documents/${encodeURIComponent(entry.id)}/download`;
+    download.textContent = entry.originalName;
+    download.target = "_blank";
+    download.rel = "noopener";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "text-button";
+    remove.textContent = "Entfernen";
+    remove.addEventListener("click", async () => {
+      if (!confirm(`Nachweis „${entry.originalName}“ wirklich lokal löschen?`)) return;
+      try {
+        await api(`/api/transaction-documents/${entry.id}`, { method: "DELETE" });
+        await loadDocuments();
+      } catch (error) { toast(error.message, "error"); }
+    });
+    item.append(download, ` · ${formatDocumentSize(entry.byteSize)} · SHA-256 ${entry.sha256.slice(0, 12)}… · `, remove);
+    return item;
+  }));
+}
+
+async function loadDocuments() {
+  if (!state.documentTransaction) return;
+  const payload = await api(`/api/transactions/${state.documentTransaction.id}/documents`);
+  renderDocuments(payload.documents || []);
+}
+
+async function openDocumentModal(transaction) {
+  state.documentTransaction = transaction;
+  el("transaction-document-form").reset();
+  el("transaction-document-error").hidden = true;
+  el("transaction-document-modal-copy").textContent = `${assetInfo(transaction.asset).symbol} · ${transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : "ohne Zeitstempel"}`;
+  el("transaction-document-modal").showModal();
+  try { await loadDocuments(); } catch (error) { toast(error.message, "error"); }
+}
+
+async function uploadDocument(event) {
+  event.preventDefault();
+  const file = el("transaction-document-file").files[0];
+  const error = el("transaction-document-error");
+  error.hidden = true;
+  try {
+    if (!state.documentTransaction || !file) throw new Error("Bitte zuerst einen Nachweis auswählen.");
+    if (file.size > 5 * 1024 * 1024) throw new Error("Ein Nachweis darf maximal 5 MB groß sein.");
+    const response = await fetch(`/api/transactions/${state.documentTransaction.id}/documents`, {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream", "X-Document-Name": encodeURIComponent(file.name) },
+      body: file,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Nachweis konnte nicht gespeichert werden.");
+    event.currentTarget.reset();
+    await loadDocuments();
+    toast("Nachweis lokal gespeichert.");
+  } catch (requestError) {
+    error.textContent = requestError.message;
+    error.hidden = false;
+  }
+}
+
 el("transaction-search").addEventListener("input", (event) => { state.filters.search = event.target.value; renderTransactions(); });
 el("direction-filter").addEventListener("change", (event) => { state.filters.direction = event.target.value; renderTransactions(); });
 el("select-all").addEventListener("change", (event) => {
@@ -520,4 +597,6 @@ el("refresh-chain").addEventListener("click", syncChain);
 el("close-historic-price-modal").addEventListener("click", closeHistoricPriceModal);
 el("historic-price-form").addEventListener("submit", (event) => { event.preventDefault(); saveHistoricPrice(); });
 el("restore-historic-price").addEventListener("click", () => saveHistoricPrice(true));
+el("close-transaction-document-modal").addEventListener("click", () => el("transaction-document-modal").close());
+el("transaction-document-form").addEventListener("submit", uploadDocument);
 loadPortfolio();
