@@ -20,7 +20,9 @@ function formatCurrency(value) {
 }
 
 function chainInfo() {
-  return state.portfolio?.chains?.[requestedChain] || { name: requestedChain, asset: requestedChain, decimals: 6, icon: requestedChain.slice(0, 1) };
+  return state.portfolio?.chains?.[requestedChain]
+    || (requestedChain === "EXCHANGE" ? { name: "Börse", asset: "", decimals: 8, icon: "⇄", explorer: {} } : null)
+    || { name: requestedChain, asset: requestedChain, decimals: 6, icon: requestedChain.slice(0, 1) };
 }
 
 function activeAssetId() {
@@ -438,7 +440,7 @@ async function loadPortfolio({ quiet = false } = {}) {
   try {
     if (!quiet) el("price-status").textContent = "Ansicht wird geladen …";
     state.portfolio = await api("/api/portfolio");
-    if (!state.portfolio.chains?.[requestedChain] || !state.portfolio.assets?.[activeAssetId()] || state.portfolio.assets[activeAssetId()].chain !== requestedChain) return window.location.replace("/");
+    if (!state.portfolio.assets?.[activeAssetId()] || state.portfolio.assets[activeAssetId()].chain !== requestedChain) return window.location.replace("/");
     renderPage();
   } catch (error) {
     toast(error.message, "error");

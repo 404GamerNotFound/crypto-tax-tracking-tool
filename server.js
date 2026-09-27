@@ -2228,8 +2228,7 @@ async function portfolioResponse() {
       },
     },
     purposePresets: PURPOSE_PRESETS,
-    chains: {
-      ...Object.fromEntries(Object.entries(CHAIN_CONFIG).map(([key, value]) => [key, {
+    chains: Object.fromEntries(Object.entries(CHAIN_CONFIG).map(([key, value]) => [key, {
       name: value.name,
       asset: value.asset,
       decimals: value.decimals,
@@ -2238,9 +2237,7 @@ async function portfolioResponse() {
       addressHint: value.addressHint,
       supportsXpub: key === "BTC",
       explorer: value.explorer,
-      }])),
-      EXCHANGE: { name: "Börse", asset: "", decimals: 8, icon: "⇄", addressPlaceholder: "", addressHint: "Read-only Börsenbestände", supportsXpub: false, explorer: {} },
-    },
+    }])),
   };
 }
 
