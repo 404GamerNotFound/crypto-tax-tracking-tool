@@ -125,25 +125,77 @@ function renderTransfers(items) {
   el("transfer-suggestion-empty").hidden = items.length > 0;
 }
 
-function walletOptions(id) {
-  const select = el(id);
+function providerDefinition(providerId) {
+  return state.exchange.providers.find((provider) => provider.id === providerId) || {};
+}
+
+function importTargetOptions() {
+  const select = el("csv-target");
   const current = select.value;
   select.replaceChildren();
-  (state.portfolio?.wallets || []).forEach((wallet) => select.add(new Option((wallet.label || wallet.address) + " · " + wallet.chain, wallet.id)));
+  const profile = state.csvProfiles.find((item) => item.id === el("csv-profile").value) || {};
+  const wallets = state.portfolio?.wallets || [];
+  const allowedProviders = new Set(profile.targetProviders || []);
+  if (wallets.length && !allowedProviders.size) {
+    const group = document.createElement("optgroup");
+    group.label = "Eigene Wallets";
+    wallets.forEach((wallet) => group.append(new Option((wallet.label || wallet.address) + " · " + wallet.chain, `wallet:${wallet.id}`)));
+    select.append(group);
+  }
+  const exchanges = (state.exchange.connections || []).filter((connection) => allowedProviders.has(connection.provider));
+  if (exchanges.length) {
+    const group = document.createElement("optgroup");
+    group.label = "Börsenkonten";
+    exchanges.forEach((connection) => group.append(new Option((connection.label || connection.provider) + " · Börsenkonto", `exchange:${connection.id}`)));
+    select.append(group);
+  }
+  if (!select.options.length) {
+    const requiredProvider = [...allowedProviders].map((provider) => providerDefinition(provider).defaultLabel || provider).join(" oder ");
+    select.add(new Option(`Zuerst ${requiredProvider || "eine Zielquelle"} verbinden`, ""));
+  }
   select.value = current || select.options[0]?.value || "";
 }
 
 function updateExchangeProviderForm() {
-  const isBinance = el("exchange-provider").value === "binance";
-  el("exchange-symbols-field").hidden = !isBinance;
-  el("exchange-label").placeholder = isBinance ? "z. B. Binance Spot" : "z. B. Bitvavo";
-  el("exchange-provider-help").textContent = isBinance
-    ? "Binance: API-Key nur mit Leserecht erstellen; Trading, Auszahlungen und Transfers deaktiviert lassen. Spot-Käufe/-Verkäufe, Ein- und Auszahlungen, Ausschüttungen sowie Gebühren werden getrennt importiert. Leere Märkte werden aus aktuellen Beständen ermittelt; ergänze alte Märkte für bereits verkaufte Coins."
-    : "Lege einen separaten API-Key mit minimalen Rechten an – insbesondere niemals Auszahlungen freigeben. CryptoBuch sendet ausschließlich lesende GET-Anfragen. Key und Secret werden nur lokal gespeichert und nie erneut angezeigt.";
+  const provider = providerDefinition(el("exchange-provider").value);
+  const api = provider.importMode === "api";
+  el("exchange-symbols-field").hidden = !provider.supportsSymbols;
+  el("exchange-label").placeholder = `z. B. ${provider.defaultLabel || "Börse"}`;
+  el("exchange-api-key-field").hidden = !api;
+  el("exchange-api-secret-field").hidden = !api;
+  el("exchange-api-key").required = api;
+  el("exchange-api-secret").required = api;
+  el("exchange-api-key-label").textContent = provider.apiKeyLabel || "Read-only API-Key";
+  el("exchange-api-secret-label").textContent = provider.apiSecretLabel || "API-Secret";
+  el("exchange-provider-help").textContent = provider.help || "Wähle eine unterstützte Börsenquelle.";
+  el("exchange-security-copy").textContent = api
+    ? "Read-only & lokal: Die Zugangsdaten dürfen nur Kontostände und Historie lesen. Sie werden nach dem Speichern nicht erneut angezeigt."
+    : "Nur lokale Belege: Für diese Quelle werden keine API-, Login- oder Zugangsdaten benötigt oder gespeichert.";
+  if (!api) {
+    el("exchange-api-key").value = "";
+    el("exchange-api-secret").value = "";
+    el("exchange-symbols").value = "";
+  }
+  el("exchange-connection-form").querySelector('button[type="submit"]').textContent = api ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
+}
+
+function openExchangeCsvImport(connection) {
+  const profileId = connection.csvProfile || providerDefinition(connection.provider).csvProfile;
+  const profile = el("csv-profile");
+  if (!profileId || ![...profile.options].some((option) => option.value === profileId)) {
+    toast("Für diese Börse ist noch kein passendes CSV-Profil eingerichtet.", "error");
+    return;
+  }
+  profile.value = profileId;
+  el("csv-profile-help").textContent = state.csvProfiles.find((item) => item.id === profileId)?.detail || "CSV-Profil wählen.";
+  importTargetOptions();
+  el("csv-target").value = `exchange:${connection.id}`;
+  document.getElementById("csv-import-form").scrollIntoView({ behavior: "smooth", block: "center" });
+  window.setTimeout(() => el("csv-file").focus(), 350);
 }
 
 function providerMark(provider) {
-  return provider === "binance" ? "BN" : provider === "bitvavo" ? "BV" : "EX";
+  return provider === "binance" ? "BN" : provider === "bitvavo" ? "BV" : provider === "etoro" ? "eT" : provider === "trade_republic" ? "TR" : "EX";
 }
 
 function connectionCard(connection) {
@@ -151,8 +203,10 @@ function connectionCard(connection) {
   const head = node("div", "exchange-connection-card-head");
   const mark = node("span", "exchange-provider-mark " + connection.provider, providerMark(connection.provider));
   const name = node("div", "exchange-connection-name");
-  name.append(node("strong", "", connection.label || connection.provider), node("span", "", connection.provider === "binance" ? "Binance Spot · Read-only" : "Bitvavo · Read-only"));
-  const status = node("span", "sync-status" + (connection.lastSyncedAt ? " is-synced" : ""), connection.lastSyncedAt ? "Synchronisiert" : "Bereit");
+  const provider = providerDefinition(connection.provider);
+  const csv = connection.importMode === "csv";
+  name.append(node("strong", "", connection.label || provider.defaultLabel || connection.provider), node("span", "", `${provider.label || connection.provider} · ${csv ? "lokaler CSV-Import" : "Read-only"}`));
+  const status = node("span", "sync-status" + (connection.lastSyncedAt ? " is-synced" : ""), connection.lastSyncedAt ? (csv ? "Importiert" : "Synchronisiert") : "Bereit");
   head.append(mark, name, status);
   const details = node("dl", "exchange-connection-details");
   const account = node("div");
@@ -166,11 +220,12 @@ function connectionCard(connection) {
     details.append(markets);
   }
   const footer = node("div", "exchange-connection-card-footer");
-  footer.append(node("p", "", "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
+  footer.append(node("p", "", csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
   const actions = node("div", "exchange-connection-actions");
-  const sync = node("button", "button button-secondary button-small", "Jetzt synchronisieren");
+  const sync = node("button", "button button-secondary button-small", csv ? "CSV importieren" : "Jetzt synchronisieren");
   sync.type = "button";
   sync.addEventListener("click", async () => {
+    if (csv) return openExchangeCsvImport(connection);
     sync.disabled = true;
     sync.textContent = "Sync gestartet …";
     try {
@@ -208,7 +263,7 @@ function renderExchangeConnections() {
   const connections = state.exchange.connections || [];
   if (!connections.length) {
     const empty = node("li", "exchange-connection-empty");
-    empty.append(node("span", "", "⌁"), node("strong", "", "Noch keine Börse verbunden"), node("p", "", "Lege eine Read-only-Verbindung an. Der erste Import und Abgleich startet danach automatisch."));
+    empty.append(node("span", "", "⌁"), node("strong", "", "Noch keine Börse verbunden"), node("p", "", "Lege eine Read-only-Verbindung oder ein Börsenkonto für lokale Beleg-CSV an."));
     el("exchange-connection-list").replaceChildren(empty);
     return;
   }
@@ -231,12 +286,12 @@ function render() {
     return tr;
   }));
   el("duplicate-empty").hidden = (data.possibleDuplicates || []).length > 0;
-  walletOptions("csv-wallet");
   const profile = el("csv-profile");
   const previous = profile.value;
   profile.replaceChildren(...state.csvProfiles.map((item) => new Option(item.label, item.id)));
   profile.value = previous || "generic";
   el("csv-profile-help").textContent = state.csvProfiles.find((item) => item.id === profile.value)?.detail || "CSV-Profil wählen.";
+  importTargetOptions();
   renderExchangeConnections();
 }
 
@@ -331,6 +386,7 @@ el("retry-prices").addEventListener("click", async () => {
 });
 el("csv-profile").addEventListener("change", () => {
   el("csv-profile-help").textContent = state.csvProfiles.find((item) => item.id === el("csv-profile").value)?.detail || "CSV-Profil wählen.";
+  importTargetOptions();
 });
 el("exchange-provider").addEventListener("change", updateExchangeProviderForm);
 el("csv-import-form").addEventListener("submit", async (event) => {
@@ -339,7 +395,12 @@ el("csv-import-form").addEventListener("submit", async (event) => {
   try {
     const file = el("csv-file").files[0];
     if (!file) throw new Error("Bitte zuerst eine CSV-Datei auswählen.");
-    const result = await api("/api/import/csv", { method: "POST", body: JSON.stringify({ walletId: el("csv-wallet").value, profile: el("csv-profile").value, csv: await file.text() }) });
+    const [targetKind, targetId] = String(el("csv-target").value || "").split(":");
+    if (!targetId) throw new Error("Bitte eine Zielquelle auswählen.");
+    const result = await api("/api/import/csv", { method: "POST", body: JSON.stringify({
+      ...(targetKind === "exchange" ? { exchangeConnectionId: targetId } : { walletId: targetId }),
+      profile: el("csv-profile").value, csv: await file.text(),
+    }) });
     toast(result.imported.toLocaleString("de-DE") + " CSV-Transaktionen importiert.");
     form.reset();
     await load();
@@ -357,12 +418,12 @@ el("exchange-connection-form").addEventListener("submit", async (event) => {
       apiKey: el("exchange-api-key").value, apiSecret: el("exchange-api-secret").value, symbols: el("exchange-symbols").value,
     }) });
     form.reset();
-    toast(result.job ? "Read-only-Börsenverbindung gespeichert; Sync-Job #" + result.job.id + " gestartet." : "Read-only-Börsenverbindung gespeichert.");
+    toast(result.job ? "Read-only-Börsenverbindung gespeichert; Sync-Job #" + result.job.id + " gestartet." : "Börsenkonto für lokale CSV-Belege gespeichert.");
     await load();
   } catch (error) { toast(error.message, "error"); }
   finally {
     submit.disabled = false;
-    submit.textContent = "Börse speichern & abgleichen";
+    submit.textContent = providerDefinition(el("exchange-provider").value).importMode === "api" ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
   }
 });
 el("quality-document-form").addEventListener("submit", async (event) => {

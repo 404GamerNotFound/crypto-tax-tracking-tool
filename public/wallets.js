@@ -1,4 +1,4 @@
-const state = { portfolio: null };
+const state = { portfolio: null, exchange: null };
 const el = (id) => document.getElementById(id);
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
 
@@ -110,14 +110,75 @@ function renderWallet(wallet) {
   return item;
 }
 
+function exchangeName(connection) {
+  const defaults = { binance: "Binance Spot", bitvavo: "Bitvavo", etoro: "eToro", trade_republic: "Trade Republic" };
+  return connection.label || defaults[connection.provider] || "Börsenkonto";
+}
+
+function exchangeProviderLabel(connection) {
+  const labels = { binance: "Binance Spot · Read-only", bitvavo: "Bitvavo · Read-only", etoro: "eToro · Read-only", trade_republic: "Trade Republic · lokaler CSV-Import" };
+  return labels[connection.provider] || "Börsenquelle";
+}
+
+function renderExchange(connection) {
+  const item = document.createElement("article");
+  item.className = "wallet-page-item exchange-page-item";
+  const identity = document.createElement("div");
+  identity.className = "wallet-page-identity";
+  const icon = document.createElement("span");
+  icon.className = `exchange-source-icon ${connection.provider || ""}`;
+  icon.textContent = connection.provider === "binance" ? "B" : connection.provider === "bitvavo" ? "V" : connection.provider === "etoro" ? "eT" : "TR";
+  const copy = document.createElement("div");
+  const title = document.createElement("h3");
+  title.textContent = exchangeName(connection);
+  const meta = document.createElement("p");
+  meta.textContent = `${exchangeProviderLabel(connection)} · eigenes Börsenkonto`;
+  copy.append(title, meta);
+  identity.append(icon, copy);
+
+  const sync = document.createElement("div");
+  sync.className = "wallet-page-sync";
+  const syncLabel = document.createElement("span");
+  syncLabel.className = "card-label";
+  syncLabel.textContent = "LETZTER IMPORT";
+  const syncDate = document.createElement("strong");
+  syncDate.textContent = connection.lastSyncedAt ? dateTime.format(new Date(`${connection.lastSyncedAt}Z`)) : connection.importMode === "csv" ? "Noch kein CSV-Import" : "Noch nicht synchronisiert";
+  sync.append(syncLabel, syncDate);
+
+  const actions = document.createElement("div");
+  actions.className = "wallet-page-actions";
+  const details = document.createElement("a");
+  details.className = "button button-secondary button-small";
+  details.href = `/exchange.html?id=${encodeURIComponent(connection.id)}`;
+  details.textContent = "Börse öffnen";
+  const refresh = document.createElement(connection.importMode === "csv" ? "a" : "button");
+  refresh.className = "button button-primary button-small";
+  refresh.textContent = connection.importMode === "csv" ? "CSV importieren" : "Synchronisieren";
+  if (connection.importMode === "csv") refresh.href = "/quality.html#csv-import-form";
+  else refresh.addEventListener("click", () => syncExchange(connection, refresh));
+  const manage = document.createElement("a");
+  manage.className = "text-button";
+  manage.href = "/quality.html#exchange-connection-form";
+  manage.textContent = "Verwalten";
+  actions.append(details, refresh, manage);
+  item.append(identity, sync, actions);
+  return item;
+}
+
 function render() {
   const wallets = state.portfolio?.wallets || [];
+  const exchanges = state.exchange?.connections || [];
   el("wallet-count").textContent = wallets.length.toLocaleString("de-DE");
-  el("wallet-status").textContent = `${wallets.length.toLocaleString("de-DE")} Wallet${wallets.length === 1 ? "" : "s"} eingerichtet`;
+  el("exchange-count").textContent = exchanges.length.toLocaleString("de-DE");
+  el("wallet-status").textContent = `${wallets.length.toLocaleString("de-DE")} Wallet${wallets.length === 1 ? "" : "s"} · ${exchanges.length.toLocaleString("de-DE")} Börse${exchanges.length === 1 ? "" : "n"}`;
   const list = el("wallet-list");
   list.replaceChildren();
   for (const wallet of wallets) list.append(renderWallet(wallet));
   el("wallet-empty").hidden = wallets.length > 0;
+  const exchangeList = el("exchange-list");
+  exchangeList.replaceChildren();
+  for (const exchange of exchanges) exchangeList.append(renderExchange(exchange));
+  el("exchange-empty").hidden = exchanges.length > 0;
 
   const select = el("wallet-chain");
   const requested = String(new URLSearchParams(window.location.search).get("chain") || "").toUpperCase();
@@ -156,8 +217,10 @@ function updateWalletFields() {
 
 async function loadPortfolio({ quiet = false } = {}) {
   try {
-    if (!quiet) el("wallet-status").textContent = "Wallets werden geladen …";
-    state.portfolio = await api("/api/portfolio");
+    if (!quiet) el("wallet-status").textContent = "Bestände werden geladen …";
+    const [portfolio, exchange] = await Promise.all([api("/api/portfolio"), api("/api/exchange-connections")]);
+    state.portfolio = portfolio;
+    state.exchange = exchange;
     render();
   } catch (error) {
     toast(error.message, "error");
@@ -191,6 +254,20 @@ async function syncWallet(wallet, button) {
   }
 }
 
+async function syncExchange(connection, button) {
+  try {
+    setBusy(button, true, "Synchronisiert …");
+    const queued = await api(`/api/exchange-connections/${connection.id}/sync`, { method: "POST" });
+    const result = await waitForJob(queued.job.id);
+    await loadPortfolio({ quiet: true });
+    toast(`${(result.imported || 0).toLocaleString("de-DE")} Börsenbuchungen synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}.`);
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    setBusy(button, false);
+  }
+}
+
 async function waitForJob(id) {
   for (let attempt = 0; attempt < 240; attempt += 1) {
     const job = await api(`/api/jobs/${id}`);
@@ -203,12 +280,19 @@ async function waitForJob(id) {
 
 async function syncAll() {
   const wallets = state.portfolio?.wallets || [];
-  if (!wallets.length) return openWalletModal();
+  const exchanges = (state.exchange?.connections || []).filter((connection) => connection.syncAvailable !== false);
+  if (!wallets.length && !exchanges.length) return openWalletModal();
   const button = el("refresh-all");
   setBusy(button, true, "Synchronisiert …");
   try {
-    const queued = await api("/api/jobs/sync", { method: "POST", body: JSON.stringify({ walletIds: wallets.map((wallet) => wallet.id) }) });
-    const results = await Promise.all(queued.jobs.map((job) => waitForJob(job.id)));
+    const jobs = [];
+    if (wallets.length) {
+      const queued = await api("/api/jobs/sync", { method: "POST", body: JSON.stringify({ walletIds: wallets.map((wallet) => wallet.id) }) });
+      jobs.push(...queued.jobs);
+    }
+    const exchangeJobs = await Promise.all(exchanges.map((connection) => api(`/api/exchange-connections/${connection.id}/sync`, { method: "POST" })));
+    jobs.push(...exchangeJobs.map((entry) => entry.job));
+    const results = await Promise.all(jobs.map((job) => waitForJob(job.id)));
     await loadPortfolio({ quiet: true });
     toast(`${results.reduce((sum, item) => sum + item.imported, 0).toLocaleString("de-DE")} Transaktionen aktualisiert.`);
   } catch (error) {

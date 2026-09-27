@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Börsenbestände und Buchungsjournal in CryptoBuch" />
+    <title>CryptoBuch · Börse</title>
+    <link rel="stylesheet" href="/styles.css?v=20260927-4" />
+  </head>
+  <body>
+    <div class="shell asset-page-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="CryptoBuch Dashboard"><span class="brand-mark" aria-hidden="true">₿</span><span>CryptoBuch</span></a>
+        <nav class="topbar-nav" aria-label="Hauptnavigation">
+          <a class="topbar-link" href="/">Dashboard</a>
+          <a class="topbar-link is-active" href="/wallets.html">Crypto-Bestände</a>
+          <a class="topbar-link" href="/quality.html">Datenqualität</a>
+          <a class="topbar-link" href="/tax.html">Steuerreport</a>
+          <a class="topbar-link" href="/maintenance.html">Betrieb</a>
+          <a class="topbar-link" href="/settings.html">Einstellungen</a>
+        </nav>
+        <div class="topbar-status" id="exchange-status" aria-live="polite">Börse wird geladen …</div>
+      </header>
+
+      <main class="asset-main exchange-main">
+        <section class="asset-hero" aria-labelledby="exchange-title">
+          <div>
+            <a class="back-link" href="/wallets.html">← Crypto-Bestände</a>
+            <div class="asset-hero-heading">
+              <span id="exchange-icon" class="asset-hero-icon exchange" aria-hidden="true">⇄</span>
+              <div>
+                <p class="eyebrow">BÖRSEN-DETAILANSICHT</p>
+                <h1 id="exchange-title">Börse</h1>
+                <p id="exchange-subtitle">Read-only-Bestände und alle lokal gespeicherten Börsenbuchungen.</p>
+              </div>
+            </div>
+          </div>
+          <div class="hero-actions"><a class="button button-secondary" href="/quality.html#exchange-connection-form">Börse verwalten</a><button class="button button-primary" id="refresh-exchange">Börse aktualisieren</button></div>
+        </section>
+
+        <section id="exchange-metrics" class="asset-metrics" aria-label="Börsenübersicht"></section>
+
+        <section class="exchange-holdings-panel" aria-labelledby="exchange-holdings-title">
+          <div class="section-heading exchange-holdings-heading"><div><p class="eyebrow">BESTÄNDE AUF DER BÖRSE</p><h2 id="exchange-holdings-title">Aktuelle Assets</h2></div><p class="section-copy">Berechnet aus allen gespeicherten Ein- und Ausgängen dieses Börsenkontos.</p></div>
+          <div class="exchange-holdings-grid" id="exchange-holdings"></div>
+          <div class="transactions-empty" id="exchange-holdings-empty" hidden><span class="empty-icon">◇</span><strong>Keine Bestände erkannt</strong><p>Alle bisher importierten Bewegungen ergeben aktuell keinen positiven Bestand.</p></div>
+        </section>
+
+        <section class="transactions-panel asset-transactions-panel" aria-labelledby="exchange-transactions-title">
+          <div class="section-heading transactions-title"><div><p class="eyebrow">VOLLSTÄNDIGES BUCHUNGSJOURNAL</p><h2 id="exchange-transactions-title">Alle Börsenbuchungen</h2></div><button class="icon-button" id="reload-exchange" aria-label="Ansicht neu laden" title="Ansicht neu laden">↻</button></div>
+          <div class="toolbar"><label class="search-control"><span class="visually-hidden">Börsenbuchungen durchsuchen</span><span aria-hidden="true">⌕</span><input id="transaction-search" type="search" placeholder="Asset, Hash oder Zweck suchen" autocomplete="off" /></label><label class="select-control"><span class="visually-hidden">Richtung filtern</span><select id="direction-filter"><option value="">Ein- &amp; Ausgänge</option><option value="in">Eingänge</option><option value="out">Ausgänge</option><option value="self">Eigene Transfers</option></select></label></div>
+          <div class="table-wrap"><table><thead><tr><th>Vorgang</th><th>Asset</th><th>Betrag</th><th>Preis jetzt</th><th>Preis Transaktionsdatum</th><th>Herkunft / Zweck</th></tr></thead><tbody id="exchange-transaction-list"></tbody></table><div id="exchange-transactions-empty" class="transactions-empty" hidden><span class="empty-icon">⌁</span><strong>Keine Buchungen gefunden</strong><p>Synchronisiere die Börse oder passe die Filter an.</p></div></div>
+          <p class="data-note">Die Ansicht zeigt sämtliche lokal gespeicherten Buchungen dieser Börsenverbindung. Die Verfügbarkeit sehr alter Daten hängt von der jeweiligen Börsen-API ab.</p>
+        </section>
+      </main>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/notifications.js?v=20260925-1" defer></script>
+    <script src="/exchange.js?v=20260927-2" defer></script>
+  </body>
+</html>

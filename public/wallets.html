@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Wallet-Verwaltung für CryptoBuch" />
-    <title>CryptoBuch · Wallets</title>
-    <link rel="stylesheet" href="/styles.css?v=20260922-15" />
+    <meta name="description" content="Crypto-Bestände, Wallets und Börsenverbindungen in CryptoBuch" />
+    <title>CryptoBuch · Crypto-Bestände</title>
+    <link rel="stylesheet" href="/styles.css?v=20260927-4" />
   </head>
   <body>
     <div class="shell wallet-page-shell">
@@ -16,21 +16,21 @@
         </a>
         <nav class="topbar-nav" aria-label="Hauptnavigation">
           <a class="topbar-link" href="/">Dashboard</a>
-          <a class="topbar-link is-active" href="/wallets.html">Wallets</a>
+          <a class="topbar-link is-active" href="/wallets.html">Crypto-Bestände</a>
           <a class="topbar-link" href="/quality.html">Datenqualität</a>
           <a class="topbar-link" href="/tax.html">Steuerreport</a>
           <a class="topbar-link" href="/maintenance.html">Betrieb</a>
           <a class="topbar-link" href="/settings.html">Einstellungen</a>
         </nav>
-        <div class="topbar-status" id="wallet-status" aria-live="polite">Wallets werden geladen …</div>
+        <div class="topbar-status" id="wallet-status" aria-live="polite">Bestände werden geladen …</div>
       </header>
 
       <main class="wallets-main">
         <section class="page-hero compact-hero" aria-labelledby="wallets-title">
           <div>
             <p class="eyebrow">DATENQUELLEN</p>
-            <h1 id="wallets-title">Deine <em>Wallets.</em></h1>
-            <p>Verwalte öffentliche Adressen und Bitcoin-xPubs getrennt vom Portfolio. Jede Wallet lässt sich einzeln synchronisieren oder entfernen.</p>
+            <h1 id="wallets-title">Deine <em>Crypto-Bestände.</em></h1>
+            <p>Verwalte öffentliche Wallets und verbundene Börsen getrennt. Wallets bleiben On-Chain-Quellen; Börsen erhalten ein eigenes Buchungskonto.</p>
           </div>
           <div class="hero-actions">
             <button class="button button-primary" id="open-wallet-modal">+ Wallet hinzufügen</button>
@@ -44,8 +44,8 @@
         <section class="wallets-page-panel" aria-labelledby="wallet-list-title">
           <div class="section-heading page-section-heading">
             <div>
-              <p class="eyebrow">QUELLEN</p>
-              <h2 id="wallet-list-title">Eingerichtete Wallets</h2>
+              <p class="eyebrow">ON-CHAIN-QUELLEN</p>
+              <h2 id="wallet-list-title">Deine Wallets</h2>
             </div>
             <span class="count-badge" id="wallet-count">0</span>
           </div>
@@ -55,6 +55,24 @@
             <strong>Noch keine Wallet</strong>
             <p>Füge eine öffentliche Adresse oder einen Bitcoin-xPub hinzu.</p>
             <button class="button button-primary" id="open-wallet-empty">Wallet anlegen</button>
+          </div>
+        </section>
+
+        <section class="wallets-page-panel exchange-sources-panel" aria-labelledby="exchange-list-title">
+          <div class="section-heading page-section-heading">
+            <div>
+              <p class="eyebrow">VERBUNDENE BÖRSEN</p>
+              <h2 id="exchange-list-title">Deine Börsen</h2>
+            </div>
+            <span class="count-badge" id="exchange-count">0</span>
+          </div>
+          <p class="section-copy exchange-section-copy">Jede Verbindung besitzt ein separates Börsenkonto. Öffne eine Börse für ihre Bestände und das vollständige Buchungsjournal.</p>
+          <div class="wallets-page-list exchange-sources-list" id="exchange-list"></div>
+          <div id="exchange-empty" class="wallet-empty wallet-page-empty exchange-page-empty" hidden>
+            <span class="empty-icon">⇄</span>
+            <strong>Noch keine Börse verbunden</strong>
+            <p>Verbinde Binance Spot oder Bitvavo mit einem separaten API-Key mit Leserecht.</p>
+            <a class="button button-primary" href="/quality.html#exchange-connection-form">Börse verbinden</a>
           </div>
         </section>
       </main>
@@ -155,6 +173,6 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script src="/notifications.js?v=20260925-1" defer></script>
-    <script src="/wallets.js?v=20260927-1" defer></script>
+    <script src="/wallets.js?v=20260927-3" defer></script>
   </body>
 </html>

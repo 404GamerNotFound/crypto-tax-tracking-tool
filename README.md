@@ -121,9 +121,29 @@ Wallets lassen sich beim Anlegen mit einer Gruppe und bis zu zwölf Tags struktu
 
 Unter **Datenqualität → Börse verbinden** kann eine Binance-Spot-Verbindung angelegt werden. Für jede Verbindung legt CryptoBuch automatisch ein eigenes, internes **Börsenkonto** als Buchungsquelle an – eine Börse wird niemals einer Blockchain-Wallet wie BTC oder BCH zugeordnet. Der anschließende Transfer-Abgleich prüft dennoch alle lokalen Wallets. Erstelle hierfür bei Binance einen **separaten API-Key mit ausschließlich Leserecht**. Trading, Auszahlungen und Transfers müssen deaktiviert bleiben. Nach dem Speichern startet CryptoBuch die erste serielle Synchronisierung und danach den lokalen Transfer-Abgleich automatisch. CryptoBuch sendet nur signierte `GET`-Abfragen; API-Key und Secret bleiben im lokalen Datenverzeichnis und werden nach dem Speichern nicht mehr an den Browser ausgegeben.
 
+Unter **Crypto-Bestände** stehen On-Chain-Wallets oben und verbundene Börsen darunter. Die Detailansicht einer Börse zeigt ausschließlich deren aktuelle Salden sowie jede lokal gespeicherte Börsenbuchung; sie fasst keine Wallet-Transaktionen der gleichen Assets hinzu.
+
 Der Adapter liest Kontobestände, Spot-Trades, Einzahlungen, Auszahlungen sowie Asset-Dividenden. Das Mapping ist transparent: Spot-Kauf/-Verkauf wird als `Kauf`/`Verkauf` importiert; nicht-fiat Gegenbuchungen bleiben als eigene Asset-Bewegung sichtbar, Ein-/Auszahlungen als `Transfer`, eindeutig erkennbare Earn-/Staking-Ausschüttungen als `Staking Rewards` und Gebühren als `Gebühr`. USDT, USDC, DAI, FDUSD und BUSD werden als Börsenassets mit eigener Kursquelle geführt – nie mit dem Kurs der zufällig gewählten Ziel-Wallet. Für bereits verkaufte oder nicht mehr gehaltene Märkte können im Dialog optional Marktpaare wie `BTCEUR`, `BTCUSDT` oder `ETHEUR` ergänzt werden. Ohne Liste werden Spot-Märkte aus den aktuellen Beständen abgeleitet.
 
 Die direkte API deckt bewusst die Spot-Wallet ab; Futures, Margin, Kredit, NFT und sonstige Binance-Produkte besitzen getrennte APIs und werden nicht stillschweigend als Spot-Bewegung interpretiert. Für diese oder für sehr alte, umfangreiche Historien exportiere die Binance-Transaktionshistorie und importiere sie über das Profil **Binance Transaktionshistorie**. Ein Durchlauf importiert höchstens 2.500 Buchungszeilen; fehlende historische Kurse werden anschließend über den vorhandenen seriellen, gedrosselten Kurs-Job nachbearbeitet.
+
+### eToro · Read-only
+
+Unter **Datenqualität → Börse verbinden** steht zusätzlich **eToro · Read-only API** zur Verfügung. eToro verwendet dafür zwei getrennte, öffentliche Integrations-Zugangsdaten: den **Public API-Key** (`x-api-key`) und den **User-Key** (`x-user-key`). CryptoBuch legt daraus ein eigenes Börsenkonto an und fragt ausschließlich die Trade-Historie per `GET` ab – ohne Handels-, Auszahlungs- oder Transferrechte. Jede Anfrage erhält eine neue Request-ID; die Seiten werden seriell mit mindestens 1,1 Sekunden Abstand abgefragt und auf 2.500 Buchungszeilen begrenzt.
+
+Nur Einträge mit einer expliziten Krypto-Einheitenmenge werden übernommen. Ein in USD ausgewiesener eToro-Ausführungspreis wird **nie** als EUR-Kaufkurs fehlinterpretiert; der vorhandene historische Preis-Job ergänzt EUR-Werte anschließend nur über die normalen Kursquellen. Nicht-krypto Positionen, CFDs und Datensätze ohne Menge bleiben außen vor. Die offizielle eToro-API dokumentiert Portfolio-, Order- und Historienzugriff sowie die verpflichtenden Header und Limits. Siehe [eToro Builder Guide](https://builders.etoro.com/get-started) und [eToro Trading API](https://builders.etoro.com/products/trading).
+
+Die Basisadresse ist unter **Einstellungen → Preisdaten** konfigurierbar oder kann beim ersten Start gesetzt werden:
+
+```dotenv
+ETORO_API_BASE_URL=https://public-api.etoro.com/api/v1
+```
+
+### Trade Republic · lokale Beleg-CSV
+
+**Trade Republic** wird als separates Börsenkonto ohne API-Zugang angelegt. CryptoBuch automatisiert keine Anmeldung und speichert weder PIN noch Login-Cookies. Trade Republic beschreibt Kontoauszüge und Abrechnungsdokumente als in der App herunterladbare PDFs; eine dokumentierte Read-only-Transaktions-API steht für diesen Import nicht zur Verfügung. Lade die Belege daher lokal herunter und übertrage die Crypto-Buchungen in das Profil **Trade Republic Crypto-Beleg (CSV)** mit den Spalten `Datum`, `Typ`, `Asset`, `Stück`, `Preis`, `Gebühr` und `Referenz` (oder deren englischen Entsprechungen). Deutsche Datumswerte wie `02.01.2025 12:00` werden verarbeitet.
+
+Das CSV-Profil kann ausschließlich in ein Trade-Republic-Börsenkonto importieren. Nach dem Import werden historische Kurse seriell nachbearbeitet und Ein-/Auszahlungen als unverbindliche Transfer-Vorschläge mit allen lokalen Wallets abgeglichen. Die Quelldokumente bleiben dabei bei dir; Trade Republic erläutert den Download von Kontoauszügen in seiner [Hilfe](https://support.traderepublic.com/de-de/267).
 
 ### TRON / TronGrid
 

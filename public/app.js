@@ -131,9 +131,9 @@ function render() {
   for (const [assetId, asset] of Object.entries(portfolio.assets || {})) {
     if (["erc20", "exchange"].includes(asset.kind) && Math.abs(Number(portfolio.holdings?.[assetId] || 0)) > 0) dashboard.append(renderAssetCard(assetId, asset));
   }
-  const hasWallets = (portfolio.wallets || []).length > 0;
-  dashboard.hidden = !hasWallets;
-  el("dashboard-empty").hidden = hasWallets;
+  const hasDataSources = (portfolio.wallets || []).length > 0 || (portfolio.transactions || []).some((transaction) => transaction.source_type === "exchange");
+  dashboard.hidden = !hasDataSources;
+  el("dashboard-empty").hidden = hasDataSources;
   renderInsights(portfolio.insights || {});
 }
 

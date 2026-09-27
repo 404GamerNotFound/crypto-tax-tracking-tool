@@ -24,3 +24,10 @@ test("ordnet Binance-Earn, Gebühren und Convert-Zeilen nachvollziehbar zu", () 
     ["out", "DeFi Swap", "c-1:binance convert:ETH"],
   ]);
 });
+
+test("normalisiert eToro- und Trade-Republic-Beleg-CSV für das zugehörige Börsenkonto", () => {
+  const etoro = normalizeExchangeRows("Date,Type,Asset,Units,Price,Transaction ID\n2025-01-02T12:00:00Z,Buy,Bitcoin,0.25,42000,et-1\n", "etoro");
+  const tradeRepublic = normalizeExchangeRows("Datum;Typ;Asset;Stück;Ausführungspreis;Gebühr;Referenz\n02.01.2025 12:00;Kauf;ETH;1,5;2500;1;tr-1\n", "trade_republic");
+  assert.deepEqual({ provider: etoro.profile.targetProviders[0], asset: etoro.rows[0].asset, purpose: etoro.rows[0].purpose }, { provider: "etoro", asset: "BTC", purpose: "Kauf" });
+  assert.deepEqual({ provider: tradeRepublic.profile.targetProviders[0], timestamp: tradeRepublic.rows[0].timestamp, asset: tradeRepublic.rows[0].asset, fee: tradeRepublic.rows[0].fee }, { provider: "trade_republic", timestamp: "2025-01-02T12:00:00Z", asset: "ETH", fee: 1 });
+});

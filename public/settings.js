@@ -58,6 +58,7 @@ function render(settings) {
   el("coingecko-api").value = settings.coinGeckoBaseUrl;
   el("bitvavo-api").value = settings.bitvavoApiBaseUrl;
   el("binance-api").value = settings.binanceApiBaseUrl;
+  el("etoro-api").value = settings.etoroApiBaseUrl;
   el("xpub-gap").value = settings.xpubGapLimit;
   el("xpub-maximum").value = settings.xpubMaxDerivationsPerBranch;
   el("staking-aliases").value = settings.xtzStakingPayoutAliases;
@@ -147,6 +148,7 @@ el("settings-form").addEventListener("submit", async (event) => {
         coinGeckoBaseUrl: form.get("coinGeckoBaseUrl"),
         bitvavoApiBaseUrl: form.get("bitvavoApiBaseUrl"),
         binanceApiBaseUrl: form.get("binanceApiBaseUrl"),
+        etoroApiBaseUrl: form.get("etoroApiBaseUrl"),
         coinGeckoApiKey: form.get("coinGeckoApiKey"),
         clearCoinGeckoApiKey: form.get("clearCoinGeckoApiKey") === "on",
         xpubGapLimit: form.get("xpubGapLimit"),

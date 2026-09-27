@@ -30,6 +30,7 @@ const { classifyEvmTransaction, isLikelySpamAsset } = require("./lib/defi");
 const { EXCHANGE_CSV_PROFILES, normalizeExchangeRows } = require("./lib/exchange-import");
 const { fetchBitvavoHistory } = require("./lib/bitvavo");
 const { fetchBinanceHistory, parseSymbols } = require("./lib/binance");
+const { fetchEtoroHistory } = require("./lib/etoro");
 const { matchExchangeTransfer } = require("./lib/exchange-transfer-matcher");
 const {
   bitvavoDailyClosePrices,
@@ -85,6 +86,7 @@ const SETTINGS_DEFAULTS = Object.freeze({
   coinGeckoBaseUrl: (process.env.COINGECKO_API_BASE_URL || "https://api.coingecko.com/api/v3").replace(/\/$/, ""),
   bitvavoApiBaseUrl: (process.env.BITVAVO_API_BASE_URL || "https://api.bitvavo.com/v2").replace(/\/$/, ""),
   binanceApiBaseUrl: (process.env.BINANCE_API_BASE_URL || "https://api.binance.com").replace(/\/$/, ""),
+  etoroApiBaseUrl: (process.env.ETORO_API_BASE_URL || "https://public-api.etoro.com/api/v1").replace(/\/$/, ""),
   tronGridApiKey: String(process.env.TRONGRID_API_KEY || "").trim(),
   blockfrostProjectId: String(process.env.BLOCKFROST_PROJECT_ID || "").trim(),
   etherscanApiKey: String(process.env.ETHERSCAN_API_KEY || "").trim(),
@@ -99,6 +101,29 @@ const SETTINGS_DEFAULTS = Object.freeze({
   xpubGapLimit: DEFAULT_XPUB_GAP_LIMIT,
   xpubMaxDerivationsPerBranch: boundedInteger(process.env.XPUB_MAX_DERIVATIONS_PER_BRANCH, 200, DEFAULT_XPUB_GAP_LIMIT, 1000),
   xtzStakingPayoutAliases: String(process.env.XTZ_STAKING_PAYOUT_ALIASES || "Stake.fish Payouts").trim(),
+});
+
+const EXCHANGE_PROVIDERS = Object.freeze({
+  bitvavo: Object.freeze({
+    id: "bitvavo", label: "Bitvavo · Read-only API", defaultLabel: "Bitvavo", importMode: "api",
+    apiKeyLabel: "Read-only API-Key", apiSecretLabel: "API-Secret",
+    help: "Bitvavo: API-Key nur mit Leserecht erstellen; Trading und Auszahlungen deaktiviert lassen. Der Import verarbeitet Buchungen seriell und gleicht Ein- und Auszahlungen anschließend mit allen lokalen Wallets ab.",
+  }),
+  binance: Object.freeze({
+    id: "binance", label: "Binance Spot · Read-only API", defaultLabel: "Binance Spot", importMode: "api",
+    apiKeyLabel: "Read-only API-Key", apiSecretLabel: "API-Secret", supportsSymbols: true,
+    help: "Binance: API-Key nur mit Leserecht erstellen; Trading, Auszahlungen und Transfers deaktiviert lassen. Leere Märkte werden aus aktuellen Beständen ermittelt; ergänze alte Märkte für bereits verkaufte Coins.",
+  }),
+  etoro: Object.freeze({
+    id: "etoro", label: "eToro · Read-only API", defaultLabel: "eToro", importMode: "api",
+    apiKeyLabel: "eToro Public API-Key", apiSecretLabel: "eToro User-Key",
+    help: "eToro: Public API-Key und User-Key werden nur für lesende Historienabfragen verwendet. CryptoBuch sendet keine Handels-, Auszahlungs- oder Transfer-Anfragen; die API wird seriell und gedrosselt abgefragt.",
+  }),
+  trade_republic: Object.freeze({
+    id: "trade_republic", label: "Trade Republic · Beleg-/CSV-Import", defaultLabel: "Trade Republic", importMode: "csv",
+    csvProfile: "trade_republic",
+    help: "Trade Republic bietet keine dokumentierte Read-only-API für diesen Import. Lege ein separates Börsenkonto an und importiere die Crypto-Buchungen anschließend aus deinen Belegen als CSV – es werden keine Zugangsdaten oder Login-Daten abgefragt.",
+  }),
 });
 const PURPOSE_PRESETS = [
   "Kauf",
@@ -382,12 +407,13 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS exchange_connections (
     id INTEGER PRIMARY KEY,
-    provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance')),
+    provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance', 'etoro', 'trade_republic')),
     wallet_id INTEGER NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
     label TEXT NOT NULL DEFAULT '',
     api_key TEXT NOT NULL,
     api_secret TEXT NOT NULL,
     symbols TEXT NOT NULL DEFAULT '',
+    import_mode TEXT NOT NULL DEFAULT 'api' CHECK (import_mode IN ('api', 'csv')),
     last_synced_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(provider, wallet_id, label)
@@ -399,24 +425,26 @@ db.exec(`
 function migrateExchangeConnectionSchema() {
   const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'exchange_connections'").get()?.sql || "";
   const columns = new Set(db.prepare("PRAGMA table_info(exchange_connections)").all().map((column) => column.name));
-  if (sql.includes("binance") && columns.has("symbols")) return;
+  if (sql.includes("binance") && sql.includes("etoro") && sql.includes("trade_republic") && columns.has("symbols") && columns.has("import_mode")) return;
   const symbols = columns.has("symbols") ? "symbols" : "''";
+  const importMode = columns.has("import_mode") ? "import_mode" : "'api'";
   db.exec(`
     BEGIN;
     CREATE TABLE exchange_connections_migration (
       id INTEGER PRIMARY KEY,
-      provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance')),
+      provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance', 'etoro', 'trade_republic')),
       wallet_id INTEGER NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
       label TEXT NOT NULL DEFAULT '',
       api_key TEXT NOT NULL,
       api_secret TEXT NOT NULL,
       symbols TEXT NOT NULL DEFAULT '',
+      import_mode TEXT NOT NULL DEFAULT 'api' CHECK (import_mode IN ('api', 'csv')),
       last_synced_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(provider, wallet_id, label)
     );
-    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, symbols, last_synced_at, created_at)
-      SELECT id, provider, wallet_id, label, api_key, api_secret, ${symbols}, last_synced_at, created_at FROM exchange_connections;
+    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, symbols, import_mode, last_synced_at, created_at)
+      SELECT id, provider, wallet_id, label, api_key, api_secret, ${symbols}, ${importMode}, last_synced_at, created_at FROM exchange_connections;
     DROP TABLE exchange_connections;
     ALTER TABLE exchange_connections_migration RENAME TO exchange_connections;
     COMMIT;
@@ -433,7 +461,7 @@ if (!walletColumnNames.has("source_type")) db.exec("ALTER TABLE wallets ADD COLU
 if (!walletColumnNames.has("xpub_address_type")) db.exec("ALTER TABLE wallets ADD COLUMN xpub_address_type TEXT");
 
 function exchangeAccountLabel(provider, label) {
-  return cleanLabel(label, 80) || (provider === "binance" ? "Binance Spot" : "Bitvavo");
+  return cleanLabel(label, 80) || EXCHANGE_PROVIDERS[provider]?.defaultLabel || "Börsenkonto";
 }
 
 function createExchangeAccountWallet(provider, label, identifier = crypto.randomUUID()) {
@@ -575,6 +603,7 @@ function runtimeSettings() {
     coinGeckoBaseUrl: values.coinGeckoBaseUrl || SETTINGS_DEFAULTS.coinGeckoBaseUrl,
     bitvavoApiBaseUrl: values.bitvavoApiBaseUrl || SETTINGS_DEFAULTS.bitvavoApiBaseUrl,
     binanceApiBaseUrl: values.binanceApiBaseUrl || SETTINGS_DEFAULTS.binanceApiBaseUrl,
+    etoroApiBaseUrl: values.etoroApiBaseUrl || SETTINGS_DEFAULTS.etoroApiBaseUrl,
     tronGridApiKey: values.tronGridApiKey || "",
     blockfrostProjectId: values.blockfrostProjectId || "",
     etherscanApiKey: values.etherscanApiKey || "",
@@ -620,6 +649,7 @@ function settingsResponse() {
     coinGeckoBaseUrl: settings.coinGeckoBaseUrl,
     bitvavoApiBaseUrl: settings.bitvavoApiBaseUrl,
     binanceApiBaseUrl: settings.binanceApiBaseUrl,
+    etoroApiBaseUrl: settings.etoroApiBaseUrl,
     tronGridApiKeyConfigured: Boolean(settings.tronGridApiKey),
     blockfrostProjectIdConfigured: Boolean(settings.blockfrostProjectId),
     etherscanApiKeyConfigured: Boolean(settings.etherscanApiKey),
@@ -695,6 +725,7 @@ function updateSettings(input) {
     coinGeckoBaseUrl: cleanServiceUrl(input.coinGeckoBaseUrl, "Die CoinGecko-URL"),
     bitvavoApiBaseUrl: cleanServiceUrl(input.bitvavoApiBaseUrl, "Die Bitvavo-URL"),
     binanceApiBaseUrl: cleanServiceUrl(input.binanceApiBaseUrl, "Die Binance-URL"),
+    etoroApiBaseUrl: cleanServiceUrl(input.etoroApiBaseUrl, "Die eToro-URL"),
     xpubGapLimit,
     xpubMaxDerivationsPerBranch,
     xtzStakingPayoutAliases: cleanAliases(input.xtzStakingPayoutAliases),
@@ -3020,16 +3051,52 @@ function getExchangeConnection(id) {
 }
 
 function exchangeConnectionView(connection) {
+  const provider = EXCHANGE_PROVIDERS[connection.provider] || null;
   return {
     id: connection.id,
     provider: connection.provider,
     label: connection.label,
     accountLabel: connection.account_label,
     symbols: connection.symbols || "",
+    importMode: connection.import_mode || provider?.importMode || "api",
+    syncAvailable: (connection.import_mode || provider?.importMode || "api") === "api",
+    csvProfile: provider?.csvProfile || null,
     lastSyncedAt: connection.last_synced_at,
     createdAt: connection.created_at,
     apiKeyConfigured: Boolean(connection.api_key),
     apiSecretConfigured: Boolean(connection.api_secret),
+  };
+}
+
+async function exchangePortfolioResponse(id) {
+  const connection = getExchangeConnection(id);
+  const portfolio = await portfolioResponse();
+  const transactions = portfolio.transactions.filter((transaction) => Number(transaction.wallet_id) === Number(connection.wallet_id));
+  const holdings = new Map();
+  for (const transaction of transactions) {
+    const sign = transaction.direction === "in" ? 1 : transaction.direction === "out" ? -1 : 0;
+    holdings.set(transaction.asset, Number(holdings.get(transaction.asset) || 0) + sign * Number(transaction.amount || 0));
+  }
+  const assets = [...holdings.entries()]
+    .filter(([, amount]) => Math.abs(amount) > 0.000000000001)
+    .map(([assetId, amount]) => {
+      const asset = portfolio.assets[assetId] || { id: assetId, name: assetId, symbol: assetId, decimals: 8, icon: "◇", kind: "unknown" };
+      const priceEur = positiveNumber(portfolio.assetPrices[assetId]);
+      return {
+        ...asset,
+        amount,
+        currentPriceEur: priceEur,
+        currentValueEur: priceEur ? amount * priceEur : null,
+      };
+    })
+    .sort((left, right) => Number(right.currentValueEur || 0) - Number(left.currentValueEur || 0) || left.symbol.localeCompare(right.symbol));
+  const totalValueEur = assets.reduce((sum, asset) => sum + Number(asset.currentValueEur || 0), 0);
+  return {
+    connection: exchangeConnectionView(connection),
+    assets,
+    transactions,
+    transactionCount: transactions.length,
+    totalValueEur,
   };
 }
 
@@ -3042,9 +3109,11 @@ function containsForbiddenKeyMaterial(value) {
 async function syncExchangeConnection(connection) {
   const wallet = getWallet(connection.wallet_id);
   const settings = runtimeSettings();
+  if (connection.import_mode === "csv") throw makeError("Für diese Quelle gibt es keine direkte Read-only-API. Bitte importiere die Buchungen als CSV in das zugehörige Börsenkonto.");
   let rows = [];
   let warnings = [];
   let selectedSymbols = [];
+  let limited = false;
   if (connection.provider === "bitvavo") {
     rows = await fetchBitvavoHistory({ apiBaseUrl: settings.bitvavoApiBaseUrl, apiKey: connection.api_key, apiSecret: connection.api_secret });
   } else if (connection.provider === "binance") {
@@ -3054,10 +3123,18 @@ async function syncExchangeConnection(connection) {
     rows = result.rows;
     warnings = result.warnings;
     selectedSymbols = result.selectedSymbols;
+    limited = result.rows.length >= 2500;
+  } else if (connection.provider === "etoro") {
+    const result = await fetchEtoroHistory({
+      apiBaseUrl: settings.etoroApiBaseUrl, apiKey: connection.api_key, userKey: connection.api_secret,
+    });
+    rows = result.rows;
+    warnings = result.warnings;
+    limited = result.limited;
   } else throw makeError("Für diese Börse ist noch kein Read-only-Adapter eingerichtet.");
   const imported = importExternalRows(wallet, rows, { source: `${connection.provider}-api`, purposeOrigin: "auto" });
   db.prepare("UPDATE exchange_connections SET last_synced_at = datetime('now') WHERE id = ?").run(connection.id);
-  return { imported, provider: connection.provider, limited: rows.length >= 2500, warnings, selectedSymbols };
+  return { imported, provider: connection.provider, limited: limited || rows.length >= 2500, warnings, selectedSymbols };
 }
 
 app.get("/api/import/csv-profiles", (_request, response) => {
@@ -3070,23 +3147,33 @@ app.get("/api/exchange-connections", (_request, response, next) => {
       SELECT c.*, w.label AS account_label
       FROM exchange_connections c JOIN wallets w ON w.id = c.wallet_id ORDER BY c.id DESC
     `).all().map(exchangeConnectionView);
-    response.json({ providers: [
-      { id: "bitvavo", label: "Bitvavo · Read-only API" },
-      { id: "binance", label: "Binance Spot · Read-only API" },
-    ], connections });
+    response.json({ providers: Object.values(EXCHANGE_PROVIDERS), connections });
+  } catch (error) { next(error); }
+});
+
+app.get("/api/exchange-connections/:id/portfolio", async (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültige Börsenverbindung.");
+    response.json(await exchangePortfolioResponse(id));
   } catch (error) { next(error); }
 });
 
 app.post("/api/exchange-connections", (request, response, next) => {
   try {
     const provider = String(request.body?.provider || "").trim().toLowerCase();
-    const label = cleanLabel(request.body?.label, 80) || (provider === "binance" ? "Binance Spot" : "Bitvavo");
+    const definition = EXCHANGE_PROVIDERS[provider];
+    if (!definition) throw makeError("Bitte eine unterstützte Börse auswählen.");
+    const label = cleanLabel(request.body?.label, 80) || definition.defaultLabel;
     const apiKey = String(request.body?.apiKey || "").trim();
     const apiSecret = String(request.body?.apiSecret || "").trim();
     const symbols = parseSymbols(request.body?.symbols).join(",");
-    if (!['bitvavo', 'binance'].includes(provider)) throw makeError("Bitte eine unterstützte Börse auswählen.");
-    if (apiKey.length < 8 || apiKey.length > 512 || apiSecret.length < 8 || apiSecret.length > 512) throw makeError("API-Key und Secret müssen zwischen 8 und 512 Zeichen lang sein.");
-    if (containsForbiddenKeyMaterial(apiKey) || containsForbiddenKeyMaterial(apiSecret)) throw makeError("Private Keys, xPrvs und Seed-Phrases werden niemals akzeptiert. Bitte ausschließlich einen Börsen-API-Key und dessen Secret verwenden.");
+    if (definition.importMode === "api" && (apiKey.length < 8 || apiKey.length > 512 || apiSecret.length < 8 || apiSecret.length > 512)) {
+      throw makeError("Die Zugangsdaten müssen jeweils zwischen 8 und 512 Zeichen lang sein.");
+    }
+    if (definition.importMode === "api" && (containsForbiddenKeyMaterial(apiKey) || containsForbiddenKeyMaterial(apiSecret))) {
+      throw makeError("Private Keys, xPrvs und Seed-Phrases werden niemals akzeptiert. Bitte ausschließlich die Read-only-Zugangsdaten der Börse verwenden.");
+    }
     if (db.prepare("SELECT id FROM exchange_connections WHERE provider = ? AND label = ?").get(provider, label)) {
       throw makeError("Diese Börsenverbindung ist bereits hinterlegt.", 409);
     }
@@ -3094,18 +3181,17 @@ app.post("/api/exchange-connections", (request, response, next) => {
     let result;
     try {
       const accountWalletId = createExchangeAccountWallet(provider, label);
-      result = db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret, symbols) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(provider, accountWalletId, label, apiKey, apiSecret, symbols);
+      result = db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret, symbols, import_mode) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(provider, accountWalletId, label, apiKey, apiSecret, symbols, definition.importMode);
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
       throw error;
     }
     const connection = exchangeConnectionView(getExchangeConnection(Number(result.lastInsertRowid)));
-    // A newly saved Read-only connection contains no local exchange rows yet.
-    // Start its regular serial sync immediately; the follow-up transfer check
-    // is queued by that sync only after records were imported.
-    const job = enqueueJob("exchange_sync", { connectionId: connection.id });
+    // API sources start their serial import immediately. CSV-only sources are
+    // deliberately left empty until the user selects a documented local file.
+    const job = definition.importMode === "api" ? enqueueJob("exchange_sync", { connectionId: connection.id }) : null;
     response.status(201).json({ ...connection, job });
   } catch (error) {
     if (String(error.message).includes("UNIQUE constraint failed")) return next(makeError("Diese Börsenverbindung ist bereits hinterlegt."));
@@ -3117,7 +3203,8 @@ app.post("/api/exchange-connections/:id/sync", (request, response, next) => {
   try {
     const id = asPositiveId(request.params.id);
     if (!id) throw makeError("Ungültige Börsenverbindung.");
-    getExchangeConnection(id);
+    const connection = getExchangeConnection(id);
+    if (connection.import_mode === "csv") throw makeError("Diese Quelle wird über den lokalen CSV-Import aktualisiert.");
     response.status(202).json({ job: enqueueJob("exchange_sync", { connectionId: id }) });
   } catch (error) { next(error); }
 });
@@ -3134,12 +3221,30 @@ app.delete("/api/exchange-connections/:id", (request, response, next) => {
 
 app.post("/api/import/csv", (request, response, next) => {
   try {
-    const walletId = asPositiveId(request.body?.walletId);
-    if (!walletId) throw makeError("Bitte eine Ziel-Wallet auswählen.");
-    const wallet = getWallet(walletId);
-    if (wallet.source_type === "exchange") throw makeError("CSV-Dateien bitte einer Blockchain-Wallet zuordnen. Börsenbuchungen werden über die Read-only-Börsenverbindung importiert.");
     const { profile, rows } = parseCsvRows(request.body?.csv, String(request.body?.profile || "generic").toLowerCase());
     if (rows.length > 2500) throw makeError("Maximal 2.500 CSV-Transaktionen gleichzeitig importieren.");
+    const connectionId = asPositiveId(request.body?.exchangeConnectionId);
+    if (connectionId) {
+      const connection = getExchangeConnection(connectionId);
+      const targetProviders = Array.isArray(profile.targetProviders) ? profile.targetProviders : [];
+      if (!targetProviders.includes(connection.provider)) throw makeError("Dieses CSV-Profil passt nicht zu der ausgewählten Börsenquelle.");
+      const wallet = getWallet(connection.wallet_id);
+      const imported = importExternalRows(wallet, rows, { source: `${connection.provider}-csv`, profile: profile.id, purposeOrigin: "manual" });
+      db.prepare("UPDATE exchange_connections SET last_synced_at = datetime('now') WHERE id = ?").run(connection.id);
+      if (imported) {
+        enqueueJob("exchange_transfer_check", { connectionId: connection.id });
+        enqueueJob("price_backfill", { force: false });
+      }
+      response.status(201).json({ imported, exchangeConnectionId: connection.id, profile: profile.id });
+      return;
+    }
+    const walletId = asPositiveId(request.body?.walletId);
+    if (!walletId) throw makeError("Bitte eine Ziel-Wallet oder Börsenquelle auswählen.");
+    if (Array.isArray(profile.targetProviders) && profile.targetProviders.length) {
+      throw makeError("Dieses CSV-Profil benötigt das zugehörige Börsenkonto als Zielquelle.");
+    }
+    const wallet = getWallet(walletId);
+    if (wallet.source_type === "exchange") throw makeError("Für Börsenbuchungen bitte ein passendes Börsenprofil und das zugehörige Börsenkonto auswählen.");
     const imported = importExternalRows(wallet, rows, { source: "csv", profile: profile.id, purposeOrigin: "manual" });
     response.status(201).json({ imported, walletId: wallet.id, profile: profile.id });
   } catch (error) { next(error); }

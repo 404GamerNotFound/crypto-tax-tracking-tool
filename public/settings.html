@@ -16,7 +16,7 @@
         </a>
         <nav class="topbar-nav" aria-label="Hauptnavigation">
           <a class="topbar-link" href="/">Dashboard</a>
-          <a class="topbar-link" href="/wallets.html">Wallets</a>
+          <a class="topbar-link" href="/wallets.html">Crypto-Bestände</a>
           <a class="topbar-link" href="/quality.html">Datenqualität</a>
           <a class="topbar-link" href="/tax.html">Steuerreport</a>
           <a class="topbar-link" href="/maintenance.html">Betrieb</a>
@@ -223,6 +223,11 @@
               <small>Wird ausschließlich von der optionalen Binance-Spot-Read-only-Verbindung für Konto- und Historienabfragen verwendet.</small>
             </label>
             <label>
+              <span>eToro-Public-API-Basisadresse</span>
+              <input id="etoro-api" name="etoroApiBaseUrl" type="url" inputmode="url" required />
+              <small>Wird ausschließlich von der optionalen eToro-Read-only-Verbindung für serielle Historienabfragen verwendet.</small>
+            </label>
+            <label>
               <span>CoinGecko-API-Key <small>optional</small></span>
               <input id="coingecko-key" name="coinGeckoApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
               <small id="coingecko-key-status">Key-Status wird geladen …</small>
@@ -364,6 +369,6 @@
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script src="/notifications.js?v=20260925-1" defer></script>
-    <script src="/settings.js?v=20260922-16" defer></script>
+    <script src="/settings.js?v=20260927-1" defer></script>
   </body>
 </html>
