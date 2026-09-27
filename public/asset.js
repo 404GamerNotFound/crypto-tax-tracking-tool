@@ -423,7 +423,9 @@ function renderPage() {
   el("asset-title").textContent = asset.name;
   el("asset-subtitle").textContent = asset.kind === "erc20"
     ? `Ethereum ERC-20 · ${asset.symbol} · Transaktionen und Auswertung dieses Tokens.`
+    : asset.kind === "exchange" ? `Börsenbestand · ${asset.symbol} · Synchronisierung und Mapping erfolgen unter Datenqualität.`
     : `Käufe, Erträge und alle ${asset.symbol}-Bewegungen in deinem Portfolio.`;
+  el("refresh-chain").hidden = asset.kind === "exchange";
   const report = state.portfolio.assetAnalytics?.[activeAssetId()];
   const prices = state.portfolio.currentPrices || {};
   el("price-status").textContent = prices.warning ? "Preisabfrage momentan nicht verfügbar" : hasPrice(report?.currentPriceEur) ? `1 ${asset.symbol} · ${formatPrice(report.currentPriceEur)}` : "Aktueller Preis nicht verfügbar";

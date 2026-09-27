@@ -40,6 +40,7 @@ docker compose down
 - Interaktive Coin-Charts mit Zoom und Cursor, QR-Codes für gespeicherte öffentliche Wallet-Adressen sowie eine reine Bitcoin-PSBT-Vorschau ohne Signieren oder Speichern
 - Direkter, read-only Ledger-Import für Bitcoin und Ethereum: Die öffentliche Empfangsadresse wird im Browser vom Gerät gelesen und auf dem Ledger bestätigt; Private Keys, Seed-Phrases und Signaturfunktionen bleiben ausgeschlossen
 - Cardano-Stake-Wallets zusätzlich um die von Blockfrost gelieferte Reward-Historie erweitern und ERC-20-Metadaten mit read-only Ethereum-RPC-Multicalls prüfen
+- Read-only-Börsenanbindung für Bitvavo und Binance Spot: Binance importiert Spot-Trades, Ein- und Auszahlungen, Earn-/Dividendenausschüttungen und Gebühren mit nachvollziehbarem Zweck-Mapping; die Binance-CSV ordnet zusätzlich Convert-, Airdrop- und sonstige Kontobewegungen ein
 
 ## Datenquellen und Grenzen
 
@@ -115,6 +116,14 @@ Wallet-Synchronisierungen und die Nachbearbeitung historischer Kurse laufen als 
 Unter **Datenqualität** schlägt CryptoBuch gegenläufige, zeitlich und mengenmäßig ähnliche Bewegungen zwischen eigenen Wallets als mögliche Transfers vor. CSV-Nachträge können dort einer bestehenden Wallet zugeordnet werden. Das CSV-Format benötigt die Spalten `timestamp`, `direction`, `asset` und `amount`; optional sind `fee`, `purpose`, `price_eur`, `hash` und `counterparty`. Manuell importierte Preise und Zwecke werden nicht von einer Blockchain-Synchronisierung überschrieben. Eine CSV-Übernahme ist auf 2.500 Zeilen begrenzt.
 
 Wallets lassen sich beim Anlegen mit einer Gruppe und bis zu zwölf Tags strukturieren. Das Dashboard ergänzt die Bestandskarten um eine Allokationsansicht und eine historische Buchwertentwicklung auf Basis der erfassten historischen Transaktionswerte.
+
+### Binance Spot · Read-only
+
+Unter **Datenqualität → Börse verbinden** kann eine Binance-Spot-Verbindung angelegt werden. Erstelle hierfür bei Binance einen **separaten API-Key mit ausschließlich Leserecht**. Trading, Auszahlungen und Transfers müssen deaktiviert bleiben. CryptoBuch sendet nur signierte `GET`-Abfragen; API-Key und Secret bleiben im lokalen Datenverzeichnis und werden nach dem Speichern nicht mehr an den Browser ausgegeben.
+
+Der Adapter liest Kontobestände, Spot-Trades, Einzahlungen, Auszahlungen sowie Asset-Dividenden. Das Mapping ist transparent: Spot-Kauf/-Verkauf wird als `Kauf`/`Verkauf` importiert; nicht-fiat Gegenbuchungen bleiben als eigene Asset-Bewegung sichtbar, Ein-/Auszahlungen als `Transfer`, eindeutig erkennbare Earn-/Staking-Ausschüttungen als `Staking Rewards` und Gebühren als `Gebühr`. USDT, USDC, DAI, FDUSD und BUSD werden als Börsenassets mit eigener Kursquelle geführt – nie mit dem Kurs der zufällig gewählten Ziel-Wallet. Für bereits verkaufte oder nicht mehr gehaltene Märkte können im Dialog optional Marktpaare wie `BTCEUR`, `BTCUSDT` oder `ETHEUR` ergänzt werden. Ohne Liste werden Spot-Märkte aus den aktuellen Beständen abgeleitet.
+
+Die direkte API deckt bewusst die Spot-Wallet ab; Futures, Margin, Kredit, NFT und sonstige Binance-Produkte besitzen getrennte APIs und werden nicht stillschweigend als Spot-Bewegung interpretiert. Für diese oder für sehr alte, umfangreiche Historien exportiere die Binance-Transaktionshistorie und importiere sie über das Profil **Binance Transaktionshistorie**. Ein Durchlauf importiert höchstens 2.500 Buchungszeilen; fehlende historische Kurse werden anschließend über den vorhandenen seriellen, gedrosselten Kurs-Job nachbearbeitet.
 
 ### TRON / TronGrid
 

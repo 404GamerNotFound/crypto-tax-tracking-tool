@@ -218,6 +218,11 @@
               <small>Kostenloser EUR-Tageskurs-Fallback für native Coins, wenn CoinGecko für ein altes Datum keinen Kurs liefert. Kein API-Key erforderlich.</small>
             </label>
             <label>
+              <span>Binance-API-Basisadresse</span>
+              <input id="binance-api" name="binanceApiBaseUrl" type="url" inputmode="url" required />
+              <small>Wird ausschließlich von der optionalen Binance-Spot-Read-only-Verbindung für Konto- und Historienabfragen verwendet.</small>
+            </label>
+            <label>
               <span>CoinGecko-API-Key <small>optional</small></span>
               <input id="coingecko-key" name="coinGeckoApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
               <small id="coingecko-key-status">Key-Status wird geladen …</small>

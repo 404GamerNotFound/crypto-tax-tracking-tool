@@ -129,7 +129,7 @@ function render() {
     if (walletChains.has(chain.asset) || Math.abs(Number(portfolio.holdings?.[chain.asset] || 0)) > 0) dashboard.append(renderAssetCard(chain.asset, asset));
   }
   for (const [assetId, asset] of Object.entries(portfolio.assets || {})) {
-    if (asset.kind === "erc20" && Math.abs(Number(portfolio.holdings?.[assetId] || 0)) > 0) dashboard.append(renderAssetCard(assetId, asset));
+    if (["erc20", "exchange"].includes(asset.kind) && Math.abs(Number(portfolio.holdings?.[assetId] || 0)) > 0) dashboard.append(renderAssetCard(assetId, asset));
   }
   const hasWallets = (portfolio.wallets || []).length > 0;
   dashboard.hidden = !hasWallets;

@@ -15,3 +15,12 @@ test("normalisiert Coinbase-Käufe und Binance-Abgänge in ein gemeinsames Forma
   assert.deepEqual({ direction: coinbase.direction, asset: coinbase.asset, amount: coinbase.amount, purpose: coinbase.purpose }, { direction: "in", asset: "BTC", amount: 0.1, purpose: "Kauf" });
   assert.deepEqual({ direction: binance.direction, asset: binance.asset, amount: binance.amount, purpose: binance.purpose }, { direction: "out", asset: "BTC", amount: 0.2, purpose: "Transfer" });
 });
+
+test("ordnet Binance-Earn, Gebühren und Convert-Zeilen nachvollziehbar zu", () => {
+  const rows = normalizeExchangeRows("Date(UTC),Operation,Coin,Change,Transaction ID\n2025-01-02 12:00:00,Simple Earn Flexible Rewards,ADA,2.4,r-1\n2025-01-02 12:01:00,Transaction Fee,BNB,-0.01,f-1\n2025-01-02 12:02:00,Binance Convert,ETH,-0.5,c-1\n", "binance").rows;
+  assert.deepEqual(rows.map((row) => [row.direction, row.purpose, row.external_id]), [
+    ["in", "Staking Rewards", "r-1:simple earn flexible rewards:ADA"],
+    ["out", "Gebühr", "f-1:transaction fee:BNB"],
+    ["out", "DeFi Swap", "c-1:binance convert:ETH"],
+  ]);
+});

@@ -29,6 +29,7 @@ const { buildTaxOptimizer, simulateSale } = require("./lib/tax-optimizer");
 const { classifyEvmTransaction, isLikelySpamAsset } = require("./lib/defi");
 const { EXCHANGE_CSV_PROFILES, normalizeExchangeRows } = require("./lib/exchange-import");
 const { fetchBitvavoHistory } = require("./lib/bitvavo");
+const { fetchBinanceHistory, parseSymbols } = require("./lib/binance");
 const {
   bitvavoDailyClosePrices,
   coinGeckoDate,
@@ -82,6 +83,7 @@ const SETTINGS_DEFAULTS = Object.freeze({
   blockCypherApiBaseUrl: (process.env.BLOCKCYPHER_API_BASE_URL || "https://api.blockcypher.com/v1").replace(/\/$/, ""),
   coinGeckoBaseUrl: (process.env.COINGECKO_API_BASE_URL || "https://api.coingecko.com/api/v3").replace(/\/$/, ""),
   bitvavoApiBaseUrl: (process.env.BITVAVO_API_BASE_URL || "https://api.bitvavo.com/v2").replace(/\/$/, ""),
+  binanceApiBaseUrl: (process.env.BINANCE_API_BASE_URL || "https://api.binance.com").replace(/\/$/, ""),
   tronGridApiKey: String(process.env.TRONGRID_API_KEY || "").trim(),
   blockfrostProjectId: String(process.env.BLOCKFROST_PROJECT_ID || "").trim(),
   etherscanApiKey: String(process.env.ETHERSCAN_API_KEY || "").trim(),
@@ -115,6 +117,17 @@ const PURPOSE_PRESETS = [
   "Gebühr",
   "Sonstiges",
 ];
+// Exchange balances are not blockchain wallets. Stablecoins commonly appear
+// as the counter-leg of a Binance trade nevertheless, so retain their own
+// pricing identity instead of accidentally valuing them at the target
+// wallet's native-coin price.
+const EXCHANGE_ASSET_CONFIG = Object.freeze({
+  USDT: { name: "Tether", symbol: "USDT", decimals: 6, icon: "₮", coinGeckoId: "tether" },
+  USDC: { name: "USD Coin", symbol: "USDC", decimals: 6, icon: "$", coinGeckoId: "usd-coin" },
+  DAI: { name: "Dai", symbol: "DAI", decimals: 18, icon: "◈", coinGeckoId: "dai" },
+  FDUSD: { name: "First Digital USD", symbol: "FDUSD", decimals: 6, icon: "$", coinGeckoId: "first-digital-usd" },
+  BUSD: { name: "Binance USD", symbol: "BUSD", decimals: 18, icon: "$", coinGeckoId: "binance-usd" },
+});
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -365,11 +378,12 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS exchange_connections (
     id INTEGER PRIMARY KEY,
-    provider TEXT NOT NULL CHECK (provider IN ('bitvavo')),
+    provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance')),
     wallet_id INTEGER NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
     label TEXT NOT NULL DEFAULT '',
     api_key TEXT NOT NULL,
     api_secret TEXT NOT NULL,
+    symbols TEXT NOT NULL DEFAULT '',
     last_synced_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(provider, wallet_id, label)
@@ -377,6 +391,36 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_exchange_connections_wallet
     ON exchange_connections(wallet_id, id DESC);
 `);
+
+function migrateExchangeConnectionSchema() {
+  const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'exchange_connections'").get()?.sql || "";
+  const columns = new Set(db.prepare("PRAGMA table_info(exchange_connections)").all().map((column) => column.name));
+  if (sql.includes("binance") && columns.has("symbols")) return;
+  const symbols = columns.has("symbols") ? "symbols" : "''";
+  db.exec(`
+    BEGIN;
+    CREATE TABLE exchange_connections_migration (
+      id INTEGER PRIMARY KEY,
+      provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance')),
+      wallet_id INTEGER NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+      label TEXT NOT NULL DEFAULT '',
+      api_key TEXT NOT NULL,
+      api_secret TEXT NOT NULL,
+      symbols TEXT NOT NULL DEFAULT '',
+      last_synced_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(provider, wallet_id, label)
+    );
+    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, symbols, last_synced_at, created_at)
+      SELECT id, provider, wallet_id, label, api_key, api_secret, ${symbols}, last_synced_at, created_at FROM exchange_connections;
+    DROP TABLE exchange_connections;
+    ALTER TABLE exchange_connections_migration RENAME TO exchange_connections;
+    COMMIT;
+    CREATE INDEX IF NOT EXISTS idx_exchange_connections_wallet ON exchange_connections(wallet_id, id DESC);
+  `);
+}
+
+migrateExchangeConnectionSchema();
 
 // Existing installations predate automatic purpose assignment. Preserve manual
 // entries, while allowing unclassified legacy rows to be enriched on re-sync.
@@ -403,6 +447,7 @@ app.use(express.json({ limit: "64kb" }));
 
 let currentPriceCache = { expiresAt: 0, data: {} };
 let tokenPriceCache = { expiresAt: 0, data: {} };
+let exchangeAssetPriceCache = { expiresAt: 0, data: {} };
 let topMarketCache = { expiresAt: 0, data: null };
 let historicalPriceRequestTail = Promise.resolve();
 let nextHistoricalPriceRequestAt = 0;
@@ -488,6 +533,7 @@ function runtimeSettings() {
     blockCypherApiBaseUrl: values.blockCypherApiBaseUrl || SETTINGS_DEFAULTS.blockCypherApiBaseUrl,
     coinGeckoBaseUrl: values.coinGeckoBaseUrl || SETTINGS_DEFAULTS.coinGeckoBaseUrl,
     bitvavoApiBaseUrl: values.bitvavoApiBaseUrl || SETTINGS_DEFAULTS.bitvavoApiBaseUrl,
+    binanceApiBaseUrl: values.binanceApiBaseUrl || SETTINGS_DEFAULTS.binanceApiBaseUrl,
     tronGridApiKey: values.tronGridApiKey || "",
     blockfrostProjectId: values.blockfrostProjectId || "",
     etherscanApiKey: values.etherscanApiKey || "",
@@ -532,6 +578,7 @@ function settingsResponse() {
     blockCypherApiBaseUrl: settings.blockCypherApiBaseUrl,
     coinGeckoBaseUrl: settings.coinGeckoBaseUrl,
     bitvavoApiBaseUrl: settings.bitvavoApiBaseUrl,
+    binanceApiBaseUrl: settings.binanceApiBaseUrl,
     tronGridApiKeyConfigured: Boolean(settings.tronGridApiKey),
     blockfrostProjectIdConfigured: Boolean(settings.blockfrostProjectId),
     etherscanApiKeyConfigured: Boolean(settings.etherscanApiKey),
@@ -606,6 +653,7 @@ function updateSettings(input) {
     blockCypherApiBaseUrl: cleanServiceUrl(input.blockCypherApiBaseUrl, "Die BlockCypher-URL"),
     coinGeckoBaseUrl: cleanServiceUrl(input.coinGeckoBaseUrl, "Die CoinGecko-URL"),
     bitvavoApiBaseUrl: cleanServiceUrl(input.bitvavoApiBaseUrl, "Die Bitvavo-URL"),
+    binanceApiBaseUrl: cleanServiceUrl(input.binanceApiBaseUrl, "Die Binance-URL"),
     xpubGapLimit,
     xpubMaxDerivationsPerBranch,
     xtzStakingPayoutAliases: cleanAliases(input.xtzStakingPayoutAliases),
@@ -643,6 +691,7 @@ function updateSettings(input) {
   }
   currentPriceCache = { expiresAt: 0, data: {} };
   tokenPriceCache = { expiresAt: 0, data: {} };
+  exchangeAssetPriceCache = { expiresAt: 0, data: {} };
   topMarketCache = { expiresAt: 0, data: null };
   // Apply a changed retry cadence at the next scheduler tick instead of
   // keeping a previously calculated interval alive.
@@ -737,6 +786,28 @@ async function getCurrentPrices() {
       warning: error.message,
     };
   }
+}
+
+async function getExchangeAssetCurrentPrices(assetIds) {
+  const requested = [...new Set(assetIds.filter((asset) => EXCHANGE_ASSET_CONFIG[asset]))];
+  if (requested.length === 0) return {};
+  if (exchangeAssetPriceCache.expiresAt > Date.now() && requested.every((asset) => asset in exchangeAssetPriceCache.data)) {
+    return Object.fromEntries(requested.map((asset) => [asset, exchangeAssetPriceCache.data[asset]]));
+  }
+  const cached = { ...exchangeAssetPriceCache.data };
+  try {
+    const settings = runtimeSettings();
+    const ids = requested.map((asset) => EXCHANGE_ASSET_CONFIG[asset].coinGeckoId).join(",");
+    const payload = await fetchJson(
+      `${settings.coinGeckoBaseUrl}/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=eur`,
+      coinGeckoHeaders(settings.coinGeckoBaseUrl, settings.coinGeckoApiKey),
+    );
+    for (const asset of requested) cached[asset] = positiveNumber(payload[EXCHANGE_ASSET_CONFIG[asset].coinGeckoId]?.eur);
+  } catch (_) {
+    for (const asset of requested) cached[asset] = null;
+  }
+  exchangeAssetPriceCache = { data: cached, expiresAt: Date.now() + 5 * 60 * 1000 };
+  return Object.fromEntries(requested.map((asset) => [asset, cached[asset] || null]));
 }
 
 async function getTopMarketCatalog() {
@@ -868,8 +939,8 @@ async function hydrateBitvavoHistoricalPrices(chain, timestamps, settings) {
   return result;
 }
 
-async function hydrateHistoricalPrices(chain, timestamps, settings) {
-  const coinId = CHAIN_CONFIG[chain]?.coinGeckoId;
+async function hydrateHistoricalPrices(chain, timestamps, settings, coinIdOverride = null) {
+  const coinId = coinIdOverride || CHAIN_CONFIG[chain]?.coinGeckoId;
   const dates = [...new Set(timestamps.filter(Boolean).map(isoDay))].sort();
   if (!coinId || dates.length === 0) return new Map();
 
@@ -924,7 +995,7 @@ async function hydrateHistoricalPrices(chain, timestamps, settings) {
   // CoinGecko's public history is time-limited. If it cannot answer a date,
   // use independent EUR daily candles for native assets where a market exists.
   const unresolvedDates = missing.filter((date) => !result.has(date));
-  if (unresolvedDates.length > 0) {
+  if (unresolvedDates.length > 0 && CHAIN_CONFIG[chain]) {
     const fallback = await hydrateBitvavoHistoricalPrices(chain, unresolvedDates, settings);
     for (const [date, price] of fallback) result.set(date, price);
   }
@@ -1695,7 +1766,12 @@ function scheduleJobWorker() {
       } else if (job.type === "exchange_sync") {
         const connection = getExchangeConnection(payload.connectionId);
         result = await syncExchangeConnection(connection);
-        createNotification("success", "Börse synchronisiert", `${connection.label || "Bitvavo"}: ${result.imported.toLocaleString("de-DE")} Buchungen importiert.`);
+        createNotification("success", "Börse synchronisiert", `${connection.label || connection.provider}: ${result.imported.toLocaleString("de-DE")} Buchungen importiert.`);
+        if (result.warnings?.length) createNotification("warning", "Börsen-Sync prüfen", result.warnings[0]);
+        // The exchange request itself remains read-only and quick. Missing
+        // execution prices are completed afterwards by the existing serial,
+        // throttled price queue instead of making the account sync fan out.
+        if (result.imported) enqueueJob("price_backfill", { force: false });
       } else {
         throw makeError("Unbekannter Hintergrundjob.");
       }
@@ -1849,12 +1925,19 @@ function pendingHistoricalPriceCount() {
   `).get().count || 0);
 }
 
+function chainForNativeAsset(asset, fallbackChain = null) {
+  const symbol = String(asset || "").toUpperCase();
+  const mapped = Object.entries(CHAIN_CONFIG).find(([, config]) => config.asset === symbol)?.[0];
+  if (mapped) return mapped;
+  return CHAIN_CONFIG[fallbackChain]?.asset === symbol ? fallbackChain : null;
+}
+
 async function backfillHistoricalPrices({ force = false } = {}) {
   const settings = runtimeSettings();
   const totalPending = pendingHistoricalPriceCount();
   const retryFilter = force ? "1 = 1" : "(retry.next_attempt_at IS NULL OR retry.next_attempt_at <= ?)";
   const candidates = db.prepare(`
-    SELECT t.id, t.timestamp, t.asset_contract, t.asset_type, w.chain, retry.attempt_count AS retry_attempt_count
+    SELECT t.id, t.timestamp, t.asset, t.asset_contract, t.asset_type, w.chain, retry.attempt_count AS retry_attempt_count
     FROM transactions t
     JOIN wallets w ON w.id = t.wallet_id
     LEFT JOIN historical_price_retries retry ON retry.transaction_id = t.id
@@ -1879,14 +1962,21 @@ async function backfillHistoricalPrices({ force = false } = {}) {
   }
   const nativeDates = new Map();
   const tokenDates = new Map();
+  const exchangeAssetDates = new Map();
   for (const transaction of candidates) {
     if (transaction.asset_contract) {
       const contract = String(transaction.asset_contract).toLowerCase();
       if (!tokenDates.has(contract)) tokenDates.set(contract, []);
       tokenDates.get(contract).push(transaction.timestamp);
     } else {
-      if (!nativeDates.has(transaction.chain)) nativeDates.set(transaction.chain, []);
-      nativeDates.get(transaction.chain).push(transaction.timestamp);
+      const chain = chainForNativeAsset(transaction.asset, transaction.chain);
+      if (chain) {
+        if (!nativeDates.has(chain)) nativeDates.set(chain, []);
+        nativeDates.get(chain).push(transaction.timestamp);
+      } else if (EXCHANGE_ASSET_CONFIG[transaction.asset]) {
+        if (!exchangeAssetDates.has(transaction.asset)) exchangeAssetDates.set(transaction.asset, []);
+        exchangeAssetDates.get(transaction.asset).push(transaction.timestamp);
+      }
     }
   }
 
@@ -1894,6 +1984,10 @@ async function backfillHistoricalPrices({ force = false } = {}) {
   for (const [chain, timestamps] of nativeDates) nativePrices.set(chain, await hydrateHistoricalPrices(chain, timestamps, settings));
   const tokenPrices = new Map();
   for (const [contract, timestamps] of tokenDates) tokenPrices.set(contract, await hydrateHistoricalTokenPrices(contract, timestamps, settings));
+  const exchangeAssetPrices = new Map();
+  for (const [asset, timestamps] of exchangeAssetDates) {
+    exchangeAssetPrices.set(asset, await hydrateHistoricalPrices(null, timestamps, settings, EXCHANGE_ASSET_CONFIG[asset].coinGeckoId));
+  }
 
   const update = db.prepare(`
     UPDATE transactions
@@ -1915,9 +2009,12 @@ async function backfillHistoricalPrices({ force = false } = {}) {
   try {
     for (const transaction of candidates) {
       const date = isoDay(transaction.timestamp);
+      const mappedChain = chainForNativeAsset(transaction.asset, transaction.chain);
+      const exchangeAsset = EXCHANGE_ASSET_CONFIG[transaction.asset];
       const price = transaction.asset_contract
         ? positiveNumber(tokenPrices.get(String(transaction.asset_contract).toLowerCase())?.get(date))
-        : positiveNumber(nativePrices.get(transaction.chain)?.get(date));
+        : mappedChain ? positiveNumber(nativePrices.get(mappedChain)?.get(date))
+          : exchangeAsset ? positiveNumber(exchangeAssetPrices.get(transaction.asset)?.get(date)) : null;
       if (price) {
         updated += update.run(price, transaction.id).changes;
         removeRetry.run(transaction.id);
@@ -1996,7 +2093,8 @@ function nativeAssetDescriptors() {
 }
 
 function assetDescriptorFromTransaction(transaction) {
-  const native = CHAIN_CONFIG[transaction.chain];
+  const nativeChain = chainForNativeAsset(transaction.asset, transaction.chain);
+  const native = CHAIN_CONFIG[nativeChain];
   if (transaction.asset_type === "nft") return {
     id: transaction.asset,
     chain: transaction.chain,
@@ -2007,15 +2105,29 @@ function assetDescriptorFromTransaction(transaction) {
     kind: "nft",
     contractAddress: transaction.asset_contract || null,
   };
-  if (!transaction.asset_contract) return nativeAssetDescriptors()[transaction.asset] || {
-    id: transaction.asset,
-    chain: transaction.chain,
-    name: transaction.asset_name || transaction.asset,
-    symbol: transaction.asset_symbol || transaction.asset,
-    decimals: Number.isInteger(transaction.asset_decimals) ? transaction.asset_decimals : native?.decimals || 6,
-    icon: native?.icon || "◇",
-    kind: "native",
-  };
+  if (!transaction.asset_contract) {
+    const knownNative = nativeAssetDescriptors()[transaction.asset];
+    if (knownNative) return knownNative;
+    const exchangeAsset = EXCHANGE_ASSET_CONFIG[transaction.asset];
+    if (exchangeAsset) return {
+      id: transaction.asset,
+      chain: "EXCHANGE",
+      name: exchangeAsset.name,
+      symbol: exchangeAsset.symbol,
+      decimals: exchangeAsset.decimals,
+      icon: exchangeAsset.icon,
+      kind: "exchange",
+    };
+    return {
+      id: transaction.asset,
+      chain: nativeChain,
+      name: transaction.asset_name || transaction.asset,
+      symbol: transaction.asset_symbol || transaction.asset,
+      decimals: Number.isInteger(transaction.asset_decimals) ? transaction.asset_decimals : native?.decimals || 6,
+      icon: native?.icon || "◇",
+      kind: native ? "native" : "unknown",
+    };
+  }
   return {
     id: transaction.asset,
     chain: transaction.chain,
@@ -2052,9 +2164,14 @@ async function portfolioResponse() {
       .map((asset) => asset.contractAddress),
     runtimeSettings(),
   );
+  const exchangeAssetPrices = await getExchangeAssetCurrentPrices(
+    Object.values(assets).filter((asset) => asset.kind === "exchange" && Number(holdings[asset.id] || 0) !== 0).map((asset) => asset.id),
+  );
   const pricesByAsset = Object.fromEntries(Object.entries(assets).map(([assetId, asset]) => [
     assetId,
-    asset.kind === "erc20" ? tokenPrices[asset.contractAddress] || null : asset.kind === "nft" ? null : currentPrices[asset.chain] || null,
+    asset.kind === "erc20" ? tokenPrices[asset.contractAddress] || null
+      : asset.kind === "exchange" ? exchangeAssetPrices[assetId] || null
+        : asset.kind === "nft" || asset.kind === "unknown" ? null : currentPrices[asset.chain] || null,
   ]));
   const enriched = transactions.map((transaction) => ({
     ...transaction,
@@ -2111,7 +2228,8 @@ async function portfolioResponse() {
       },
     },
     purposePresets: PURPOSE_PRESETS,
-    chains: Object.fromEntries(Object.entries(CHAIN_CONFIG).map(([key, value]) => [key, {
+    chains: {
+      ...Object.fromEntries(Object.entries(CHAIN_CONFIG).map(([key, value]) => [key, {
       name: value.name,
       asset: value.asset,
       decimals: value.decimals,
@@ -2120,7 +2238,9 @@ async function portfolioResponse() {
       addressHint: value.addressHint,
       supportsXpub: key === "BTC",
       explorer: value.explorer,
-    }])),
+      }])),
+      EXCHANGE: { name: "Börse", asset: "", decimals: 8, icon: "⇄", addressPlaceholder: "", addressHint: "Read-only Börsenbestände", supportsXpub: false, explorer: {} },
+    },
   };
 }
 
@@ -2282,7 +2402,10 @@ function transactionQualityRows(condition, limit = 100) {
     WHERE ${condition}
     ORDER BY t.timestamp ASC
     LIMIT ?
-  `).all(limit);
+  `).all(limit).map((transaction) => ({
+    ...transaction,
+    chain: chainForNativeAsset(transaction.asset, transaction.chain) || (EXCHANGE_ASSET_CONFIG[transaction.asset] ? "EXCHANGE" : transaction.chain),
+  }));
 }
 
 app.get("/api/data-quality", (_request, response, next) => {
@@ -2702,10 +2825,11 @@ function parseCsvRows(text, profileId) {
 
 function importExternalRows(wallet, rows, { source, profile = null, purposeOrigin = "manual" }) {
   const insert = db.prepare(`INSERT INTO transactions (wallet_id, external_id, hash, timestamp, direction, asset, asset_symbol, asset_name, asset_decimals, amount, fee, fee_asset, counterparty, price_transaction_eur, price_source, purpose, purpose_origin, raw_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(wallet_id, external_id) DO UPDATE SET
       timestamp=excluded.timestamp, direction=excluded.direction, amount=excluded.amount, fee=excluded.fee, fee_asset=excluded.fee_asset,
       counterparty=excluded.counterparty, price_transaction_eur=CASE WHEN transactions.price_source='manual' THEN transactions.price_transaction_eur ELSE excluded.price_transaction_eur END,
+      price_source=CASE WHEN transactions.price_source='manual' THEN 'manual' ELSE excluded.price_source END,
       purpose=CASE WHEN transactions.purpose_origin='manual' THEN transactions.purpose ELSE excluded.purpose END,
       purpose_origin=CASE WHEN transactions.purpose_origin='manual' THEN 'manual' ELSE excluded.purpose_origin END,
       raw_json=excluded.raw_json, updated_at=datetime('now')`);
@@ -2725,9 +2849,13 @@ function importExternalRows(wallet, rows, { source, profile = null, purposeOrigi
       const fee = Number(String(row.fee || 0).replace(",", ".")) || 0;
       const feeAsset = cleanLabel(row.fee_asset || row.feeAsset || asset, 48).toUpperCase() || asset;
       const raw = row.raw || row;
+      // An exchange-supplied EUR execution price is a source record and must
+      // remain protected. Empty values are deliberately automatic so the
+      // existing throttled historic-price job can keep completing them.
+      const priceSource = price === null ? "auto" : "manual";
       insert.run(
         wallet.id, externalId, cleanLabel(row.hash || externalId, 180), timestamp, direction, asset, asset, asset, 8,
-        amount, fee, feeAsset, cleanLabel(row.counterparty, 160) || null, price, cleanPurpose(row.purpose), purposeOrigin,
+        amount, fee, feeAsset, cleanLabel(row.counterparty, 160) || null, price, priceSource, cleanPurpose(row.purpose), purposeOrigin,
         JSON.stringify({ source, profile, row: raw }),
       );
       imported += 1;
@@ -2755,6 +2883,7 @@ function exchangeConnectionView(connection) {
     walletLabel: connection.wallet_label,
     walletChain: connection.wallet_chain,
     walletAddress: connection.wallet_address,
+    symbols: connection.symbols || "",
     lastSyncedAt: connection.last_synced_at,
     createdAt: connection.created_at,
     apiKeyConfigured: Boolean(connection.api_key),
@@ -2769,16 +2898,24 @@ function containsForbiddenKeyMaterial(value) {
 }
 
 async function syncExchangeConnection(connection) {
-  if (connection.provider !== "bitvavo") throw makeError("Für diese Börse ist noch kein Read-only-Adapter eingerichtet.");
   const wallet = getWallet(connection.wallet_id);
-  const rows = await fetchBitvavoHistory({
-    apiBaseUrl: runtimeSettings().bitvavoApiBaseUrl,
-    apiKey: connection.api_key,
-    apiSecret: connection.api_secret,
-  });
-  const imported = importExternalRows(wallet, rows, { source: "bitvavo-api", purposeOrigin: "auto" });
+  const settings = runtimeSettings();
+  let rows = [];
+  let warnings = [];
+  let selectedSymbols = [];
+  if (connection.provider === "bitvavo") {
+    rows = await fetchBitvavoHistory({ apiBaseUrl: settings.bitvavoApiBaseUrl, apiKey: connection.api_key, apiSecret: connection.api_secret });
+  } else if (connection.provider === "binance") {
+    const result = await fetchBinanceHistory({
+      apiBaseUrl: settings.binanceApiBaseUrl, apiKey: connection.api_key, apiSecret: connection.api_secret, symbols: connection.symbols,
+    });
+    rows = result.rows;
+    warnings = result.warnings;
+    selectedSymbols = result.selectedSymbols;
+  } else throw makeError("Für diese Börse ist noch kein Read-only-Adapter eingerichtet.");
+  const imported = importExternalRows(wallet, rows, { source: `${connection.provider}-api`, purposeOrigin: "auto" });
   db.prepare("UPDATE exchange_connections SET last_synced_at = datetime('now') WHERE id = ?").run(connection.id);
-  return { imported, provider: connection.provider, limited: rows.length >= 2500 };
+  return { imported, provider: connection.provider, limited: rows.length >= 2500, warnings, selectedSymbols };
 }
 
 app.get("/api/import/csv-profiles", (_request, response) => {
@@ -2791,7 +2928,10 @@ app.get("/api/exchange-connections", (_request, response, next) => {
       SELECT c.*, w.label AS wallet_label, w.chain AS wallet_chain, w.address AS wallet_address
       FROM exchange_connections c JOIN wallets w ON w.id = c.wallet_id ORDER BY c.id DESC
     `).all().map(exchangeConnectionView);
-    response.json({ providers: [{ id: "bitvavo", label: "Bitvavo · Read-only API" }], connections });
+    response.json({ providers: [
+      { id: "bitvavo", label: "Bitvavo · Read-only API" },
+      { id: "binance", label: "Binance Spot · Read-only API" },
+    ], connections });
   } catch (error) { next(error); }
 });
 
@@ -2799,16 +2939,17 @@ app.post("/api/exchange-connections", (request, response, next) => {
   try {
     const provider = String(request.body?.provider || "").trim().toLowerCase();
     const walletId = asPositiveId(request.body?.walletId);
-    const label = cleanLabel(request.body?.label, 80) || "Bitvavo";
+    const label = cleanLabel(request.body?.label, 80) || (provider === "binance" ? "Binance Spot" : "Bitvavo");
     const apiKey = String(request.body?.apiKey || "").trim();
     const apiSecret = String(request.body?.apiSecret || "").trim();
-    if (provider !== "bitvavo") throw makeError("Bitte eine unterstützte Börse auswählen.");
+    const symbols = parseSymbols(request.body?.symbols).join(",");
+    if (!['bitvavo', 'binance'].includes(provider)) throw makeError("Bitte eine unterstützte Börse auswählen.");
     if (!walletId) throw makeError("Bitte eine Ziel-Wallet auswählen.");
     getWallet(walletId);
     if (apiKey.length < 8 || apiKey.length > 512 || apiSecret.length < 8 || apiSecret.length > 512) throw makeError("API-Key und Secret müssen zwischen 8 und 512 Zeichen lang sein.");
     if (containsForbiddenKeyMaterial(apiKey) || containsForbiddenKeyMaterial(apiSecret)) throw makeError("Private Keys, xPrvs und Seed-Phrases werden niemals akzeptiert. Bitte ausschließlich einen Börsen-API-Key und dessen Secret verwenden.");
-    const result = db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret) VALUES (?, ?, ?, ?, ?)")
-      .run(provider, walletId, label, apiKey, apiSecret);
+    const result = db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret, symbols) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(provider, walletId, label, apiKey, apiSecret, symbols);
     response.status(201).json(exchangeConnectionView(getExchangeConnection(Number(result.lastInsertRowid))));
   } catch (error) {
     if (String(error.message).includes("UNIQUE constraint failed")) return next(makeError("Diese Börsenverbindung ist für die Ziel-Wallet bereits hinterlegt."));
