@@ -30,6 +30,7 @@ const { classifyEvmTransaction, isLikelySpamAsset } = require("./lib/defi");
 const { EXCHANGE_CSV_PROFILES, normalizeExchangeRows } = require("./lib/exchange-import");
 const { fetchBitvavoHistory } = require("./lib/bitvavo");
 const { fetchBinanceHistory, parseSymbols } = require("./lib/binance");
+const { matchExchangeTransfer } = require("./lib/exchange-transfer-matcher");
 const {
   bitvavoDailyClosePrices,
   coinGeckoDate,
@@ -221,7 +222,7 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS background_jobs (
     id INTEGER PRIMARY KEY,
-    type TEXT NOT NULL CHECK (type IN ('wallet_sync', 'price_backfill', 'exchange_sync')),
+    type TEXT NOT NULL CHECK (type IN ('wallet_sync', 'price_backfill', 'exchange_sync', 'exchange_transfer_check')),
     payload_json TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'success', 'error')),
     progress_current INTEGER NOT NULL DEFAULT 0,
@@ -270,6 +271,8 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_transactions_wallet_timestamp
     ON transactions(wallet_id, timestamp DESC);
+  CREATE INDEX IF NOT EXISTS idx_transactions_asset_direction_timestamp
+    ON transactions(asset, direction, timestamp DESC);
   CREATE INDEX IF NOT EXISTS idx_transactions_purpose
     ON transactions(purpose) WHERE purpose IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_wallet_addresses_wallet_branch_index
@@ -339,12 +342,12 @@ migrateWalletSchemaForChains();
 
 function migrateBackgroundJobSchema() {
   const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'background_jobs'").get()?.sql || "";
-  if (sql.includes("exchange_sync")) return;
+  if (sql.includes("exchange_transfer_check")) return;
   db.exec(`
     BEGIN;
     CREATE TABLE background_jobs_migration (
       id INTEGER PRIMARY KEY,
-      type TEXT NOT NULL CHECK (type IN ('wallet_sync', 'price_backfill', 'exchange_sync')),
+      type TEXT NOT NULL CHECK (type IN ('wallet_sync', 'price_backfill', 'exchange_sync', 'exchange_transfer_check')),
       payload_json TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'success', 'error')),
       progress_current INTEGER NOT NULL DEFAULT 0,
@@ -1771,7 +1774,23 @@ function scheduleJobWorker() {
         // The exchange request itself remains read-only and quick. Missing
         // execution prices are completed afterwards by the existing serial,
         // throttled price queue instead of making the account sync fan out.
-        if (result.imported) enqueueJob("price_backfill", { force: false });
+        if (result.imported) {
+          // A transfer reconciliation is deliberately separate from the API
+          // import. It only creates reviewable suggestions and never changes
+          // purposes, prices or FIFO lots by itself.
+          enqueueJob("exchange_transfer_check", { connectionId: connection.id });
+          enqueueJob("price_backfill", { force: false });
+        }
+      } else if (job.type === "exchange_transfer_check") {
+        const connection = db.prepare("SELECT id, provider, label FROM exchange_connections WHERE id = ?").get(asPositiveId(payload.connectionId));
+        const suggestions = exchangeTransferSuggestions(400);
+        result = { connectionId: Number(payload.connectionId) || null, candidates: suggestions.length };
+        const sourceName = connection?.label || connection?.provider || "Börsenbestand";
+        if (suggestions.length) {
+          createNotification("info", "Börsen-Transfers prüfen", `${sourceName}: ${suggestions.length.toLocaleString("de-DE")} mögliche Ein- oder Auszahlungen wurden unter Datenqualität vorgeschlagen.`);
+        } else {
+          createNotification("success", "Börsen-Transfers geprüft", `${sourceName}: Keine passenden lokalen Gegenbewegungen gefunden.`);
+        }
       } else {
         throw makeError("Unbekannter Hintergrundjob.");
       }
@@ -2405,6 +2424,89 @@ function transactionQualityRows(condition, limit = 100) {
   }));
 }
 
+function exchangeProviderFromRaw(rawJson) {
+  try {
+    const source = JSON.parse(String(rawJson || "{}"))?.source;
+    if (source === "binance-api") return "Binance";
+    if (source === "bitvavo-api") return "Bitvavo";
+  } catch {
+    // Old or malformed raw payloads must simply not be presented as an
+    // exchange proposal; normal transaction data remains untouched.
+  }
+  return null;
+}
+
+function exchangeTransferSuggestions(limit = 80) {
+  const desired = boundedInteger(limit, 80, 1, 400);
+  // The SQL prefilter narrows the comparison to matching asset, direction,
+  // amount and time window. The matcher below then applies the fee-aware
+  // exact comparison and assigns the human-readable direction.
+  const rows = db.prepare(`
+    SELECT
+      exchange_row.id AS exchange_id, exchange_row.direction AS exchange_direction, exchange_row.asset AS exchange_asset,
+      exchange_row.amount AS exchange_amount, exchange_row.fee AS exchange_fee, exchange_row.fee_asset AS exchange_fee_asset,
+      exchange_row.timestamp AS exchange_timestamp, exchange_row.raw_json AS exchange_raw_json,
+      local_row.id AS local_id, local_row.direction AS local_direction, local_row.asset AS local_asset,
+      local_row.amount AS local_amount, local_row.timestamp AS local_timestamp,
+      exchange_wallet.label AS exchange_wallet, local_wallet.label AS local_wallet
+    FROM transactions exchange_row
+    JOIN transactions local_row ON local_row.asset = exchange_row.asset
+      AND ((exchange_row.direction = 'out' AND local_row.direction = 'in') OR (exchange_row.direction = 'in' AND local_row.direction = 'out'))
+      AND ABS(strftime('%s', local_row.timestamp) - strftime('%s', exchange_row.timestamp)) <= 259200
+      AND (
+        ABS(local_row.amount - exchange_row.amount) <= MAX(0.00000001, ABS(exchange_row.amount) * 0.01)
+        OR (
+          exchange_row.fee_asset = exchange_row.asset AND exchange_row.fee > 0 AND exchange_row.fee < exchange_row.amount
+          AND ABS(local_row.amount - (exchange_row.amount - exchange_row.fee)) <= MAX(0.00000001, ABS(exchange_row.amount - exchange_row.fee) * 0.01)
+        )
+      )
+    JOIN wallets exchange_wallet ON exchange_wallet.id = exchange_row.wallet_id
+    JOIN wallets local_wallet ON local_wallet.id = local_row.wallet_id
+    LEFT JOIN transfer_links linked_out ON linked_out.outgoing_transaction_id = CASE WHEN exchange_row.direction = 'out' THEN exchange_row.id ELSE local_row.id END
+    LEFT JOIN transfer_links linked_in ON linked_in.incoming_transaction_id = CASE WHEN exchange_row.direction = 'in' THEN exchange_row.id ELSE local_row.id END
+    WHERE exchange_row.purpose = 'Transfer'
+      AND (exchange_row.raw_json LIKE '%"source":"binance-api"%' OR exchange_row.raw_json LIKE '%"source":"bitvavo-api"%')
+      AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"binance-api"%'
+      AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"bitvavo-api"%'
+      AND linked_out.id IS NULL AND linked_in.id IS NULL
+    ORDER BY exchange_row.timestamp DESC
+    LIMIT ?
+  `).all(Math.min(desired * 4, 1600));
+  const suggestions = [];
+  const seen = new Set();
+  for (const row of rows) {
+    const provider = exchangeProviderFromRaw(row.exchange_raw_json);
+    if (!provider) continue;
+    const exchangeTransaction = {
+      id: row.exchange_id, direction: row.exchange_direction, asset: row.exchange_asset, amount: row.exchange_amount,
+      fee: row.exchange_fee, feeAsset: row.exchange_fee_asset, timestamp: row.exchange_timestamp,
+    };
+    const localTransaction = {
+      id: row.local_id, direction: row.local_direction, asset: row.local_asset, amount: row.local_amount, timestamp: row.local_timestamp,
+    };
+    const match = matchExchangeTransfer(exchangeTransaction, localTransaction);
+    if (!match) continue;
+    const key = `${match.outgoing.id}:${match.incoming.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const exchangeIsOutgoing = match.outgoing.id === row.exchange_id;
+    suggestions.push({
+      outgoing_id: match.outgoing.id,
+      incoming_id: match.incoming.id,
+      asset: match.asset,
+      amount: match.amount,
+      outgoing_at: match.outgoing.timestamp,
+      incoming_at: match.incoming.timestamp,
+      outgoing_wallet: exchangeIsOutgoing ? `${provider} · Börse` : (row.local_wallet || "Lokale Wallet"),
+      incoming_wallet: exchangeIsOutgoing ? (row.local_wallet || "Lokale Wallet") : `${provider} · Börse`,
+      origin: "exchange",
+      fee_adjusted: match.feeAdjusted,
+    });
+    if (suggestions.length >= desired) break;
+  }
+  return suggestions;
+}
+
 app.get("/api/data-quality", (_request, response, next) => {
   try {
     const missingHistoricPrices = transactionQualityRows(`
@@ -2418,7 +2520,7 @@ app.get("/api/data-quality", (_request, response, next) => {
       unassignedPurposes: Number(db.prepare("SELECT COUNT(*) AS count FROM transactions WHERE purpose IS NULL OR trim(purpose) = ''").get().count || 0),
       manualHistoricPrices: Number(db.prepare("SELECT COUNT(*) AS count FROM transactions WHERE price_source = 'manual'").get().count || 0),
     };
-    const possibleTransfers = db.prepare(`
+    const walletTransferSuggestions = db.prepare(`
       SELECT a.id AS outgoing_id, b.id AS incoming_id, a.asset, a.amount, a.timestamp AS outgoing_at, b.timestamp AS incoming_at,
         aw.label AS outgoing_wallet, bw.label AS incoming_wallet
       FROM transactions a
@@ -2432,6 +2534,9 @@ app.get("/api/data-quality", (_request, response, next) => {
         AND linked_out.id IS NULL AND linked_in.id IS NULL
       ORDER BY a.timestamp DESC LIMIT 80
     `).all();
+    const possibleTransfers = [...exchangeTransferSuggestions(80), ...walletTransferSuggestions]
+      .filter((entry, index, entries) => entries.findIndex((candidate) => candidate.outgoing_id === entry.outgoing_id && candidate.incoming_id === entry.incoming_id) === index)
+      .slice(0, 80);
     const possibleDuplicates = db.prepare(`
       SELECT hash, asset, amount, COUNT(*) AS occurrences, GROUP_CONCAT(id) AS transaction_ids
       FROM transactions WHERE hash <> '' GROUP BY hash, asset, amount HAVING COUNT(*) > 1 ORDER BY occurrences DESC LIMIT 80
@@ -2947,7 +3052,12 @@ app.post("/api/exchange-connections", (request, response, next) => {
     if (containsForbiddenKeyMaterial(apiKey) || containsForbiddenKeyMaterial(apiSecret)) throw makeError("Private Keys, xPrvs und Seed-Phrases werden niemals akzeptiert. Bitte ausschließlich einen Börsen-API-Key und dessen Secret verwenden.");
     const result = db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret, symbols) VALUES (?, ?, ?, ?, ?, ?)")
       .run(provider, walletId, label, apiKey, apiSecret, symbols);
-    response.status(201).json(exchangeConnectionView(getExchangeConnection(Number(result.lastInsertRowid))));
+    const connection = exchangeConnectionView(getExchangeConnection(Number(result.lastInsertRowid)));
+    // A newly saved Read-only connection contains no local exchange rows yet.
+    // Start its regular serial sync immediately; the follow-up transfer check
+    // is queued by that sync only after records were imported.
+    const job = enqueueJob("exchange_sync", { connectionId: connection.id });
+    response.status(201).json({ ...connection, job });
   } catch (error) {
     if (String(error.message).includes("UNIQUE constraint failed")) return next(makeError("Diese Börsenverbindung ist für die Ziel-Wallet bereits hinterlegt."));
     next(error);

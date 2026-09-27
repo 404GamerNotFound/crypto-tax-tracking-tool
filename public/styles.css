@@ -218,6 +218,86 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
 .quality-action { margin-left: 12px; }
 .historic-price-edit { display: block; margin-top: 7px; font-size: 10px; }
 
+/* Datenqualität: Börsenabgleich und Read-only-Verbindungen */
+.quality-hero { padding-bottom: 30px; }
+.transfer-review-panel { margin: 0 0 18px; border: 1px solid #b8d9c6; border-radius: 10px; overflow: hidden; background: linear-gradient(135deg, #eff9f1 0%, var(--cream) 56%); }
+.transfer-review-heading { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 22px 24px; }
+.transfer-review-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; color: var(--green-dark); background: var(--mint); font: 600 29px "DM Mono", monospace; }
+.transfer-review-heading .eyebrow { margin-bottom: 5px; }
+.transfer-review-heading h2 { margin: 0 0 4px; font: 600 27px "Fraunces", Georgia, serif; letter-spacing: -.04em; }
+.transfer-review-heading p:not(.eyebrow) { max-width: 650px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.transfer-count { min-width: 38px; height: 38px; border: 1px solid #a4d5b6; color: var(--green-dark); background: #f9fffa; font-size: 13px; }
+.transfer-review-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #cfe6d5; border-bottom: 1px solid #cfe6d5; background: rgba(255,255,255,.48); }
+.transfer-review-steps article { min-height: 88px; display: grid; grid-template-columns: 26px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 9px; padding: 16px 18px; border-right: 1px solid #cfe6d5; }
+.transfer-review-steps article:last-child { border-right: 0; }
+.transfer-review-steps span { grid-row: span 2; width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; color: var(--green-dark); background: var(--mint); font: 600 10px "DM Mono", monospace; }
+.transfer-review-steps strong { align-self: end; font-size: 12px; }
+.transfer-review-steps small { align-self: start; margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.35; }
+.transfer-suggestion-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 12px; padding: 18px; }
+.transfer-suggestion-card { display: grid; gap: 15px; padding: 15px; border: 1px solid var(--line); border-radius: 8px; background: #fffefa; box-shadow: 0 3px 12px rgba(21, 44, 35, .035); }
+.transfer-suggestion-card.is-exchange { border-color: #acd7bd; }
+.transfer-card-head, .transfer-card-footer, .exchange-connection-card-head, .exchange-connection-card-footer, .exchange-connection-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.transfer-kind, .sync-status, .connection-mode { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; color: #54635a; background: #edf0eb; font: 500 9px "DM Mono", monospace; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.transfer-kind.exchange, .sync-status.is-synced { color: var(--green-dark); background: var(--mint); }
+.transfer-amount { color: var(--ink); font: 500 23px "Fraunces", Georgia, serif; letter-spacing: -.045em; white-space: nowrap; }
+.transfer-route { display: grid; grid-template-columns: minmax(0, 1fr) 26px minmax(0, 1fr); gap: 8px; align-items: center; }
+.transfer-route-point { min-width: 0; display: grid; gap: 2px; padding: 10px; border: 1px solid #e1e6dc; border-radius: 6px; background: #fbfcf8; }
+.transfer-route-point strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.transfer-route-point small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.transfer-route-label { color: var(--muted); font: 500 8px "DM Mono", monospace; letter-spacing: .09em; text-transform: uppercase; }
+.transfer-route-arrow { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 50%; color: var(--green-dark); background: var(--mint); font-size: 16px; font-weight: 700; }
+.transfer-details { display: flex; flex-wrap: wrap; gap: 6px; }
+.transfer-detail { flex: 1 1 112px; display: grid; gap: 2px; padding: 7px 8px; border-radius: 5px; background: #f3f6f0; }
+.transfer-detail span { color: var(--muted); font: 500 8px "DM Mono", monospace; letter-spacing: .06em; text-transform: uppercase; }
+.transfer-detail strong { font-size: 10px; line-height: 1.35; }
+.transfer-card-footer { align-items: flex-end; padding-top: 2px; border-top: 1px solid #e5e8e1; }
+.transfer-card-footer p { max-width: 255px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.transfer-card-footer .button { flex: 0 0 auto; }
+.transfer-empty { display: flex; align-items: center; gap: 12px; margin: 18px; padding: 17px; border: 1px dashed #9dc9ad; border-radius: 7px; background: rgba(255,255,255,.55); }
+.transfer-empty > span { width: 31px; height: 31px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; color: var(--green-dark); background: var(--mint); font-weight: 700; }
+.transfer-empty strong { display: block; font-size: 12px; }
+.transfer-empty p, .transfer-review-footnote { margin: 3px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.transfer-review-footnote { padding: 0 24px 17px; }
+.quality-form { padding: 20px 24px 24px; }
+.connection-mode { align-self: center; color: var(--green-dark); background: var(--mint); }
+.exchange-connect-intro { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--line); }
+.exchange-connect-intro > div { padding: 14px 24px; background: #f3f8f2; }
+.exchange-connect-intro strong { display: block; color: var(--green-dark); font-size: 12px; }
+.exchange-connect-intro p { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.exchange-connect-intro b { color: var(--green-dark); }
+.exchange-connect-form { padding-top: 22px; }
+.form-wide { grid-column: 1 / -1; }
+.exchange-security-notice { display: grid; grid-template-columns: 29px minmax(0, 1fr); gap: 9px; align-items: center; margin: 1px 0 18px; padding: 10px 11px; border: 1px solid #b9dac5; border-radius: 6px; background: #eff9f1; }
+.exchange-security-notice > span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: var(--green-dark); background: #d5eddf; font: 600 17px "DM Mono", monospace; }
+.exchange-security-notice p { margin: 0; color: #4b6958; font-size: 10px; line-height: 1.45; }
+.exchange-security-notice strong { color: var(--green-dark); }
+.exchange-connection-section { padding: 22px 24px 24px; border-top: 1px solid var(--line); background: #fafbf7; }
+.exchange-connection-heading { align-items: flex-end; margin-bottom: 13px; }
+.exchange-connection-heading .eyebrow { margin-bottom: 4px; }
+.exchange-connection-heading h3 { margin: 0; font: 600 22px "Fraunces", Georgia, serif; letter-spacing: -.035em; }
+.exchange-connection-heading .muted { max-width: 290px; text-align: right; line-height: 1.4; }
+.exchange-connection-list { display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; }
+.exchange-connection-card { display: grid; gap: 14px; padding: 15px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); }
+.exchange-connection-card-head { justify-content: flex-start; }
+.exchange-provider-mark { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 9px; color: white; background: #52677f; font: 600 10px "DM Mono", monospace; }
+.exchange-provider-mark.binance { color: #5b4708; background: #f0c54a; }
+.exchange-provider-mark.bitvavo { background: #2374ac; }
+.exchange-connection-name { min-width: 0; display: grid; gap: 2px; }
+.exchange-connection-name strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.exchange-connection-name span { color: var(--muted); font: 10px "DM Mono", monospace; }
+.sync-status { margin-left: auto; }
+.exchange-connection-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 0; padding: 10px; border-radius: 6px; background: #f4f6f1; }
+.exchange-connection-details dt { color: var(--muted); font: 500 8px "DM Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
+.exchange-connection-details dd { margin: 3px 0 0; overflow-wrap: anywhere; font-size: 11px; line-height: 1.35; }
+.exchange-connection-card-footer { align-items: flex-end; }
+.exchange-connection-card-footer p { max-width: 440px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.exchange-connection-actions { display: flex; align-items: center; gap: 12px; }
+.exchange-remove { color: #9d4a40; }
+.exchange-connection-empty { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 1px 10px; align-items: center; padding: 16px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
+.exchange-connection-empty > span { grid-row: span 2; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: var(--green); background: var(--mint); font-size: 18px; }
+.exchange-connection-empty strong { color: var(--ink); font-size: 12px; }
+.exchange-connection-empty p { margin: 0; font-size: 10px; line-height: 1.4; }
+
 .settings-shell { max-width: 1080px; }
 .settings-main { max-width: 840px; padding: 62px 0 44px; }
 .settings-intro { max-width: 680px; margin-bottom: 38px; }
@@ -445,6 +525,23 @@ a.market-availability:hover { text-decoration: underline; }
   .asset-chart { min-height: 205px; overflow-x: auto; }
   .asset-chart svg { min-width: 620px; height: 205px; }
   .report-main { padding-top: 35px; }
+  .transfer-review-heading { grid-template-columns: 42px minmax(0, 1fr) auto; padding: 18px 16px; }
+  .transfer-review-icon { width: 42px; height: 42px; border-radius: 12px; font-size: 25px; }
+  .transfer-review-heading h2 { font-size: 23px; }
+  .transfer-review-steps { grid-template-columns: 1fr; }
+  .transfer-review-steps article { min-height: 0; padding: 12px 16px; border-right: 0; border-bottom: 1px solid #cfe6d5; }
+  .transfer-review-steps article:last-child { border-bottom: 0; }
+  .transfer-suggestion-grid { grid-template-columns: 1fr; padding: 14px; }
+  .transfer-review-footnote { padding: 0 16px 15px; }
+  .transfer-card-footer, .exchange-connection-card-footer { align-items: stretch; flex-direction: column; }
+  .transfer-card-footer p, .exchange-connection-card-footer p { max-width: none; }
+  .transfer-card-footer .button { width: 100%; }
+  .exchange-connect-intro { grid-template-columns: 1fr; }
+  .exchange-connect-intro > div { padding: 13px 16px; }
+  .quality-form { padding: 18px 16px; }
+  .exchange-connection-section { padding: 18px 16px; }
+  .exchange-connection-heading { display: block; }
+  .exchange-connection-heading .muted { display: block; max-width: none; margin-top: 7px; text-align: left; }
   .tax-workflow { grid-template-columns: 1fr 1fr; }
   .tax-profile-panel { grid-template-columns: 1fr; gap: 16px; padding: 18px; }
   .tax-optimizer-grid { grid-template-columns: 1fr; padding: 0 16px 18px; }
@@ -465,6 +562,12 @@ a.market-availability:hover { text-decoration: underline; }
   .card-label { letter-spacing: .04em; font-size: 8px; }
   .muted { font-size: 10px; }
   .form-grid { grid-template-columns: 1fr; gap: 0; }
+  .form-wide { grid-column: auto; }
+  .transfer-route { grid-template-columns: 1fr; }
+  .transfer-route-arrow { transform: rotate(90deg); justify-self: center; }
+  .transfer-details { display: grid; grid-template-columns: 1fr; }
+  .exchange-connection-actions { align-items: stretch; flex-direction: column; gap: 9px; }
+  .exchange-connection-actions .button { width: 100%; }
   dialog form { padding: 21px; }
   .modal-actions { align-items: stretch; flex-direction: column-reverse; }
   .dashboard-overview, .asset-metrics { grid-template-columns: 1fr; }
