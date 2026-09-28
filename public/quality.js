@@ -2,7 +2,7 @@ const el = (id) => document.getElementById(id);
 const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" });
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
 const amount = (value, asset) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 8 }).format(Number(value || 0)) + " " + asset;
-const state = { data: null, transaction: null, portfolio: null, csvProfiles: [], exchange: { providers: [], connections: [] }, tradeRepublicActivationConnectionId: null };
+const state = { data: null, transaction: null, portfolio: null, csvProfiles: [], exchange: { providers: [], connections: [] }, tradeRepublicWebLoginConnectionId: null, tradeRepublicWebLoginTimer: null };
 
 function node(tag, className, text) {
   const value = document.createElement(tag);
@@ -159,7 +159,7 @@ function importTargetOptions() {
 function updateExchangeProviderForm() {
   const provider = providerDefinition(el("exchange-provider").value);
   const api = provider.importMode === "api";
-  const tradeRepublic = Boolean(provider.requiresDeviceActivation);
+  const tradeRepublic = Boolean(provider.requiresWebLogin);
   el("exchange-symbols-field").hidden = !provider.supportsSymbols;
   el("exchange-label").placeholder = `z. B. ${provider.defaultLabel || "Börse"}`;
   el("exchange-api-key-field").hidden = !api;
@@ -179,7 +179,7 @@ function updateExchangeProviderForm() {
   el("exchange-trade-republic-consent").required = tradeRepublic;
   el("exchange-security-copy").textContent = api
     ? tradeRepublic
-      ? "Inoffiziell & lokal: Die Geräteaktivierung und die Anmeldung erfolgen direkt zwischen diesem lokalen Server und Trade Republic. Session-Tokens bleiben nur im Arbeitsspeicher; es werden keine Handelsfunktionen aufgerufen."
+      ? "Inoffiziell & lokal: Die Web-Anmeldung wird in deiner Trade-Republic-App bestätigt. Deine PIN wird nicht gespeichert; nur die lokale Web-Sitzung wird verschlüsselt abgelegt. Es werden keine Handelsfunktionen aufgerufen."
       : "Read-only & lokal: Die Zugangsdaten dürfen nur Kontostände und Historie lesen. Sie werden nach dem Speichern nicht erneut angezeigt."
     : "Nur lokale Belege: Für diese Quelle werden keine API-, Login- oder Zugangsdaten benötigt oder gespeichert.";
   if (!api) {
@@ -188,15 +188,60 @@ function updateExchangeProviderForm() {
     el("exchange-symbols").value = "";
     el("exchange-trade-republic-consent").checked = false;
   }
-  el("exchange-connection-form").querySelector('button[type="submit"]').textContent = tradeRepublic ? "Geräteaktivierung starten" : api ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
+  el("exchange-connection-form").querySelector('button[type="submit"]').textContent = tradeRepublic ? "Web-Anmeldung starten" : api ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
 }
 
-function openTradeRepublicActivation(connection) {
-  state.tradeRepublicActivationConnectionId = Number(connection.id);
-  el("trade-republic-activation-form").reset();
-  el("trade-republic-activation-error").hidden = true;
-  el("trade-republic-activation-modal").showModal();
-  window.setTimeout(() => el("trade-republic-activation-code").focus(), 0);
+function clearTradeRepublicWebLoginPoll() {
+  if (state.tradeRepublicWebLoginTimer) window.clearTimeout(state.tradeRepublicWebLoginTimer);
+  state.tradeRepublicWebLoginTimer = null;
+}
+
+function openTradeRepublicWebLogin(connection) {
+  clearTradeRepublicWebLoginPoll();
+  state.tradeRepublicWebLoginConnectionId = Number(connection.id);
+  const pending = connection.tradeRepublic?.status === "approval_pending";
+  el("trade-republic-web-login-form").reset();
+  el("trade-republic-web-login-error").hidden = true;
+  el("trade-republic-web-login-pin-field").hidden = pending;
+  el("trade-republic-web-login-submit").textContent = pending ? "Warte auf App-Bestätigung …" : "App-Bestätigung anfordern";
+  el("trade-republic-web-login-submit").disabled = pending;
+  el("trade-republic-web-login-copy").textContent = pending ? "Bestätige die Anmeldung jetzt in deiner Trade-Republic-App. CryptoBuch prüft die Freigabe lokal; die App bleibt als Gerät angemeldet." : "Für eine neue Web-Sitzung benötigst du einmalig deine PIN. Sie wird nicht gespeichert. Bestätige anschließend die Anmeldung in der Trade-Republic-App.";
+  el("trade-republic-web-login-modal").showModal();
+  if (pending) pollTradeRepublicWebLogin(); else window.setTimeout(() => el("trade-republic-web-login-pin").focus(), 0);
+}
+
+async function pollTradeRepublicWebLogin() {
+  try {
+    const id = state.tradeRepublicWebLoginConnectionId;
+    if (!Number.isSafeInteger(id)) return;
+    const result = await api(`/api/exchange-connections/${id}/trade-republic/web-login/poll`, { method: "POST" });
+    if (result.tradeRepublic?.status === "connected") {
+      clearTradeRepublicWebLoginPoll();
+      el("trade-republic-web-login-modal").close();
+      state.tradeRepublicWebLoginConnectionId = null;
+      toast("Trade-Republic-Websitzung bestätigt. Der nur lesende Krypto-Import wurde gestartet.");
+      await load();
+      return;
+    }
+    if (result.tradeRepublic?.status !== "approval_pending") {
+      clearTradeRepublicWebLoginPoll();
+      el("trade-republic-web-login-error").textContent = result.tradeRepublic?.lastError || "Die App-Bestätigung wurde nicht abgeschlossen.";
+      el("trade-republic-web-login-error").hidden = false;
+      el("trade-republic-web-login-pin-field").hidden = false;
+      el("trade-republic-web-login-submit").disabled = false;
+      el("trade-republic-web-login-submit").textContent = "Erneut anmelden";
+      await load();
+      return;
+    }
+    state.tradeRepublicWebLoginTimer = window.setTimeout(pollTradeRepublicWebLogin, 2500);
+  } catch (error) {
+    clearTradeRepublicWebLoginPoll();
+    el("trade-republic-web-login-error").textContent = error.message;
+    el("trade-republic-web-login-error").hidden = false;
+    el("trade-republic-web-login-pin-field").hidden = false;
+    el("trade-republic-web-login-submit").disabled = false;
+    el("trade-republic-web-login-submit").textContent = "Erneut anmelden";
+  }
 }
 
 function openExchangeCsvImport(connection) {
@@ -237,10 +282,10 @@ function connectionCard(connection) {
   const provider = providerDefinition(connection.provider);
   const csv = connection.importMode === "csv";
   const tradeRepublic = connection.tradeRepublic;
-  const activationPending = tradeRepublic?.status === "activation_pending";
-  const activationNeeded = tradeRepublic && tradeRepublic.status !== "active";
+  const activationPending = tradeRepublic?.status === "approval_pending";
+  const activationNeeded = tradeRepublic && tradeRepublic.status !== "connected";
   name.append(node("strong", "", connection.label || provider.defaultLabel || connection.provider), node("span", "", `${provider.label || connection.provider} · ${csv ? "lokaler CSV-Import" : "Read-only"}`));
-  const historyStatus = activationPending ? "Code benötigt" : tradeRepublic?.status === "activation_error" ? "Aktivierung prüfen" : connection.history?.lastError ? "Historie prüfen" : connection.history?.status === "running" ? "Historie läuft" : connection.history?.status === "pending" ? "Historie bereit" : connection.lastSyncedAt ? (csv ? "Importiert" : "Synchronisiert") : "Bereit";
+  const historyStatus = activationPending ? "App-Freigabe offen" : tradeRepublic?.status === "login_error" ? "Anmeldung prüfen" : connection.history?.lastError ? "Historie prüfen" : connection.history?.status === "running" ? "Historie läuft" : connection.history?.status === "pending" ? "Historie bereit" : connection.lastSyncedAt ? (csv ? "Importiert" : "Synchronisiert") : "Bereit";
   const status = node("span", "sync-status" + (connection.lastSyncedAt ? " is-synced" : ""), historyStatus);
   head.append(mark, name, status);
   const details = node("dl", "exchange-connection-details");
@@ -261,35 +306,22 @@ function connectionCard(connection) {
   }
   if (tradeRepublic) {
     const activation = node("div");
-    const copy = tradeRepublic.status === "active" ? `Gerät bestätigt${tradeRepublic.activatedAt ? ` · ${readableDateTime(tradeRepublic.activatedAt)}` : ""}`
-      : activationPending ? "Bestätigungscode aus Trade Republic eingeben"
-        : tradeRepublic.lastError ? `Aktivierung fehlgeschlagen: ${tradeRepublic.lastError}` : "Geräteaktivierung noch nicht gestartet";
-    activation.append(node("dt", "", "Geräteaktivierung"), node("dd", tradeRepublic.lastError ? "history-error" : "", copy));
+    const copy = tradeRepublic.status === "connected" ? `Web-Sitzung bestätigt${tradeRepublic.connectedAt ? ` · ${readableDateTime(tradeRepublic.connectedAt)}` : ""}`
+      : activationPending ? "App-Bestätigung steht aus"
+        : tradeRepublic.lastError ? `Anmeldung fehlgeschlagen: ${tradeRepublic.lastError}` : "Web-Anmeldung noch nicht gestartet";
+    activation.append(node("dt", "", "Web-Anmeldung"), node("dd", tradeRepublic.lastError ? "history-error" : "", copy));
     details.append(activation);
   }
   const footer = node("div", "exchange-connection-card-footer");
-  footer.append(node("p", "", csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : activationNeeded ? "Vor dem ersten Import muss die inoffizielle Trade-Republic-Geräteaktivierung bewusst abgeschlossen werden. Der Import ruft ausschließlich Timeline und Details ab." : connection.history && connection.history.status !== "complete" ? "Die Binance-Historie wird automatisch in kleinen, seriellen Schritten nachgeladen. Der Transfer-Abgleich folgt nach Abschluss." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
+  footer.append(node("p", "", csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : activationNeeded ? "Vor dem ersten Import muss die inoffizielle Trade-Republic-Webanmeldung in der App bestätigt werden. Der Import ruft ausschließlich Timeline und Details ab." : connection.history && connection.history.status !== "complete" ? "Die Binance-Historie wird automatisch in kleinen, seriellen Schritten nachgeladen. Der Transfer-Abgleich folgt nach Abschluss." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
   const actions = node("div", "exchange-connection-actions");
-  const sync = node("button", "button button-secondary button-small", csv ? "CSV importieren" : activationPending ? "Bestätigungscode eingeben" : activationNeeded ? "Aktivierung starten" : "Jetzt synchronisieren");
+  const sync = node("button", "button button-secondary button-small", csv ? "CSV importieren" : activationPending ? "App-Bestätigung öffnen" : activationNeeded ? "Web-Anmeldung starten" : "Jetzt synchronisieren");
   sync.type = "button";
   sync.addEventListener("click", async () => {
     if (csv) return openExchangeCsvImport(connection);
-    if (activationPending) return openTradeRepublicActivation(connection);
+    if (activationPending) return openTradeRepublicWebLogin(connection);
     if (activationNeeded) {
-      if (!confirm("Die inoffizielle Trade-Republic-Geräteaktivierung erneut starten? Dadurch kann die Anmeldung in der Trade-Republic-App abgemeldet werden.")) return;
-      sync.disabled = true;
-      sync.textContent = "Aktivierung startet …";
-      try {
-        const started = await api("/api/exchange-connections/" + connection.id + "/trade-republic/activation/start", { method: "POST" });
-        await load();
-        if (started.tradeRepublic?.status === "activation_pending") openTradeRepublicActivation(started);
-        else toast(started.tradeRepublic?.lastError || "Die Geräteaktivierung konnte nicht gestartet werden.", "error");
-      } catch (error) {
-        sync.disabled = false;
-        sync.textContent = "Aktivierung starten";
-        toast(error.message, "error");
-      }
-      return;
+      return openTradeRepublicWebLogin(connection);
     }
     sync.disabled = true;
     sync.textContent = "Sync gestartet …";
@@ -485,42 +517,39 @@ el("exchange-connection-form").addEventListener("submit", async (event) => {
       tradeRepublicConsent: el("exchange-trade-republic-consent").checked,
     }) });
     form.reset();
-    if (result.tradeRepublic?.status === "activation_pending") {
-      toast("Trade-Republic-Geräteaktivierung gestartet. Bitte den Bestätigungscode eingeben.");
-      openTradeRepublicActivation(result);
-    } else if (result.tradeRepublic?.status === "activation_error") {
-      toast(result.tradeRepublic.lastError || "Die Trade-Republic-Geräteaktivierung konnte nicht gestartet werden.", "error");
+    if (result.tradeRepublic?.status === "approval_pending") {
+      toast("Trade-Republic-Webanmeldung gestartet. Bitte in der App bestätigen.");
+      openTradeRepublicWebLogin(result);
+    } else if (result.tradeRepublic?.status === "login_error") {
+      toast(result.tradeRepublic.lastError || "Die Trade-Republic-Webanmeldung konnte nicht gestartet werden.", "error");
     } else toast(result.job ? "Read-only-Börsenverbindung gespeichert; aktuelle Daten und verfügbare Historie werden automatisch importiert." : "Börsenkonto für lokale CSV-Belege gespeichert.");
     await load();
   } catch (error) { toast(error.message, "error"); }
   finally {
     submit.disabled = false;
     const provider = providerDefinition(providerId);
-    submit.textContent = provider.requiresDeviceActivation ? "Geräteaktivierung starten" : provider.importMode === "api" ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
+    submit.textContent = provider.requiresWebLogin ? "Web-Anmeldung starten" : provider.importMode === "api" ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
   }
 });
-el("trade-republic-activation-form").addEventListener("submit", async (event) => {
+el("trade-republic-web-login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const errorNode = el("trade-republic-activation-error");
+  const errorNode = el("trade-republic-web-login-error");
   const submit = event.currentTarget.querySelector('button[type="submit"]');
   try {
-    if (!Number.isSafeInteger(state.tradeRepublicActivationConnectionId)) throw new Error("Die Trade-Republic-Verbindung fehlt.");
+    if (!Number.isSafeInteger(state.tradeRepublicWebLoginConnectionId)) throw new Error("Die Trade-Republic-Verbindung fehlt.");
     submit.disabled = true;
-    submit.textContent = "Wird bestätigt …";
-    const result = await api("/api/exchange-connections/" + state.tradeRepublicActivationConnectionId + "/trade-republic/activation", {
-      method: "POST", body: JSON.stringify({ code: el("trade-republic-activation-code").value }),
+    submit.textContent = "Anmeldung wird gestartet …";
+    const result = await api("/api/exchange-connections/" + state.tradeRepublicWebLoginConnectionId + "/trade-republic/web-login/start", {
+      method: "POST", body: JSON.stringify({ pin: el("trade-republic-web-login-pin").value }),
     });
-    el("trade-republic-activation-modal").close();
-    state.tradeRepublicActivationConnectionId = null;
-    toast("Trade-Republic-Gerät bestätigt. Der nur lesende Krypto-Import wurde gestartet.");
-    await load();
-    return result;
+    if (result.tradeRepublic?.status !== "approval_pending") throw new Error(result.tradeRepublic?.lastError || "Die Trade-Republic-Webanmeldung konnte nicht gestartet werden.");
+    openTradeRepublicWebLogin(result);
   } catch (error) {
     errorNode.textContent = error.message;
     errorNode.hidden = false;
   } finally {
     submit.disabled = false;
-    submit.textContent = "Gerät bestätigen & importieren";
+    if (!state.tradeRepublicWebLoginTimer) submit.textContent = "App-Bestätigung anfordern";
   }
 });
 el("quality-document-form").addEventListener("submit", async (event) => {
@@ -541,7 +570,7 @@ el("quality-document-form").addEventListener("submit", async (event) => {
 });
 el("reload-quality").addEventListener("click", load);
 el("close-quality-price").addEventListener("click", () => el("quality-price-modal").close());
-el("close-trade-republic-activation").addEventListener("click", () => el("trade-republic-activation-modal").close());
+el("close-trade-republic-web-login").addEventListener("click", () => { clearTradeRepublicWebLoginPoll(); el("trade-republic-web-login-modal").close(); });
 el("close-quality-document").addEventListener("click", () => el("quality-document-modal").close());
 el("quality-price-form").addEventListener("submit", (event) => { event.preventDefault(); savePrice(); });
 el("quality-price-auto").addEventListener("click", () => savePrice(true));

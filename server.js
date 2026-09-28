@@ -39,8 +39,11 @@ const {
 } = require("./lib/binance");
 const { fetchEtoroHistory } = require("./lib/etoro");
 const {
-  startTradeRepublicDeviceRegistration,
-  completeTradeRepublicDeviceRegistration,
+  createTradeRepublicWebDeviceId,
+  startTradeRepublicWebLogin,
+  pollTradeRepublicWebLogin,
+  refreshTradeRepublicWebSession,
+  hasTradeRepublicWebSession,
   fetchTradeRepublicCryptoHistory,
 } = require("./lib/trade-republic");
 const { matchExchangeTransfer } = require("./lib/exchange-transfer-matcher");
@@ -72,6 +75,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DB_PATH = path.join(DATA_DIR, "cryptobuch.sqlite");
 const BACKUP_DIR = path.join(DATA_DIR, "backups");
 const DOCUMENT_DIR = path.join(DATA_DIR, "documents");
+const TRADE_REPUBLIC_SESSION_KEY_PATH = path.join(DATA_DIR, "trade-republic-session.key");
 const DEFAULT_XPUB_GAP_LIMIT = boundedInteger(process.env.XPUB_GAP_LIMIT, 20, 1, 50);
 const HISTORICAL_PRICE_REQUEST_GAP_MS = 1750;
 const SETTINGS_DEFAULTS = Object.freeze({
@@ -133,9 +137,9 @@ const EXCHANGE_PROVIDERS = Object.freeze({
   }),
   trade_republic: Object.freeze({
     id: "trade_republic", label: "Trade Republic · inoffizieller Read-only-Import", defaultLabel: "Trade Republic", importMode: "api",
-    apiKeyLabel: "Mobilnummer", apiSecretLabel: "Trade-Republic-PIN", requiresExplicitConsent: true, requiresDeviceActivation: true,
+    apiKeyLabel: "Mobilnummer", apiSecretLabel: "Trade-Republic-PIN (nur für diese Anmeldung)", requiresExplicitConsent: true, requiresWebLogin: true,
     csvProfile: "trade_republic",
-    help: "Inoffizieller, ausschließlich lesender Timeline-Import: Die Geräteaktivierung kann die Trade-Republic-App abmelden. Mobilnummer, PIN und ein lokaler Geräte-Schlüssel werden nur nach deiner ausdrücklichen Bestätigung lokal gespeichert. Es werden ausschließlich Timeline und Timeline-Details abgefragt – niemals Orders, Auszahlungen oder Transfers.",
+    help: "Inoffizieller, ausschließlich lesender Web-Import: Bestätige die Anmeldung in deiner Trade-Republic-App. Es gibt keine Geräteaktivierung; die PIN wird nicht gespeichert. CryptoBuch speichert ausschließlich eine verschlüsselte lokale Web-Sitzung für Timeline und Timeline-Details – niemals Orders, Auszahlungen oder Transfers.",
   }),
 });
 const PURPOSE_PRESETS = [
@@ -171,6 +175,44 @@ const EXCHANGE_ASSET_CONFIG = Object.freeze({
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
 fs.mkdirSync(DOCUMENT_DIR, { recursive: true });
+
+function loadTradeRepublicSessionKey() {
+  try {
+    const key = fs.readFileSync(TRADE_REPUBLIC_SESSION_KEY_PATH);
+    if (key.length === 32) return key;
+    throw new Error("ungültige Länge");
+  } catch (error) {
+    if (error.code && error.code !== "ENOENT") throw new Error("Der lokale Schlüssel für Trade-Republic-Websitzungen konnte nicht gelesen werden.");
+    const key = crypto.randomBytes(32);
+    try { fs.writeFileSync(TRADE_REPUBLIC_SESSION_KEY_PATH, key, { mode: 0o600, flag: "wx" }); }
+    catch (writeError) {
+      if (writeError.code !== "EEXIST") throw new Error("Der lokale Schlüssel für Trade-Republic-Websitzungen konnte nicht angelegt werden.");
+      return loadTradeRepublicSessionKey();
+    }
+    return key;
+  }
+}
+
+const TRADE_REPUBLIC_SESSION_KEY = loadTradeRepublicSessionKey();
+
+function encryptTradeRepublicSession(session) {
+  const plaintext = JSON.stringify(session || {});
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", TRADE_REPUBLIC_SESSION_KEY, iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  return JSON.stringify({ v: 1, iv: iv.toString("base64url"), tag: cipher.getAuthTag().toString("base64url"), ciphertext: ciphertext.toString("base64url") });
+}
+
+function decryptTradeRepublicSession(value) {
+  if (!value) return {};
+  try {
+    const payload = JSON.parse(value);
+    if (payload?.v !== 1 || !payload.iv || !payload.tag || !payload.ciphertext) return {};
+    const decipher = crypto.createDecipheriv("aes-256-gcm", TRADE_REPUBLIC_SESSION_KEY, Buffer.from(payload.iv, "base64url"));
+    decipher.setAuthTag(Buffer.from(payload.tag, "base64url"));
+    return JSON.parse(Buffer.concat([decipher.update(Buffer.from(payload.ciphertext, "base64url")), decipher.final()]).toString("utf8")) || {};
+  } catch (_) { return {}; }
+}
 const db = new DatabaseSync(DB_PATH);
 
 db.exec(`
@@ -441,6 +483,13 @@ db.exec(`
     trade_republic_activation_error TEXT,
     trade_republic_activated_at TEXT,
     trade_republic_disclaimer_accepted_at TEXT,
+    trade_republic_web_session TEXT NOT NULL DEFAULT '',
+    trade_republic_web_pending_session TEXT NOT NULL DEFAULT '',
+    trade_republic_web_device_id TEXT NOT NULL DEFAULT '',
+    trade_republic_web_login_id TEXT NOT NULL DEFAULT '',
+    trade_republic_web_login_started_at TEXT,
+    trade_republic_web_login_error TEXT,
+    trade_republic_web_connected_at TEXT,
     last_synced_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(provider, wallet_id, label)
@@ -452,7 +501,7 @@ db.exec(`
 function migrateExchangeConnectionSchema() {
   const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'exchange_connections'").get()?.sql || "";
   const columns = new Set(db.prepare("PRAGMA table_info(exchange_connections)").all().map((column) => column.name));
-  if (sql.includes("binance") && sql.includes("etoro") && sql.includes("trade_republic") && columns.has("symbols") && columns.has("import_mode") && columns.has("history_state") && columns.has("history_started_at") && columns.has("history_completed_at") && columns.has("history_last_error") && columns.has("trade_republic_device_key") && columns.has("trade_republic_activation_id") && columns.has("trade_republic_activation_started_at") && columns.has("trade_republic_activation_error") && columns.has("trade_republic_activated_at") && columns.has("trade_republic_disclaimer_accepted_at")) return;
+  if (sql.includes("binance") && sql.includes("etoro") && sql.includes("trade_republic") && columns.has("symbols") && columns.has("import_mode") && columns.has("history_state") && columns.has("history_started_at") && columns.has("history_completed_at") && columns.has("history_last_error") && columns.has("trade_republic_device_key") && columns.has("trade_republic_activation_id") && columns.has("trade_republic_activation_started_at") && columns.has("trade_republic_activation_error") && columns.has("trade_republic_activated_at") && columns.has("trade_republic_disclaimer_accepted_at") && columns.has("trade_republic_web_session") && columns.has("trade_republic_web_pending_session") && columns.has("trade_republic_web_device_id") && columns.has("trade_republic_web_login_id") && columns.has("trade_republic_web_login_started_at") && columns.has("trade_republic_web_login_error") && columns.has("trade_republic_web_connected_at")) return;
   const symbols = columns.has("symbols") ? "symbols" : "''";
   const importMode = columns.has("import_mode") ? "import_mode" : "'api'";
   const historyState = columns.has("history_state") ? "history_state" : "''";
@@ -465,6 +514,13 @@ function migrateExchangeConnectionSchema() {
   const tradeRepublicActivationError = columns.has("trade_republic_activation_error") ? "trade_republic_activation_error" : "NULL";
   const tradeRepublicActivatedAt = columns.has("trade_republic_activated_at") ? "trade_republic_activated_at" : "NULL";
   const tradeRepublicDisclaimerAcceptedAt = columns.has("trade_republic_disclaimer_accepted_at") ? "trade_republic_disclaimer_accepted_at" : "NULL";
+  const tradeRepublicWebSession = columns.has("trade_republic_web_session") ? "trade_republic_web_session" : "''";
+  const tradeRepublicWebPendingSession = columns.has("trade_republic_web_pending_session") ? "trade_republic_web_pending_session" : "''";
+  const tradeRepublicWebDeviceId = columns.has("trade_republic_web_device_id") ? "trade_republic_web_device_id" : "''";
+  const tradeRepublicWebLoginId = columns.has("trade_republic_web_login_id") ? "trade_republic_web_login_id" : "''";
+  const tradeRepublicWebLoginStartedAt = columns.has("trade_republic_web_login_started_at") ? "trade_republic_web_login_started_at" : "NULL";
+  const tradeRepublicWebLoginError = columns.has("trade_republic_web_login_error") ? "trade_republic_web_login_error" : "NULL";
+  const tradeRepublicWebConnectedAt = columns.has("trade_republic_web_connected_at") ? "trade_republic_web_connected_at" : "NULL";
   db.exec(`
     BEGIN;
     CREATE TABLE exchange_connections_migration (
@@ -486,12 +542,19 @@ function migrateExchangeConnectionSchema() {
       trade_republic_activation_error TEXT,
       trade_republic_activated_at TEXT,
       trade_republic_disclaimer_accepted_at TEXT,
+      trade_republic_web_session TEXT NOT NULL DEFAULT '',
+      trade_republic_web_pending_session TEXT NOT NULL DEFAULT '',
+      trade_republic_web_device_id TEXT NOT NULL DEFAULT '',
+      trade_republic_web_login_id TEXT NOT NULL DEFAULT '',
+      trade_republic_web_login_started_at TEXT,
+      trade_republic_web_login_error TEXT,
+      trade_republic_web_connected_at TEXT,
       last_synced_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(provider, wallet_id, label)
     );
-    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, symbols, import_mode, history_state, history_started_at, history_completed_at, history_last_error, trade_republic_device_key, trade_republic_activation_id, trade_republic_activation_started_at, trade_republic_activation_error, trade_republic_activated_at, trade_republic_disclaimer_accepted_at, last_synced_at, created_at)
-      SELECT id, provider, wallet_id, label, api_key, api_secret, ${symbols}, ${importMode}, ${historyState}, ${historyStartedAt}, ${historyCompletedAt}, ${historyLastError}, ${tradeRepublicDeviceKey}, ${tradeRepublicActivationId}, ${tradeRepublicActivationStartedAt}, ${tradeRepublicActivationError}, ${tradeRepublicActivatedAt}, ${tradeRepublicDisclaimerAcceptedAt}, last_synced_at, created_at FROM exchange_connections;
+    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, symbols, import_mode, history_state, history_started_at, history_completed_at, history_last_error, trade_republic_device_key, trade_republic_activation_id, trade_republic_activation_started_at, trade_republic_activation_error, trade_republic_activated_at, trade_republic_disclaimer_accepted_at, trade_republic_web_session, trade_republic_web_pending_session, trade_republic_web_device_id, trade_republic_web_login_id, trade_republic_web_login_started_at, trade_republic_web_login_error, trade_republic_web_connected_at, last_synced_at, created_at)
+      SELECT id, provider, wallet_id, label, api_key, api_secret, ${symbols}, ${importMode}, ${historyState}, ${historyStartedAt}, ${historyCompletedAt}, ${historyLastError}, ${tradeRepublicDeviceKey}, ${tradeRepublicActivationId}, ${tradeRepublicActivationStartedAt}, ${tradeRepublicActivationError}, ${tradeRepublicActivatedAt}, ${tradeRepublicDisclaimerAcceptedAt}, ${tradeRepublicWebSession}, ${tradeRepublicWebPendingSession}, ${tradeRepublicWebDeviceId}, ${tradeRepublicWebLoginId}, ${tradeRepublicWebLoginStartedAt}, ${tradeRepublicWebLoginError}, ${tradeRepublicWebConnectedAt}, last_synced_at, created_at FROM exchange_connections;
     DROP TABLE exchange_connections;
     ALTER TABLE exchange_connections_migration RENAME TO exchange_connections;
     COMMIT;
@@ -2768,7 +2831,12 @@ function reportYear(value) {
 }
 
 function taxReportResponse(year) {
-  const transactions = db.prepare("SELECT * FROM transactions WHERE timestamp IS NOT NULL ORDER BY timestamp ASC").all();
+  const transactions = db.prepare(`
+    SELECT t.*, w.label AS source_label, w.source_type
+    FROM transactions t JOIN wallets w ON w.id = t.wallet_id
+    WHERE t.timestamp IS NOT NULL
+    ORDER BY t.timestamp ASC
+  `).all();
   const report = calculateTaxReport(transactions, year, runtimeSettings());
   const availableYears = db.prepare(`
     SELECT DISTINCT substr(timestamp, 1, 4) AS year
@@ -3133,20 +3201,20 @@ function getExchangeConnection(id) {
   return connection;
 }
 
-function tradeRepublicActivationView(connection) {
+function tradeRepublicWebLoginView(connection) {
   if (connection.provider !== "trade_republic" || connection.import_mode !== "api") return null;
-  const pending = Boolean(connection.trade_republic_activation_id);
-  const active = Boolean(connection.trade_republic_device_key) && Boolean(connection.trade_republic_activated_at) && !pending;
+  const pending = Boolean(connection.trade_republic_web_login_id);
+  const active = Boolean(connection.trade_republic_web_connected_at) && hasTradeRepublicWebSession(decryptTradeRepublicSession(connection.trade_republic_web_session)) && !pending;
   return {
-    status: active ? "active" : pending ? "activation_pending" : connection.trade_republic_activation_error ? "activation_error" : "activation_required",
-    activatedAt: connection.trade_republic_activated_at || null,
-    activationStartedAt: connection.trade_republic_activation_started_at || null,
-    lastError: connection.trade_republic_activation_error || null,
+    status: active ? "connected" : pending ? "approval_pending" : connection.trade_republic_web_login_error ? "login_error" : "login_required",
+    connectedAt: connection.trade_republic_web_connected_at || null,
+    loginStartedAt: connection.trade_republic_web_login_started_at || null,
+    lastError: connection.trade_republic_web_login_error || null,
   };
 }
 
 function isActiveTradeRepublicConnection(connection) {
-  return tradeRepublicActivationView(connection)?.status === "active";
+  return tradeRepublicWebLoginView(connection)?.status === "connected";
 }
 
 function tradeRepublicPhoneNumber(value) {
@@ -3161,51 +3229,61 @@ function tradeRepublicPin(value) {
   return pin;
 }
 
-async function startStoredTradeRepublicActivation(connectionId) {
+async function startStoredTradeRepublicWebLogin(connectionId, pin) {
   const connection = getExchangeConnection(connectionId);
-  if (connection.provider !== "trade_republic" || connection.import_mode !== "api") throw makeError("Diese Börsenverbindung verwendet keine Trade-Republic-Geräteaktivierung.");
+  if (connection.provider !== "trade_republic" || connection.import_mode !== "api") throw makeError("Diese Börsenverbindung verwendet keine Trade-Republic-Webanmeldung.");
   const phoneNumber = tradeRepublicPhoneNumber(connection.api_key);
-  const pin = tradeRepublicPin(connection.api_secret);
+  const cleanPin = tradeRepublicPin(pin);
   try {
-    const registration = await startTradeRepublicDeviceRegistration({ phoneNumber, pin });
+    const login = await startTradeRepublicWebLogin({
+      phoneNumber, pin: cleanPin, deviceId: connection.trade_republic_web_device_id || createTradeRepublicWebDeviceId(),
+    });
     db.prepare(`UPDATE exchange_connections
-      SET trade_republic_device_key = ?, trade_republic_activation_id = ?,
-        trade_republic_activation_started_at = datetime('now'), trade_republic_activation_error = NULL,
-        trade_republic_activated_at = NULL
-      WHERE id = ?`).run(registration.privateKey, registration.processId, connection.id);
+      SET api_secret = '', trade_republic_web_device_id = ?, trade_republic_web_login_id = ?,
+        trade_republic_web_pending_session = ?, trade_republic_web_login_started_at = datetime('now'),
+        trade_republic_web_login_error = NULL
+      WHERE id = ?`).run(login.deviceId, login.processId, encryptTradeRepublicSession(login.session), connection.id);
   } catch (error) {
-    db.prepare("UPDATE exchange_connections SET trade_republic_activation_error = ? WHERE id = ?")
+    db.prepare("UPDATE exchange_connections SET trade_republic_web_login_error = ? WHERE id = ?")
       .run(String(error.message || error).slice(0, 500), connection.id);
   }
   return getExchangeConnection(connection.id);
 }
 
-async function finishStoredTradeRepublicActivation(connectionId, code) {
+async function pollStoredTradeRepublicWebLogin(connectionId) {
   const connection = getExchangeConnection(connectionId);
-  if (connection.provider !== "trade_republic" || connection.import_mode !== "api") throw makeError("Diese Börsenverbindung verwendet keine Trade-Republic-Geräteaktivierung.");
-  if (!connection.trade_republic_device_key || !connection.trade_republic_activation_id) {
-    throw makeError("Bitte die Trade-Republic-Geräteaktivierung zuerst neu starten.");
+  if (connection.provider !== "trade_republic" || connection.import_mode !== "api") throw makeError("Diese Börsenverbindung verwendet keine Trade-Republic-Webanmeldung.");
+  if (!connection.trade_republic_web_login_id || !connection.trade_republic_web_device_id) {
+    throw makeError("Bitte die Trade-Republic-Webanmeldung zuerst neu starten.");
   }
-  const confirmationCode = String(code || "").trim();
-  if (!/^[A-Za-z0-9-]{4,32}$/.test(confirmationCode)) throw makeError("Der Trade-Republic-Bestätigungscode ist ungültig.");
+  const startedAt = Date.parse(`${connection.trade_republic_web_login_started_at || ""}Z`);
+  if (Number.isFinite(startedAt) && Date.now() - startedAt > 5 * 60 * 1000) {
+    db.prepare("UPDATE exchange_connections SET trade_republic_web_login_id = '', trade_republic_web_pending_session = '', trade_republic_web_login_error = 'Die App-Bestätigung ist abgelaufen. Bitte erneut anmelden.' WHERE id = ?").run(connection.id);
+    return { connection: getExchangeConnection(connection.id), completed: false };
+  }
   try {
-    await completeTradeRepublicDeviceRegistration({
-      phoneNumber: tradeRepublicPhoneNumber(connection.api_key),
-      pin: tradeRepublicPin(connection.api_secret),
-      privateKey: connection.trade_republic_device_key,
-      processId: connection.trade_republic_activation_id,
-      code: confirmationCode,
+    const result = await pollTradeRepublicWebLogin({
+      processId: connection.trade_republic_web_login_id,
+      deviceId: connection.trade_republic_web_device_id,
+      session: decryptTradeRepublicSession(connection.trade_republic_web_pending_session),
     });
-    db.prepare(`UPDATE exchange_connections
-      SET trade_republic_activation_id = '', trade_republic_activation_error = NULL,
-        trade_republic_activated_at = datetime('now')
-      WHERE id = ?`).run(connection.id);
+    if (result.status === "approved") {
+      db.prepare(`UPDATE exchange_connections SET trade_republic_web_session = ?, trade_republic_web_pending_session = '',
+        trade_republic_web_login_id = '', trade_republic_web_login_error = NULL, trade_republic_web_connected_at = datetime('now') WHERE id = ?`)
+        .run(encryptTradeRepublicSession(result.session), connection.id);
+      return { connection: getExchangeConnection(connection.id), completed: true };
+    }
+    if (result.status === "rejected") {
+      db.prepare("UPDATE exchange_connections SET trade_republic_web_login_id = '', trade_republic_web_pending_session = '', trade_republic_web_login_error = 'Die App-Bestätigung wurde abgelehnt oder ist abgelaufen.' WHERE id = ?").run(connection.id);
+    } else {
+      db.prepare("UPDATE exchange_connections SET trade_republic_web_pending_session = ? WHERE id = ?").run(encryptTradeRepublicSession(result.session), connection.id);
+    }
   } catch (error) {
-    db.prepare("UPDATE exchange_connections SET trade_republic_activation_error = ? WHERE id = ?")
+    db.prepare("UPDATE exchange_connections SET trade_republic_web_login_id = '', trade_republic_web_pending_session = '', trade_republic_web_login_error = ? WHERE id = ?")
       .run(String(error.message || error).slice(0, 500), connection.id);
     throw error;
   }
-  return getExchangeConnection(connection.id);
+  return { connection: getExchangeConnection(connection.id), completed: false };
 }
 
 function binanceHistoryIsComplete(connection) {
@@ -3233,7 +3311,7 @@ function binanceHistoryView(connection) {
 
 function exchangeConnectionView(connection) {
   const provider = EXCHANGE_PROVIDERS[connection.provider] || null;
-  const tradeRepublic = tradeRepublicActivationView(connection);
+  const tradeRepublic = tradeRepublicWebLoginView(connection);
   return {
     id: connection.id,
     provider: connection.provider,
@@ -3241,7 +3319,7 @@ function exchangeConnectionView(connection) {
     accountLabel: connection.account_label,
     symbols: connection.symbols || "",
     importMode: connection.import_mode || provider?.importMode || "api",
-    syncAvailable: (connection.import_mode || provider?.importMode || "api") === "api" && (!tradeRepublic || tradeRepublic.status === "active"),
+    syncAvailable: (connection.import_mode || provider?.importMode || "api") === "api" && (!tradeRepublic || tradeRepublic.status === "connected"),
     csvProfile: provider?.csvProfile || null,
     lastSyncedAt: connection.last_synced_at,
     createdAt: connection.created_at,
@@ -3330,9 +3408,22 @@ async function syncExchangeConnection(connection) {
     warnings = result.warnings;
     limited = result.limited;
   } else if (connection.provider === "trade_republic") {
-    if (!isActiveTradeRepublicConnection(connection)) throw makeError("Bitte die Trade-Republic-Geräteaktivierung mit dem Bestätigungscode abschließen.");
+    if (!isActiveTradeRepublicConnection(connection)) throw makeError("Bitte die Trade-Republic-Webanmeldung in der App bestätigen.");
+    let session;
+    try {
+      session = await refreshTradeRepublicWebSession({
+        session: decryptTradeRepublicSession(connection.trade_republic_web_session),
+        deviceId: connection.trade_republic_web_device_id,
+      });
+    } catch (error) {
+      db.prepare("UPDATE exchange_connections SET trade_republic_web_login_error = ? WHERE id = ?")
+        .run("Die lokale Web-Sitzung ist abgelaufen. Bitte erneut anmelden.", connection.id);
+      throw makeError("Die Trade-Republic-Websitzung ist abgelaufen. Bitte erneut anmelden.");
+    }
+    db.prepare("UPDATE exchange_connections SET trade_republic_web_session = ?, trade_republic_web_login_error = NULL WHERE id = ?")
+      .run(encryptTradeRepublicSession(session), connection.id);
     const result = await fetchTradeRepublicCryptoHistory({
-      phoneNumber: tradeRepublicPhoneNumber(connection.api_key), pin: tradeRepublicPin(connection.api_secret), privateKey: connection.trade_republic_device_key,
+      session,
     });
     rows = result.rows;
     warnings = result.warnings;
@@ -3434,6 +3525,7 @@ app.post("/api/exchange-connections", async (request, response, next) => {
     let result;
     try {
       const accountWalletId = createExchangeAccountWallet(provider, label);
+      if (provider === "trade_republic") apiSecret = "";
       result = db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret, symbols, import_mode) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .run(provider, accountWalletId, label, apiKey, apiSecret, symbols, definition.importMode);
       db.exec("COMMIT");
@@ -3444,7 +3536,7 @@ app.post("/api/exchange-connections", async (request, response, next) => {
     const connectionId = Number(result.lastInsertRowid);
     if (provider === "trade_republic") {
       db.prepare("UPDATE exchange_connections SET trade_republic_disclaimer_accepted_at = datetime('now') WHERE id = ?").run(connectionId);
-      await startStoredTradeRepublicActivation(connectionId);
+      await startStoredTradeRepublicWebLogin(connectionId, request.body?.apiSecret);
     }
     const connection = exchangeConnectionView(getExchangeConnection(connectionId));
     // API sources start their serial import immediately. CSV-only sources are
@@ -3457,21 +3549,21 @@ app.post("/api/exchange-connections", async (request, response, next) => {
   }
 });
 
-app.post("/api/exchange-connections/:id/trade-republic/activation/start", async (request, response, next) => {
+app.post("/api/exchange-connections/:id/trade-republic/web-login/start", async (request, response, next) => {
   try {
     const id = asPositiveId(request.params.id);
     if (!id) throw makeError("Ungültige Börsenverbindung.");
-    const connection = await startStoredTradeRepublicActivation(id);
+    const connection = await startStoredTradeRepublicWebLogin(id, request.body?.pin);
     response.status(202).json(exchangeConnectionView(connection));
   } catch (error) { next(error); }
 });
 
-app.post("/api/exchange-connections/:id/trade-republic/activation", async (request, response, next) => {
+app.post("/api/exchange-connections/:id/trade-republic/web-login/poll", async (request, response, next) => {
   try {
     const id = asPositiveId(request.params.id);
     if (!id) throw makeError("Ungültige Börsenverbindung.");
-    const connection = await finishStoredTradeRepublicActivation(id, request.body?.code);
-    response.status(202).json({ ...exchangeConnectionView(connection), job: enqueueJob("exchange_sync", { connectionId: connection.id }) });
+    const result = await pollStoredTradeRepublicWebLogin(id);
+    response.status(202).json({ ...exchangeConnectionView(result.connection), ...(result.completed ? { job: enqueueJob("exchange_sync", { connectionId: result.connection.id }) } : {}) });
   } catch (error) { next(error); }
 });
 
@@ -3482,7 +3574,7 @@ app.post("/api/exchange-connections/:id/sync", (request, response, next) => {
     const connection = getExchangeConnection(id);
     if (connection.import_mode === "csv") throw makeError("Diese Quelle wird über den lokalen CSV-Import aktualisiert.");
     if (connection.provider === "trade_republic" && !isActiveTradeRepublicConnection(connection)) {
-      throw makeError("Bitte die Trade-Republic-Geräteaktivierung mit dem Bestätigungscode abschließen.");
+      throw makeError("Bitte die Trade-Republic-Webanmeldung in der App bestätigen.");
     }
     response.status(202).json({ job: enqueueJob("exchange_sync", { connectionId: id }) });
   } catch (error) { next(error); }

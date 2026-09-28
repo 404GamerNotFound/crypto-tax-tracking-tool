@@ -4,6 +4,8 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx playwright install --with-deps chromium
 
 COPY public ./public
 COPY client ./client
@@ -16,7 +18,7 @@ ENV NODE_ENV=production \
     PORT=3000 \
     DATA_DIR=/data
 
-RUN mkdir -p /data && chown -R node:node /app /data
+RUN mkdir -p /data && chown -R node:node /app /data /ms-playwright
 
 USER node
 VOLUME ["/data"]

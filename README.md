@@ -141,11 +141,17 @@ ETORO_API_BASE_URL=https://public-api.etoro.com/api/v1
 
 ### Trade Republic · expliziter inoffizieller Read-only-Import
 
-**Trade Republic** kann als separates Börsenkonto mit einem ausdrücklich opt-in-basierten, **inoffiziellen** Timeline-Import verbunden werden. Die Implementierung orientiert sich am [TradeRepublicApi-Referenzprojekt](https://github.com/Zarathustra2/TradeRepublicApi), verwendet aber ausschließlich die lesenden Vorgänge `timeline` und `timelineDetail`. Sie enthält keinerlei Order-, Auszahlungs-, Transfer- oder Portfolio-Schreiboperationen.
+**Trade Republic** kann als separates Börsenkonto mit einem ausdrücklich opt-in-basierten, **inoffiziellen** Timeline-Import verbunden werden. Die Integration ist eigenständig in CryptoBuch implementiert und verwendet ausschließlich die lesenden Vorgänge `timeline` und `timelineDetail`. Sie enthält keinerlei Order-, Auszahlungs-, Transfer- oder Portfolio-Schreiboperationen.
 
-Vor der Verbindung zeigt CryptoBuch die Folgen klar an und verlangt eine Checkbox: Die Geräteaktivierung kann die Anmeldung in der Trade-Republic-App abmelden. Mobilnummer, PIN und der für diese Geräteaktivierung benötigte lokale P-256-Geräteschlüssel werden im lokalen SQLite-Datenspeicher abgelegt; sie werden nie über eine API-Antwort ausgegeben. Der Bestätigungscode und die bei der Anmeldung erzeugten Session-Tokens bleiben nur kurz im Arbeitsspeicher und werden nicht gespeichert. Schütze den lokalen Datenordner deshalb durch Betriebssystemrechte und Festplattenverschlüsselung.
+Vor der Verbindung zeigt CryptoBuch die Folgen klar an und verlangt eine Checkbox: Die inoffizielle Anmeldung folgt dem Trade-Republic-Web-Login und wird in der bereits angemeldeten App bestätigt. Es findet keine Geräteaktivierung statt. Mobilnummer und die PIN dienen nur zum Start dieser Anmeldung; die PIN wird nicht in SQLite gespeichert. Nach der Bestätigung speichert CryptoBuch ausschließlich die notwendige Web-Sitzung verschlüsselt mit einem lokalen, separaten Schlüssel im Datenverzeichnis. Schütze Datenordner und Schlüsseldatei deshalb durch Betriebssystemrechte und Festplattenverschlüsselung.
 
-Nach der Bestätigung des Codes importiert die serielle Job-Queue nur Timeline-Buchungen mit einer **expliziten Krypto-Einheitenmenge**. Aktien, ETF, Cash-Bewegungen und Einträge ohne klar ausgewiesene Coin-Menge werden übersprungen. Preise werden bei fehlenden Ausführungskursen über den normalen, gedrosselten historischen Preis-Job ergänzt; sie bleiben Schätzwerte. Der Adapter ist nicht von Trade Republic unterstützt und kann durch Änderungen an der nicht dokumentierten Schnittstelle jederzeit ausfallen. Die vorhandene **Trade Republic Crypto-Beleg (CSV)**-Option bleibt als sichere Rückfallmethode verfügbar.
+Nach der Bestätigung in der App importiert die serielle Job-Queue nur Timeline-Buchungen mit einer **expliziten Krypto-Einheitenmenge**. Aktien, ETF, Cash-Bewegungen und Einträge ohne klar ausgewiesene Coin-Menge werden übersprungen. Preise werden bei fehlenden Ausführungskursen über den normalen, gedrosselten historischen Preis-Job ergänzt; sie bleiben Schätzwerte. Web-Sitzungen können ablaufen oder durch Trade Republic ungültig werden; dann ist eine erneute explizite Anmeldung nötig. Der Adapter ist nicht von Trade Republic unterstützt und kann durch Änderungen an der nicht dokumentierten Schnittstelle jederzeit ausfallen. Die vorhandene **Trade Republic Crypto-Beleg (CSV)**-Option bleibt als sichere Rückfallmethode verfügbar.
+
+Der Docker-Build installiert den dafür nötigen lokalen Chromium automatisch. Wer CryptoBuch ohne Docker startet, installiert ihn einmalig im Projektordner:
+
+```bash
+npx playwright install chromium
+```
 
 ### TRON / TronGrid
 

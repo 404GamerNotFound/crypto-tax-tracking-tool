@@ -32,6 +32,23 @@ test("berücksichtigt bewertbare Gebühren, Haltedauer und weitere Ertragsarten"
   assert.equal(report.summary.incomeEur, 122.5);
 });
 
+test("trennt Erträge von Wallets und Börsenkonten und behandelt Transfers nicht als Kauf oder Verkauf", () => {
+  const report = calculateTaxReport([
+    { id: 1, asset: "ETH", timestamp: "2024-01-01T00:00:00Z", direction: "in", purpose: "Kauf", amount: 2, price_transaction_eur: 1000, source_type: "address", source_label: "Ledger Wallet" },
+    { id: 2, asset: "ETH", timestamp: "2025-01-02T00:00:00Z", direction: "out", purpose: "Transfer", amount: 1, price_transaction_eur: 1800, source_type: "address", source_label: "Ledger Wallet" },
+    { id: 3, asset: "ETH", timestamp: "2025-01-02T00:01:00Z", direction: "in", purpose: "Transfer", amount: 1, price_transaction_eur: 1800, source_type: "exchange", source_label: "Bitvavo" },
+    { id: 4, asset: "ADA", timestamp: "2025-02-01T00:00:00Z", direction: "in", purpose: "Staking Rewards", amount: 10, price_transaction_eur: 0.5, source_type: "address", source_label: "Ledger Wallet" },
+    { id: 5, asset: "SOL", timestamp: "2025-03-01T00:00:00Z", direction: "in", purpose: "Lending-Ertrag", amount: 1, price_transaction_eur: 120, source_type: "exchange", source_label: "Bitvavo" },
+  ], 2025);
+
+  assert.equal(report.sales.length, 0);
+  assert.equal(report.summary.walletIncomeEur, 5);
+  assert.equal(report.summary.exchangeIncomeEur, 120);
+  assert.equal(report.summary.walletIncomeEntries, 1);
+  assert.equal(report.summary.exchangeIncomeEntries, 1);
+  assert.deepEqual(report.income.map((entry) => [entry.sourceKind, entry.sourceLabel]), [["wallet", "Ledger Wallet"], ["exchange", "Bitvavo"]]);
+});
+
 test("berechnet eine klar als Schätzung gekennzeichnete Steuerbasis mit persönlichem Satz", () => {
   const report = calculateTaxReport([
     { asset: "BTC", timestamp: "2024-06-01T00:00:00Z", direction: "in", purpose: "Kauf", amount: 1, price_transaction_eur: 10000 },

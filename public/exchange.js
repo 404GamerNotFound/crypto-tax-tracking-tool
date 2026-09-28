@@ -207,12 +207,12 @@ function render() {
   const tradeRepublic = data.connection.tradeRepublic;
   el("exchange-subtitle").textContent = `${providerLabel(data.connection.provider)} · ${csv ? "lokaler Beleg-/CSV-Import" : "Read-only-Bestände"} und alle ${data.transactionCount.toLocaleString("de-DE")} lokal gespeicherten Börsenbuchungen.`;
   const history = historyStatus(data.connection.history);
-  el("exchange-status").textContent = tradeRepublic?.status === "activation_pending"
-    ? "Trade-Republic-Bestätigungscode erforderlich"
-    : tradeRepublic?.status === "activation_error"
-      ? "Trade-Republic-Geräteaktivierung prüfen"
-      : tradeRepublic?.status === "activation_required"
-        ? "Trade-Republic-Geräteaktivierung erforderlich"
+  el("exchange-status").textContent = tradeRepublic?.status === "approval_pending"
+    ? "Trade-Republic-App-Bestätigung erforderlich"
+    : tradeRepublic?.status === "login_error"
+      ? "Trade-Republic-Webanmeldung prüfen"
+      : tradeRepublic?.status === "login_required"
+        ? "Trade-Republic-Webanmeldung erforderlich"
     : history && data.connection.history.status !== "complete"
     ? `Historienimport: ${history.help}`
     : data.connection.lastSyncedAt ? `Letzter Import ${dateTime.format(new Date(`${data.connection.lastSyncedAt}Z`))}` : csv ? "Noch kein CSV-Import" : "Noch nicht synchronisiert";

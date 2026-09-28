@@ -162,12 +162,12 @@ function renderExchange(connection) {
   details.className = "button button-secondary button-small";
   details.href = `/exchange.html?id=${encodeURIComponent(connection.id)}`;
   details.textContent = "Börse öffnen";
-  const needsActivation = connection.provider === "trade_republic" && connection.syncAvailable === false;
-  const refresh = document.createElement(connection.importMode === "csv" || needsActivation ? "a" : "button");
+  const needsLogin = connection.provider === "trade_republic" && connection.syncAvailable === false;
+  const refresh = document.createElement(connection.importMode === "csv" || needsLogin ? "a" : "button");
   refresh.className = "button button-primary button-small";
-  refresh.textContent = connection.importMode === "csv" ? "CSV importieren" : needsActivation ? "Aktivierung abschließen" : "Synchronisieren";
+  refresh.textContent = connection.importMode === "csv" ? "CSV importieren" : needsLogin ? "Web-Anmeldung abschließen" : "Synchronisieren";
   if (connection.importMode === "csv") refresh.href = "/quality.html#csv-import-form";
-  else if (needsActivation) refresh.href = "/quality.html#exchange-connection-list";
+  else if (needsLogin) refresh.href = "/quality.html#exchange-connection-list";
   else refresh.addEventListener("click", () => syncExchange(connection, refresh));
   const manage = document.createElement("a");
   manage.className = "text-button";
