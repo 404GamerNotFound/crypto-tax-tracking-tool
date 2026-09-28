@@ -2,7 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   signedQuery, signedUrl, normalizeSpotTrade, normalizeDeposit, normalizeWithdrawal,
-  normalizeDividend, parseSymbols, candidateSymbols, fetchBinanceHistory,
+  normalizeDividend, parseSymbols, candidateSymbols, normalizeBinanceHistoryState,
+  historyProgress, fetchBinanceHistory, fetchBinanceHistoryBatch,
 } = require("../lib/binance");
 
 test("signiert Binance-USER_DATA-Anfragen deterministisch", () => {
@@ -43,6 +44,73 @@ test("ermittelt Spot-Märkte aus Beständen oder expliziter Eingabe", () => {
     { symbol: "BTCDAI", status: "TRADING", isSpotTradingAllowed: true, baseAsset: "BTC", quoteAsset: "DAI" },
   ] });
   assert.deepEqual(markets, ["BTCUSDT"]);
+  assert.deepEqual(candidateSymbols({ balances: [] }, { symbols: [
+    { symbol: "ETHEUR", status: "TRADING", isSpotTradingAllowed: true, baseAsset: "ETH", quoteAsset: "EUR" },
+  ] }, ["ETH"]), ["ETHEUR"]);
+});
+
+test("normalisiert den fortsetzbaren Binance-Historienfortschritt", () => {
+  const now = Date.UTC(2025, 0, 1);
+  const state = normalizeBinanceHistoryState({ phase: "trades", startAt: Date.UTC(2020, 0, 1), endAt: now, symbols: ["btceur"], symbolIndex: 0, fromId: 42 }, now);
+  assert.deepEqual({ phase: state.phase, symbols: state.symbols, fromId: state.fromId }, { phase: "trades", symbols: ["BTCEUR"], fromId: 42 });
+  const progress = historyProgress(state, now);
+  assert.equal(progress.total, 400);
+  assert.equal(progress.phase, "trades");
+});
+
+test("holt Binance-Einzahlungen in einem zeitlich begrenzten und fortsetzbaren Fenster", async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    const requestUrl = new URL(url);
+    calls.push(requestUrl);
+    const deposit = { id: "d-1", txId: "tx-1", coin: "BTC", amount: "0.1", insertTime: Date.UTC(2020, 0, 1), address: "bc1example" };
+    return { ok: true, json: async () => requestUrl.pathname === "/sapi/v1/capital/deposit/hisrec" ? [deposit] : {} };
+  };
+  const result = await fetchBinanceHistoryBatch({
+    apiBaseUrl: "https://api.binance.com", apiKey: "public-key", apiSecret: "secret", fetchImpl, requestGapMs: 0,
+    now: Date.UTC(2020, 0, 2), state: { phase: "deposits", startAt: Date.UTC(2020, 0, 1), endAt: Date.UTC(2020, 0, 1) },
+  });
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.nextState.phase, "withdrawals");
+  assert.equal(calls[0].searchParams.get("startTime"), String(Date.UTC(2020, 0, 1)));
+  assert.equal(calls[0].searchParams.get("offset"), "0");
+});
+
+test("paginiert Binance-Spot-Trades ab der gespeicherten Trade-ID", async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    const requestUrl = new URL(url);
+    calls.push(requestUrl);
+    if (requestUrl.pathname === "/api/v3/exchangeInfo") return { ok: true, json: async () => ({ symbols: [{ symbol: "BTCEUR", status: "TRADING", isSpotTradingAllowed: true, baseAsset: "BTC", quoteAsset: "EUR" }] }) };
+    if (requestUrl.pathname === "/api/v3/myTrades") return { ok: true, json: async () => [{ id: 7, time: Date.UTC(2020, 0, 1), isBuyer: true, qty: "0.1", quoteQty: "800", commission: "0", commissionAsset: "BTC" }] };
+    throw new Error(`Unexpected ${requestUrl.pathname}`);
+  };
+  const result = await fetchBinanceHistoryBatch({
+    apiBaseUrl: "https://api.binance.com", apiKey: "public-key", apiSecret: "secret", fetchImpl, requestGapMs: 0,
+    state: { phase: "trades", startAt: Date.UTC(2020, 0, 1), endAt: Date.UTC(2020, 0, 2), symbols: ["BTCEUR"], symbolIndex: 0, fromId: 0 },
+  });
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.complete, true);
+  assert.equal(calls.find((call) => call.pathname === "/api/v3/myTrades").searchParams.get("fromId"), "0");
+});
+
+test("verwendet für folgende Trade-Seiten gespeicherte Marktmetadaten", async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    const requestUrl = new URL(url);
+    calls.push(requestUrl.pathname);
+    if (requestUrl.pathname === "/api/v3/myTrades") return { ok: true, json: async () => [] };
+    throw new Error(`Unexpected ${requestUrl.pathname}`);
+  };
+  const result = await fetchBinanceHistoryBatch({
+    apiBaseUrl: "https://api.binance.com", apiKey: "public-key", apiSecret: "secret", fetchImpl, requestGapMs: 0,
+    state: {
+      phase: "trades", startAt: Date.UTC(2020, 0, 1), endAt: Date.UTC(2020, 0, 2), symbols: ["BTCEUR"],
+      markets: [{ symbol: "BTCEUR", baseAsset: "BTC", quoteAsset: "EUR" }], symbolIndex: 0, fromId: 8,
+    },
+  });
+  assert.equal(result.complete, true);
+  assert.deepEqual(calls, ["/api/v3/myTrades"]);
 });
 
 test("holt Binance-Daten seriell und hält öffentliche Metadaten von signierten Aufrufen getrennt", async () => {

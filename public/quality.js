@@ -2,7 +2,7 @@ const el = (id) => document.getElementById(id);
 const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" });
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
 const amount = (value, asset) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 8 }).format(Number(value || 0)) + " " + asset;
-const state = { data: null, transaction: null, portfolio: null, csvProfiles: [], exchange: { providers: [], connections: [] } };
+const state = { data: null, transaction: null, portfolio: null, csvProfiles: [], exchange: { providers: [], connections: [] }, tradeRepublicActivationConnectionId: null };
 
 function node(tag, className, text) {
   const value = document.createElement(tag);
@@ -159,24 +159,44 @@ function importTargetOptions() {
 function updateExchangeProviderForm() {
   const provider = providerDefinition(el("exchange-provider").value);
   const api = provider.importMode === "api";
+  const tradeRepublic = Boolean(provider.requiresDeviceActivation);
   el("exchange-symbols-field").hidden = !provider.supportsSymbols;
   el("exchange-label").placeholder = `z. B. ${provider.defaultLabel || "Börse"}`;
   el("exchange-api-key-field").hidden = !api;
   el("exchange-api-secret-field").hidden = !api;
   el("exchange-api-key").required = api;
   el("exchange-api-secret").required = api;
+  el("exchange-api-key").minLength = tradeRepublic ? 7 : 8;
+  el("exchange-api-secret").minLength = tradeRepublic ? 4 : 8;
+  el("exchange-api-key").type = tradeRepublic ? "tel" : "text";
+  el("exchange-api-key").autocomplete = tradeRepublic ? "tel" : "off";
+  el("exchange-api-key").placeholder = tradeRepublic ? "+49 170 1234567" : "";
+  el("exchange-api-secret").autocomplete = tradeRepublic ? "current-password" : "new-password";
   el("exchange-api-key-label").textContent = provider.apiKeyLabel || "Read-only API-Key";
   el("exchange-api-secret-label").textContent = provider.apiSecretLabel || "API-Secret";
   el("exchange-provider-help").textContent = provider.help || "Wähle eine unterstützte Börsenquelle.";
+  el("exchange-trade-republic-consent-field").hidden = !tradeRepublic;
+  el("exchange-trade-republic-consent").required = tradeRepublic;
   el("exchange-security-copy").textContent = api
-    ? "Read-only & lokal: Die Zugangsdaten dürfen nur Kontostände und Historie lesen. Sie werden nach dem Speichern nicht erneut angezeigt."
+    ? tradeRepublic
+      ? "Inoffiziell & lokal: Die Geräteaktivierung und die Anmeldung erfolgen direkt zwischen diesem lokalen Server und Trade Republic. Session-Tokens bleiben nur im Arbeitsspeicher; es werden keine Handelsfunktionen aufgerufen."
+      : "Read-only & lokal: Die Zugangsdaten dürfen nur Kontostände und Historie lesen. Sie werden nach dem Speichern nicht erneut angezeigt."
     : "Nur lokale Belege: Für diese Quelle werden keine API-, Login- oder Zugangsdaten benötigt oder gespeichert.";
   if (!api) {
     el("exchange-api-key").value = "";
     el("exchange-api-secret").value = "";
     el("exchange-symbols").value = "";
+    el("exchange-trade-republic-consent").checked = false;
   }
-  el("exchange-connection-form").querySelector('button[type="submit"]').textContent = api ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
+  el("exchange-connection-form").querySelector('button[type="submit"]').textContent = tradeRepublic ? "Geräteaktivierung starten" : api ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
+}
+
+function openTradeRepublicActivation(connection) {
+  state.tradeRepublicActivationConnectionId = Number(connection.id);
+  el("trade-republic-activation-form").reset();
+  el("trade-republic-activation-error").hidden = true;
+  el("trade-republic-activation-modal").showModal();
+  window.setTimeout(() => el("trade-republic-activation-code").focus(), 0);
 }
 
 function openExchangeCsvImport(connection) {
@@ -198,6 +218,17 @@ function providerMark(provider) {
   return provider === "binance" ? "BN" : provider === "bitvavo" ? "BV" : provider === "etoro" ? "eT" : provider === "trade_republic" ? "TR" : "EX";
 }
 
+function historyCopy(history) {
+  if (!history) return null;
+  if (history.status === "complete") return "Vollständig automatisch importiert";
+  if (history.lastError) return `Angehalten: ${history.lastError}`;
+  if (history.status === "running") {
+    const percent = history.progressTotal ? Math.min(100, Math.round((history.progressCurrent / history.progressTotal) * 100)) : 0;
+    return `${history.phaseLabel} werden automatisch nachgeladen · ${percent} %`;
+  }
+  return "Startet automatisch beim nächsten Sync";
+}
+
 function connectionCard(connection) {
   const item = node("li", "exchange-connection-card");
   const head = node("div", "exchange-connection-card-head");
@@ -205,8 +236,12 @@ function connectionCard(connection) {
   const name = node("div", "exchange-connection-name");
   const provider = providerDefinition(connection.provider);
   const csv = connection.importMode === "csv";
+  const tradeRepublic = connection.tradeRepublic;
+  const activationPending = tradeRepublic?.status === "activation_pending";
+  const activationNeeded = tradeRepublic && tradeRepublic.status !== "active";
   name.append(node("strong", "", connection.label || provider.defaultLabel || connection.provider), node("span", "", `${provider.label || connection.provider} · ${csv ? "lokaler CSV-Import" : "Read-only"}`));
-  const status = node("span", "sync-status" + (connection.lastSyncedAt ? " is-synced" : ""), connection.lastSyncedAt ? (csv ? "Importiert" : "Synchronisiert") : "Bereit");
+  const historyStatus = activationPending ? "Code benötigt" : tradeRepublic?.status === "activation_error" ? "Aktivierung prüfen" : connection.history?.lastError ? "Historie prüfen" : connection.history?.status === "running" ? "Historie läuft" : connection.history?.status === "pending" ? "Historie bereit" : connection.lastSyncedAt ? (csv ? "Importiert" : "Synchronisiert") : "Bereit";
+  const status = node("span", "sync-status" + (connection.lastSyncedAt ? " is-synced" : ""), historyStatus);
   head.append(mark, name, status);
   const details = node("dl", "exchange-connection-details");
   const account = node("div");
@@ -214,23 +249,53 @@ function connectionCard(connection) {
   const synced = node("div");
   synced.append(node("dt", "", "Letzter Import"), node("dd", "", connection.lastSyncedAt ? readableDateTime(connection.lastSyncedAt) : "Noch nicht synchronisiert"));
   details.append(account, synced);
+  if (connection.history) {
+    const history = node("div");
+    history.append(node("dt", "", "Historienimport"), node("dd", connection.history.lastError ? "history-error" : "", historyCopy(connection.history)));
+    details.append(history);
+  }
   if (connection.provider === "binance" && connection.symbols) {
     const markets = node("div");
     markets.append(node("dt", "", "Märkte"), node("dd", "", connection.symbols));
     details.append(markets);
   }
+  if (tradeRepublic) {
+    const activation = node("div");
+    const copy = tradeRepublic.status === "active" ? `Gerät bestätigt${tradeRepublic.activatedAt ? ` · ${readableDateTime(tradeRepublic.activatedAt)}` : ""}`
+      : activationPending ? "Bestätigungscode aus Trade Republic eingeben"
+        : tradeRepublic.lastError ? `Aktivierung fehlgeschlagen: ${tradeRepublic.lastError}` : "Geräteaktivierung noch nicht gestartet";
+    activation.append(node("dt", "", "Geräteaktivierung"), node("dd", tradeRepublic.lastError ? "history-error" : "", copy));
+    details.append(activation);
+  }
   const footer = node("div", "exchange-connection-card-footer");
-  footer.append(node("p", "", csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
+  footer.append(node("p", "", csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : activationNeeded ? "Vor dem ersten Import muss die inoffizielle Trade-Republic-Geräteaktivierung bewusst abgeschlossen werden. Der Import ruft ausschließlich Timeline und Details ab." : connection.history && connection.history.status !== "complete" ? "Die Binance-Historie wird automatisch in kleinen, seriellen Schritten nachgeladen. Der Transfer-Abgleich folgt nach Abschluss." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
   const actions = node("div", "exchange-connection-actions");
-  const sync = node("button", "button button-secondary button-small", csv ? "CSV importieren" : "Jetzt synchronisieren");
+  const sync = node("button", "button button-secondary button-small", csv ? "CSV importieren" : activationPending ? "Bestätigungscode eingeben" : activationNeeded ? "Aktivierung starten" : "Jetzt synchronisieren");
   sync.type = "button";
   sync.addEventListener("click", async () => {
     if (csv) return openExchangeCsvImport(connection);
+    if (activationPending) return openTradeRepublicActivation(connection);
+    if (activationNeeded) {
+      if (!confirm("Die inoffizielle Trade-Republic-Geräteaktivierung erneut starten? Dadurch kann die Anmeldung in der Trade-Republic-App abgemeldet werden.")) return;
+      sync.disabled = true;
+      sync.textContent = "Aktivierung startet …";
+      try {
+        const started = await api("/api/exchange-connections/" + connection.id + "/trade-republic/activation/start", { method: "POST" });
+        await load();
+        if (started.tradeRepublic?.status === "activation_pending") openTradeRepublicActivation(started);
+        else toast(started.tradeRepublic?.lastError || "Die Geräteaktivierung konnte nicht gestartet werden.", "error");
+      } catch (error) {
+        sync.disabled = false;
+        sync.textContent = "Aktivierung starten";
+        toast(error.message, "error");
+      }
+      return;
+    }
     sync.disabled = true;
     sync.textContent = "Sync gestartet …";
     try {
       const queued = await api("/api/exchange-connections/" + connection.id + "/sync", { method: "POST" });
-      toast("Börsen-Sync als Job #" + queued.job.id + " gestartet. Der Abgleich folgt automatisch.");
+      toast(connection.history && connection.history.status !== "complete" ? "Aktuelle Daten und historische Binance-Buchungen werden automatisch nachgeladen." : "Börsen-Sync als Job #" + queued.job.id + " gestartet. Der Abgleich folgt automatisch.");
       window.setTimeout(load, 800);
     } catch (error) {
       sync.disabled = false;
@@ -410,20 +475,52 @@ el("exchange-connection-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const submit = form.querySelector('button[type="submit"]');
+  const providerId = el("exchange-provider").value;
   try {
     submit.disabled = true;
     submit.textContent = "Verbindung wird eingerichtet …";
     const result = await api("/api/exchange-connections", { method: "POST", body: JSON.stringify({
       provider: el("exchange-provider").value, label: el("exchange-label").value,
       apiKey: el("exchange-api-key").value, apiSecret: el("exchange-api-secret").value, symbols: el("exchange-symbols").value,
+      tradeRepublicConsent: el("exchange-trade-republic-consent").checked,
     }) });
     form.reset();
-    toast(result.job ? "Read-only-Börsenverbindung gespeichert; Sync-Job #" + result.job.id + " gestartet." : "Börsenkonto für lokale CSV-Belege gespeichert.");
+    if (result.tradeRepublic?.status === "activation_pending") {
+      toast("Trade-Republic-Geräteaktivierung gestartet. Bitte den Bestätigungscode eingeben.");
+      openTradeRepublicActivation(result);
+    } else if (result.tradeRepublic?.status === "activation_error") {
+      toast(result.tradeRepublic.lastError || "Die Trade-Republic-Geräteaktivierung konnte nicht gestartet werden.", "error");
+    } else toast(result.job ? "Read-only-Börsenverbindung gespeichert; aktuelle Daten und verfügbare Historie werden automatisch importiert." : "Börsenkonto für lokale CSV-Belege gespeichert.");
     await load();
   } catch (error) { toast(error.message, "error"); }
   finally {
     submit.disabled = false;
-    submit.textContent = providerDefinition(el("exchange-provider").value).importMode === "api" ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
+    const provider = providerDefinition(providerId);
+    submit.textContent = provider.requiresDeviceActivation ? "Geräteaktivierung starten" : provider.importMode === "api" ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
+  }
+});
+el("trade-republic-activation-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const errorNode = el("trade-republic-activation-error");
+  const submit = event.currentTarget.querySelector('button[type="submit"]');
+  try {
+    if (!Number.isSafeInteger(state.tradeRepublicActivationConnectionId)) throw new Error("Die Trade-Republic-Verbindung fehlt.");
+    submit.disabled = true;
+    submit.textContent = "Wird bestätigt …";
+    const result = await api("/api/exchange-connections/" + state.tradeRepublicActivationConnectionId + "/trade-republic/activation", {
+      method: "POST", body: JSON.stringify({ code: el("trade-republic-activation-code").value }),
+    });
+    el("trade-republic-activation-modal").close();
+    state.tradeRepublicActivationConnectionId = null;
+    toast("Trade-Republic-Gerät bestätigt. Der nur lesende Krypto-Import wurde gestartet.");
+    await load();
+    return result;
+  } catch (error) {
+    errorNode.textContent = error.message;
+    errorNode.hidden = false;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = "Gerät bestätigen & importieren";
   }
 });
 el("quality-document-form").addEventListener("submit", async (event) => {
@@ -444,6 +541,7 @@ el("quality-document-form").addEventListener("submit", async (event) => {
 });
 el("reload-quality").addEventListener("click", load);
 el("close-quality-price").addEventListener("click", () => el("quality-price-modal").close());
+el("close-trade-republic-activation").addEventListener("click", () => el("trade-republic-activation-modal").close());
 el("close-quality-document").addEventListener("click", () => el("quality-document-modal").close());
 el("quality-price-form").addEventListener("submit", (event) => { event.preventDefault(); savePrice(); });
 el("quality-price-auto").addEventListener("click", () => savePrice(true));

@@ -275,6 +275,9 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
 .exchange-security-notice > span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: var(--green-dark); background: #d5eddf; font: 600 17px "DM Mono", monospace; }
 .exchange-security-notice p { margin: 0; color: #4b6958; font-size: 10px; line-height: 1.45; }
 .exchange-security-notice strong { color: var(--green-dark); }
+.exchange-trade-republic-consent { display: flex; align-items: flex-start; gap: 9px; padding: 11px; border: 1px solid #e4c89c; border-radius: 6px; background: #fff7e7; color: #64481a; font-size: 11px; line-height: 1.45; }
+.exchange-trade-republic-consent input { flex: 0 0 auto; margin: 2px 0 0; }
+.exchange-trade-republic-consent strong { color: #7b4d0f; }
 .exchange-connection-section { padding: 22px 24px 24px; border-top: 1px solid var(--line); background: #fafbf7; }
 .exchange-connection-heading { align-items: flex-end; margin-bottom: 13px; }
 .exchange-connection-heading .eyebrow { margin-bottom: 4px; }
@@ -295,6 +298,7 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
 .exchange-connection-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 0; padding: 10px; border-radius: 6px; background: #f4f6f1; }
 .exchange-connection-details dt { color: var(--muted); font: 500 8px "DM Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
 .exchange-connection-details dd { margin: 3px 0 0; overflow-wrap: anywhere; font-size: 11px; line-height: 1.35; }
+.exchange-connection-details .history-error { color: var(--red); }
 .exchange-connection-card-footer { align-items: flex-end; }
 .exchange-connection-card-footer p { max-width: 440px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .exchange-connection-actions { display: flex; align-items: center; gap: 12px; }

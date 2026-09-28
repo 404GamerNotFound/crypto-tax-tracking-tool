@@ -5,6 +5,7 @@ const el = (id) => document.getElementById(id);
 const currency = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
 const price = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 6 });
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
+let historyRefreshTimer = null;
 
 function hasNumber(value) {
   return value !== null && value !== "" && value !== undefined && Number.isFinite(Number(value));
@@ -79,17 +80,28 @@ function metric(label, value, help = "", tone = "") {
   return article;
 }
 
+function historyStatus(history) {
+  if (!history) return null;
+  if (history.status === "complete") return { value: "Vollständig", help: "Automatisch abrufbare Binance-Historie verarbeitet", tone: "success" };
+  if (history.lastError) return { value: "Prüfen", help: history.lastError, tone: "warning" };
+  const percent = history.progressTotal ? Math.min(100, Math.round((history.progressCurrent / history.progressTotal) * 100)) : 0;
+  return { value: `${percent} %`, help: `${history.phaseLabel} werden automatisch und gedrosselt nachgeladen`, tone: "highlight" };
+}
+
 function renderMetrics() {
   const data = state.data;
   const assets = data.assets || [];
   const priced = assets.filter((asset) => hasNumber(asset.currentValueEur)).length;
   const metrics = el("exchange-metrics");
-  metrics.replaceChildren(
+  const entries = [
     metric("Börsenwert", formatCurrency(data.totalValueEur), `${priced} von ${assets.length} Beständen aktuell bewertet`, "highlight"),
     metric("Aktive Bestände", assets.length.toLocaleString("de-DE"), "Assets mit positivem Saldo"),
     metric("Buchungen gespeichert", data.transactionCount.toLocaleString("de-DE"), "Alle lokal importierten Ein- und Ausgänge"),
     metric("Letzter Import", data.connection.lastSyncedAt ? dateTime.format(new Date(`${data.connection.lastSyncedAt}Z`)) : "Noch keiner", data.connection.importMode === "csv" ? "Lokaler CSV-/Beleg-Import" : "Read-only-API · keine Handelsrechte"),
-  );
+  ];
+  const history = historyStatus(data.connection.history);
+  if (history) entries.push(metric("Binance-Historie", history.value, history.help, history.tone));
+  metrics.replaceChildren(...entries);
 }
 
 function renderHoldings() {
@@ -192,13 +204,27 @@ function render() {
   el("exchange-icon").textContent = data.connection.provider === "binance" ? "B" : data.connection.provider === "bitvavo" ? "V" : data.connection.provider === "etoro" ? "eT" : "TR";
   el("exchange-icon").className = `asset-hero-icon exchange ${data.connection.provider}`;
   const csv = data.connection.importMode === "csv";
+  const tradeRepublic = data.connection.tradeRepublic;
   el("exchange-subtitle").textContent = `${providerLabel(data.connection.provider)} · ${csv ? "lokaler Beleg-/CSV-Import" : "Read-only-Bestände"} und alle ${data.transactionCount.toLocaleString("de-DE")} lokal gespeicherten Börsenbuchungen.`;
-  el("exchange-status").textContent = data.connection.lastSyncedAt ? `Letzter Import ${dateTime.format(new Date(`${data.connection.lastSyncedAt}Z`))}` : csv ? "Noch kein CSV-Import" : "Noch nicht synchronisiert";
+  const history = historyStatus(data.connection.history);
+  el("exchange-status").textContent = tradeRepublic?.status === "activation_pending"
+    ? "Trade-Republic-Bestätigungscode erforderlich"
+    : tradeRepublic?.status === "activation_error"
+      ? "Trade-Republic-Geräteaktivierung prüfen"
+      : tradeRepublic?.status === "activation_required"
+        ? "Trade-Republic-Geräteaktivierung erforderlich"
+    : history && data.connection.history.status !== "complete"
+    ? `Historienimport: ${history.help}`
+    : data.connection.lastSyncedAt ? `Letzter Import ${dateTime.format(new Date(`${data.connection.lastSyncedAt}Z`))}` : csv ? "Noch kein CSV-Import" : "Noch nicht synchronisiert";
   const refresh = el("refresh-exchange");
-  refresh.hidden = csv;
+  refresh.hidden = csv || data.connection.syncAvailable === false;
   renderMetrics();
   renderHoldings();
   renderTransactions();
+  clearTimeout(historyRefreshTimer);
+  if (data.connection.history && data.connection.history.status !== "complete" && !data.connection.history.lastError) {
+    historyRefreshTimer = setTimeout(() => load({ quiet: true }), 6000);
+  }
 }
 
 async function load({ quiet = false } = {}) {
@@ -235,7 +261,7 @@ async function syncExchange() {
     const queued = await api(`/api/exchange-connections/${exchangeId}/sync`, { method: "POST" });
     const result = await waitForJob(queued.job.id);
     await load({ quiet: true });
-    toast(`${(result.imported || 0).toLocaleString("de-DE")} Börsenbuchungen synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}.`);
+    toast(`${(result.imported || 0).toLocaleString("de-DE")} Börsenbuchungen synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}${result.historyInProgress ? " Die Binance-Historie läuft automatisch weiter." : "."}`);
   } catch (error) {
     toast(error.message, "error");
   } finally {

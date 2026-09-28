@@ -116,7 +116,8 @@ function exchangeName(connection) {
 }
 
 function exchangeProviderLabel(connection) {
-  const labels = { binance: "Binance Spot · Read-only", bitvavo: "Bitvavo · Read-only", etoro: "eToro · Read-only", trade_republic: "Trade Republic · lokaler CSV-Import" };
+  if (connection.provider === "trade_republic") return connection.importMode === "csv" ? "Trade Republic · lokaler CSV-Import" : "Trade Republic · inoffiziell · Read-only";
+  const labels = { binance: "Binance Spot · Read-only", bitvavo: "Bitvavo · Read-only", etoro: "eToro · Read-only" };
   return labels[connection.provider] || "Börsenquelle";
 }
 
@@ -144,6 +145,16 @@ function renderExchange(connection) {
   const syncDate = document.createElement("strong");
   syncDate.textContent = connection.lastSyncedAt ? dateTime.format(new Date(`${connection.lastSyncedAt}Z`)) : connection.importMode === "csv" ? "Noch kein CSV-Import" : "Noch nicht synchronisiert";
   sync.append(syncLabel, syncDate);
+  if (connection.history) {
+    const history = document.createElement("small");
+    if (connection.history.status === "complete") history.textContent = "Binance-Historie vollständig importiert";
+    else if (connection.history.lastError) history.textContent = "Historie prüfen";
+    else {
+      const percent = connection.history.progressTotal ? Math.round((connection.history.progressCurrent / connection.history.progressTotal) * 100) : 0;
+      history.textContent = `Historie lädt automatisch · ${percent} %`;
+    }
+    sync.append(history);
+  }
 
   const actions = document.createElement("div");
   actions.className = "wallet-page-actions";
@@ -151,10 +162,12 @@ function renderExchange(connection) {
   details.className = "button button-secondary button-small";
   details.href = `/exchange.html?id=${encodeURIComponent(connection.id)}`;
   details.textContent = "Börse öffnen";
-  const refresh = document.createElement(connection.importMode === "csv" ? "a" : "button");
+  const needsActivation = connection.provider === "trade_republic" && connection.syncAvailable === false;
+  const refresh = document.createElement(connection.importMode === "csv" || needsActivation ? "a" : "button");
   refresh.className = "button button-primary button-small";
-  refresh.textContent = connection.importMode === "csv" ? "CSV importieren" : "Synchronisieren";
+  refresh.textContent = connection.importMode === "csv" ? "CSV importieren" : needsActivation ? "Aktivierung abschließen" : "Synchronisieren";
   if (connection.importMode === "csv") refresh.href = "/quality.html#csv-import-form";
+  else if (needsActivation) refresh.href = "/quality.html#exchange-connection-list";
   else refresh.addEventListener("click", () => syncExchange(connection, refresh));
   const manage = document.createElement("a");
   manage.className = "text-button";
@@ -260,7 +273,7 @@ async function syncExchange(connection, button) {
     const queued = await api(`/api/exchange-connections/${connection.id}/sync`, { method: "POST" });
     const result = await waitForJob(queued.job.id);
     await loadPortfolio({ quiet: true });
-    toast(`${(result.imported || 0).toLocaleString("de-DE")} Börsenbuchungen synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}.`);
+    toast(`${(result.imported || 0).toLocaleString("de-DE")} Börsenbuchungen synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}${result.historyInProgress ? " Die Historie wird automatisch weiter nachgeladen." : "."}`);
   } catch (error) {
     toast(error.message, "error");
   } finally {

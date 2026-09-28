@@ -29,8 +29,20 @@ const { buildTaxOptimizer, simulateSale } = require("./lib/tax-optimizer");
 const { classifyEvmTransaction, isLikelySpamAsset } = require("./lib/defi");
 const { EXCHANGE_CSV_PROFILES, normalizeExchangeRows } = require("./lib/exchange-import");
 const { fetchBitvavoHistory } = require("./lib/bitvavo");
-const { fetchBinanceHistory, parseSymbols } = require("./lib/binance");
+const {
+  fetchBinanceHistory,
+  fetchBinanceHistoryBatch,
+  parseSymbols,
+  normalizeBinanceHistoryState,
+  historyProgress,
+  historyPhaseLabel,
+} = require("./lib/binance");
 const { fetchEtoroHistory } = require("./lib/etoro");
+const {
+  startTradeRepublicDeviceRegistration,
+  completeTradeRepublicDeviceRegistration,
+  fetchTradeRepublicCryptoHistory,
+} = require("./lib/trade-republic");
 const { matchExchangeTransfer } = require("./lib/exchange-transfer-matcher");
 const {
   bitvavoDailyClosePrices,
@@ -112,7 +124,7 @@ const EXCHANGE_PROVIDERS = Object.freeze({
   binance: Object.freeze({
     id: "binance", label: "Binance Spot · Read-only API", defaultLabel: "Binance Spot", importMode: "api",
     apiKeyLabel: "Read-only API-Key", apiSecretLabel: "API-Secret", supportsSymbols: true,
-    help: "Binance: API-Key nur mit Leserecht erstellen; Trading, Auszahlungen und Transfers deaktiviert lassen. Leere Märkte werden aus aktuellen Beständen ermittelt; ergänze alte Märkte für bereits verkaufte Coins.",
+    help: "Binance: Nach dem ersten Sync wird die abrufbare Kontohistorie automatisch und gedrosselt nachgeladen. Märkte werden aus Beständen und bereits gefundenen Assets ergänzt; trage nur vollständig früher verkaufte Spot-Märkte zusätzlich ein.",
   }),
   etoro: Object.freeze({
     id: "etoro", label: "eToro · Read-only API", defaultLabel: "eToro", importMode: "api",
@@ -120,9 +132,10 @@ const EXCHANGE_PROVIDERS = Object.freeze({
     help: "eToro: Public API-Key und User-Key werden nur für lesende Historienabfragen verwendet. CryptoBuch sendet keine Handels-, Auszahlungs- oder Transfer-Anfragen; die API wird seriell und gedrosselt abgefragt.",
   }),
   trade_republic: Object.freeze({
-    id: "trade_republic", label: "Trade Republic · Beleg-/CSV-Import", defaultLabel: "Trade Republic", importMode: "csv",
+    id: "trade_republic", label: "Trade Republic · inoffizieller Read-only-Import", defaultLabel: "Trade Republic", importMode: "api",
+    apiKeyLabel: "Mobilnummer", apiSecretLabel: "Trade-Republic-PIN", requiresExplicitConsent: true, requiresDeviceActivation: true,
     csvProfile: "trade_republic",
-    help: "Trade Republic bietet keine dokumentierte Read-only-API für diesen Import. Lege ein separates Börsenkonto an und importiere die Crypto-Buchungen anschließend aus deinen Belegen als CSV – es werden keine Zugangsdaten oder Login-Daten abgefragt.",
+    help: "Inoffizieller, ausschließlich lesender Timeline-Import: Die Geräteaktivierung kann die Trade-Republic-App abmelden. Mobilnummer, PIN und ein lokaler Geräte-Schlüssel werden nur nach deiner ausdrücklichen Bestätigung lokal gespeichert. Es werden ausschließlich Timeline und Timeline-Details abgefragt – niemals Orders, Auszahlungen oder Transfers.",
   }),
 });
 const PURPOSE_PRESETS = [
@@ -247,7 +260,7 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS background_jobs (
     id INTEGER PRIMARY KEY,
-    type TEXT NOT NULL CHECK (type IN ('wallet_sync', 'price_backfill', 'exchange_sync', 'exchange_transfer_check')),
+    type TEXT NOT NULL CHECK (type IN ('wallet_sync', 'price_backfill', 'exchange_sync', 'exchange_history_sync', 'exchange_transfer_check')),
     payload_json TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'success', 'error')),
     progress_current INTEGER NOT NULL DEFAULT 0,
@@ -368,12 +381,12 @@ migrateWalletSchemaForChains();
 
 function migrateBackgroundJobSchema() {
   const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'background_jobs'").get()?.sql || "";
-  if (sql.includes("exchange_transfer_check")) return;
+  if (sql.includes("exchange_transfer_check") && sql.includes("exchange_history_sync")) return;
   db.exec(`
     BEGIN;
     CREATE TABLE background_jobs_migration (
       id INTEGER PRIMARY KEY,
-      type TEXT NOT NULL CHECK (type IN ('wallet_sync', 'price_backfill', 'exchange_sync', 'exchange_transfer_check')),
+      type TEXT NOT NULL CHECK (type IN ('wallet_sync', 'price_backfill', 'exchange_sync', 'exchange_history_sync', 'exchange_transfer_check')),
       payload_json TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'success', 'error')),
       progress_current INTEGER NOT NULL DEFAULT 0,
@@ -395,6 +408,10 @@ function migrateBackgroundJobSchema() {
 }
 
 migrateBackgroundJobSchema();
+// A process restart must not leave the serial queue permanently blocked by a
+// job that was marked running just before shutdown. Re-queueing is safe:
+// imports are deduplicated by their external IDs and manual fields survive.
+db.prepare("UPDATE background_jobs SET status = 'queued', started_at = NULL WHERE status = 'running'").run();
 
 // Erst nach einer möglichen Wallet-Tabellenmigration anlegen, damit bestehende
 // Datenbanken mit älterem UNIQUE-Schema ohne Fremdschlüssel-Konflikt migrieren.
@@ -414,6 +431,16 @@ db.exec(`
     api_secret TEXT NOT NULL,
     symbols TEXT NOT NULL DEFAULT '',
     import_mode TEXT NOT NULL DEFAULT 'api' CHECK (import_mode IN ('api', 'csv')),
+    history_state TEXT NOT NULL DEFAULT '',
+    history_started_at TEXT,
+    history_completed_at TEXT,
+    history_last_error TEXT,
+    trade_republic_device_key TEXT NOT NULL DEFAULT '',
+    trade_republic_activation_id TEXT NOT NULL DEFAULT '',
+    trade_republic_activation_started_at TEXT,
+    trade_republic_activation_error TEXT,
+    trade_republic_activated_at TEXT,
+    trade_republic_disclaimer_accepted_at TEXT,
     last_synced_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(provider, wallet_id, label)
@@ -425,9 +452,19 @@ db.exec(`
 function migrateExchangeConnectionSchema() {
   const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'exchange_connections'").get()?.sql || "";
   const columns = new Set(db.prepare("PRAGMA table_info(exchange_connections)").all().map((column) => column.name));
-  if (sql.includes("binance") && sql.includes("etoro") && sql.includes("trade_republic") && columns.has("symbols") && columns.has("import_mode")) return;
+  if (sql.includes("binance") && sql.includes("etoro") && sql.includes("trade_republic") && columns.has("symbols") && columns.has("import_mode") && columns.has("history_state") && columns.has("history_started_at") && columns.has("history_completed_at") && columns.has("history_last_error") && columns.has("trade_republic_device_key") && columns.has("trade_republic_activation_id") && columns.has("trade_republic_activation_started_at") && columns.has("trade_republic_activation_error") && columns.has("trade_republic_activated_at") && columns.has("trade_republic_disclaimer_accepted_at")) return;
   const symbols = columns.has("symbols") ? "symbols" : "''";
   const importMode = columns.has("import_mode") ? "import_mode" : "'api'";
+  const historyState = columns.has("history_state") ? "history_state" : "''";
+  const historyStartedAt = columns.has("history_started_at") ? "history_started_at" : "NULL";
+  const historyCompletedAt = columns.has("history_completed_at") ? "history_completed_at" : "NULL";
+  const historyLastError = columns.has("history_last_error") ? "history_last_error" : "NULL";
+  const tradeRepublicDeviceKey = columns.has("trade_republic_device_key") ? "trade_republic_device_key" : "''";
+  const tradeRepublicActivationId = columns.has("trade_republic_activation_id") ? "trade_republic_activation_id" : "''";
+  const tradeRepublicActivationStartedAt = columns.has("trade_republic_activation_started_at") ? "trade_republic_activation_started_at" : "NULL";
+  const tradeRepublicActivationError = columns.has("trade_republic_activation_error") ? "trade_republic_activation_error" : "NULL";
+  const tradeRepublicActivatedAt = columns.has("trade_republic_activated_at") ? "trade_republic_activated_at" : "NULL";
+  const tradeRepublicDisclaimerAcceptedAt = columns.has("trade_republic_disclaimer_accepted_at") ? "trade_republic_disclaimer_accepted_at" : "NULL";
   db.exec(`
     BEGIN;
     CREATE TABLE exchange_connections_migration (
@@ -439,12 +476,22 @@ function migrateExchangeConnectionSchema() {
       api_secret TEXT NOT NULL,
       symbols TEXT NOT NULL DEFAULT '',
       import_mode TEXT NOT NULL DEFAULT 'api' CHECK (import_mode IN ('api', 'csv')),
+      history_state TEXT NOT NULL DEFAULT '',
+      history_started_at TEXT,
+      history_completed_at TEXT,
+      history_last_error TEXT,
+      trade_republic_device_key TEXT NOT NULL DEFAULT '',
+      trade_republic_activation_id TEXT NOT NULL DEFAULT '',
+      trade_republic_activation_started_at TEXT,
+      trade_republic_activation_error TEXT,
+      trade_republic_activated_at TEXT,
+      trade_republic_disclaimer_accepted_at TEXT,
       last_synced_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(provider, wallet_id, label)
     );
-    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, symbols, import_mode, last_synced_at, created_at)
-      SELECT id, provider, wallet_id, label, api_key, api_secret, ${symbols}, ${importMode}, last_synced_at, created_at FROM exchange_connections;
+    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, symbols, import_mode, history_state, history_started_at, history_completed_at, history_last_error, trade_republic_device_key, trade_republic_activation_id, trade_republic_activation_started_at, trade_republic_activation_error, trade_republic_activated_at, trade_republic_disclaimer_accepted_at, last_synced_at, created_at)
+      SELECT id, provider, wallet_id, label, api_key, api_secret, ${symbols}, ${importMode}, ${historyState}, ${historyStartedAt}, ${historyCompletedAt}, ${historyLastError}, ${tradeRepublicDeviceKey}, ${tradeRepublicActivationId}, ${tradeRepublicActivationStartedAt}, ${tradeRepublicActivationError}, ${tradeRepublicActivatedAt}, ${tradeRepublicDisclaimerAcceptedAt}, last_synced_at, created_at FROM exchange_connections;
     DROP TABLE exchange_connections;
     ALTER TABLE exchange_connections_migration RENAME TO exchange_connections;
     COMMIT;
@@ -1823,8 +1870,9 @@ function scheduleJobWorker() {
     const job = db.prepare("SELECT * FROM background_jobs WHERE status = 'queued' ORDER BY id ASC LIMIT 1").get();
     if (!job) return;
     db.prepare("UPDATE background_jobs SET status = 'running', started_at = datetime('now') WHERE id = ?").run(job.id);
+    let payload = {};
     try {
-      const payload = JSON.parse(job.payload_json);
+      payload = JSON.parse(job.payload_json);
       let result;
       if (job.type === "wallet_sync") {
         const wallet = getWallet(payload.walletId);
@@ -1840,15 +1888,35 @@ function scheduleJobWorker() {
         result = await syncExchangeConnection(connection);
         createNotification("success", "Börse synchronisiert", `${connection.label || connection.provider}: ${result.imported.toLocaleString("de-DE")} Buchungen importiert.`);
         if (result.warnings?.length) createNotification("warning", "Börsen-Sync prüfen", result.warnings[0]);
+        const historyJob = queueBinanceHistoryIfNeeded(connection);
+        if (historyJob) {
+          result.historyJobId = historyJob.id;
+          result.historyInProgress = true;
+          createNotification("info", "Binance-Historie wird nachgeladen", `${connection.label || "Binance"}: Einzahlungen, Auszahlungen, Erträge und Spot-Trades werden automatisch in gedrosselten Schritten ergänzt.`);
+        }
         // The exchange request itself remains read-only and quick. Missing
         // execution prices are completed afterwards by the existing serial,
         // throttled price queue instead of making the account sync fan out.
-        if (result.imported) {
+        if (result.imported && !historyJob) {
           // A transfer reconciliation is deliberately separate from the API
           // import. It only creates reviewable suggestions and never changes
           // purposes, prices or FIFO lots by itself.
           enqueueJob("exchange_transfer_check", { connectionId: connection.id });
           enqueueJob("price_backfill", { force: false });
+        }
+      } else if (job.type === "exchange_history_sync") {
+        const connection = getExchangeConnection(payload.connectionId);
+        result = await syncBinanceHistoryBatch(connection);
+        if (result.complete) {
+          createNotification("success", "Binance-Historie vollständig", `${connection.label || "Binance"}: Die automatisch abrufbare Kontohistorie wurde vollständig verarbeitet.`);
+          if (result.warnings?.length) createNotification("warning", "Binance-Historie prüfen", result.warnings[0]);
+          // Run dependent work only once after the complete history exists;
+          // queuing it after every page would delay the serial importer.
+          enqueueJob("exchange_transfer_check", { connectionId: connection.id });
+          enqueueJob("price_backfill", { force: false });
+        } else {
+          const nextJob = queueBinanceHistoryIfNeeded(getExchangeConnection(connection.id), { ignoreJobId: job.id });
+          result.nextJobId = nextJob?.id || null;
         }
       } else if (job.type === "exchange_transfer_check") {
         const connection = db.prepare("SELECT id, provider, label FROM exchange_connections WHERE id = ?").get(asPositiveId(payload.connectionId));
@@ -1863,11 +1931,16 @@ function scheduleJobWorker() {
       } else {
         throw makeError("Unbekannter Hintergrundjob.");
       }
-      db.prepare("UPDATE background_jobs SET status = 'success', progress_current = 1, progress_total = 1, result_json = ?, finished_at = datetime('now') WHERE id = ?")
-        .run(JSON.stringify(result), job.id);
+      db.prepare("UPDATE background_jobs SET status = 'success', progress_current = ?, progress_total = ?, result_json = ?, finished_at = datetime('now') WHERE id = ?")
+        .run(result.progress?.current || 1, result.progress?.total || 1, JSON.stringify(result), job.id);
     } catch (error) {
       db.prepare("UPDATE background_jobs SET status = 'error', error_message = ?, finished_at = datetime('now') WHERE id = ?")
         .run(String(error.message || error).slice(0, 500), job.id);
+      if (job.type === "exchange_history_sync") {
+        const connectionId = asPositiveId(payload?.connectionId);
+        if (connectionId) db.prepare("UPDATE exchange_connections SET history_last_error = ? WHERE id = ?")
+          .run(String(error.message || error).slice(0, 500), connectionId);
+      }
       createNotification("error", "Hintergrundjob fehlgeschlagen", String(error.message || error).slice(0, 400));
     }
     scheduleJobWorker();
@@ -1880,6 +1953,16 @@ function enqueueJob(type, payload) {
   scheduleJobWorker();
   return job;
 }
+
+function resumeBinanceHistoryImports() {
+  const connections = db.prepare("SELECT * FROM exchange_connections WHERE provider = 'binance' AND import_mode = 'api'").all();
+  for (const connection of connections) queueBinanceHistoryIfNeeded(connection);
+}
+
+// Existing Binance connections receive the same background import as newly
+// created ones. The queue is serial, so even several accounts remain gentle
+// on the provider's account API.
+resumeBinanceHistoryImports();
 
 async function syncWallet(wallet) {
   if (wallet.source_type === "exchange") {
@@ -3050,8 +3133,107 @@ function getExchangeConnection(id) {
   return connection;
 }
 
+function tradeRepublicActivationView(connection) {
+  if (connection.provider !== "trade_republic" || connection.import_mode !== "api") return null;
+  const pending = Boolean(connection.trade_republic_activation_id);
+  const active = Boolean(connection.trade_republic_device_key) && Boolean(connection.trade_republic_activated_at) && !pending;
+  return {
+    status: active ? "active" : pending ? "activation_pending" : connection.trade_republic_activation_error ? "activation_error" : "activation_required",
+    activatedAt: connection.trade_republic_activated_at || null,
+    activationStartedAt: connection.trade_republic_activation_started_at || null,
+    lastError: connection.trade_republic_activation_error || null,
+  };
+}
+
+function isActiveTradeRepublicConnection(connection) {
+  return tradeRepublicActivationView(connection)?.status === "active";
+}
+
+function tradeRepublicPhoneNumber(value) {
+  const normalized = String(value || "").trim().replace(/[\s()-]/g, "");
+  if (!/^\+?[0-9]{7,20}$/.test(normalized)) throw makeError("Bitte eine gültige Trade-Republic-Mobilnummer im internationalen Format eingeben.");
+  return normalized.startsWith("+") ? normalized : `+${normalized}`;
+}
+
+function tradeRepublicPin(value) {
+  const pin = String(value || "").trim();
+  if (!/^\d{4,16}$/.test(pin)) throw makeError("Die Trade-Republic-PIN muss aus 4 bis 16 Ziffern bestehen.");
+  return pin;
+}
+
+async function startStoredTradeRepublicActivation(connectionId) {
+  const connection = getExchangeConnection(connectionId);
+  if (connection.provider !== "trade_republic" || connection.import_mode !== "api") throw makeError("Diese Börsenverbindung verwendet keine Trade-Republic-Geräteaktivierung.");
+  const phoneNumber = tradeRepublicPhoneNumber(connection.api_key);
+  const pin = tradeRepublicPin(connection.api_secret);
+  try {
+    const registration = await startTradeRepublicDeviceRegistration({ phoneNumber, pin });
+    db.prepare(`UPDATE exchange_connections
+      SET trade_republic_device_key = ?, trade_republic_activation_id = ?,
+        trade_republic_activation_started_at = datetime('now'), trade_republic_activation_error = NULL,
+        trade_republic_activated_at = NULL
+      WHERE id = ?`).run(registration.privateKey, registration.processId, connection.id);
+  } catch (error) {
+    db.prepare("UPDATE exchange_connections SET trade_republic_activation_error = ? WHERE id = ?")
+      .run(String(error.message || error).slice(0, 500), connection.id);
+  }
+  return getExchangeConnection(connection.id);
+}
+
+async function finishStoredTradeRepublicActivation(connectionId, code) {
+  const connection = getExchangeConnection(connectionId);
+  if (connection.provider !== "trade_republic" || connection.import_mode !== "api") throw makeError("Diese Börsenverbindung verwendet keine Trade-Republic-Geräteaktivierung.");
+  if (!connection.trade_republic_device_key || !connection.trade_republic_activation_id) {
+    throw makeError("Bitte die Trade-Republic-Geräteaktivierung zuerst neu starten.");
+  }
+  const confirmationCode = String(code || "").trim();
+  if (!/^[A-Za-z0-9-]{4,32}$/.test(confirmationCode)) throw makeError("Der Trade-Republic-Bestätigungscode ist ungültig.");
+  try {
+    await completeTradeRepublicDeviceRegistration({
+      phoneNumber: tradeRepublicPhoneNumber(connection.api_key),
+      pin: tradeRepublicPin(connection.api_secret),
+      privateKey: connection.trade_republic_device_key,
+      processId: connection.trade_republic_activation_id,
+      code: confirmationCode,
+    });
+    db.prepare(`UPDATE exchange_connections
+      SET trade_republic_activation_id = '', trade_republic_activation_error = NULL,
+        trade_republic_activated_at = datetime('now')
+      WHERE id = ?`).run(connection.id);
+  } catch (error) {
+    db.prepare("UPDATE exchange_connections SET trade_republic_activation_error = ? WHERE id = ?")
+      .run(String(error.message || error).slice(0, 500), connection.id);
+    throw error;
+  }
+  return getExchangeConnection(connection.id);
+}
+
+function binanceHistoryIsComplete(connection) {
+  if (connection.provider !== "binance") return true;
+  return Boolean(connection.history_completed_at) || normalizeBinanceHistoryState(connection.history_state).phase === "complete";
+}
+
+function binanceHistoryView(connection) {
+  if (connection.provider !== "binance") return null;
+  const state = normalizeBinanceHistoryState(connection.history_state);
+  const complete = binanceHistoryIsComplete(connection);
+  const progress = complete ? { current: 400, total: 400, phase: "complete" } : historyProgress(state);
+  return {
+    status: complete ? "complete" : connection.history_started_at ? "running" : "pending",
+    phase: complete ? "complete" : progress.phase,
+    phaseLabel: historyPhaseLabel(complete ? "complete" : progress.phase),
+    progressCurrent: progress.current,
+    progressTotal: progress.total,
+    startedAt: connection.history_started_at || null,
+    completedAt: connection.history_completed_at || null,
+    lastError: connection.history_last_error || null,
+    markets: state.symbols || [],
+  };
+}
+
 function exchangeConnectionView(connection) {
   const provider = EXCHANGE_PROVIDERS[connection.provider] || null;
+  const tradeRepublic = tradeRepublicActivationView(connection);
   return {
     id: connection.id,
     provider: connection.provider,
@@ -3059,13 +3241,29 @@ function exchangeConnectionView(connection) {
     accountLabel: connection.account_label,
     symbols: connection.symbols || "",
     importMode: connection.import_mode || provider?.importMode || "api",
-    syncAvailable: (connection.import_mode || provider?.importMode || "api") === "api",
+    syncAvailable: (connection.import_mode || provider?.importMode || "api") === "api" && (!tradeRepublic || tradeRepublic.status === "active"),
     csvProfile: provider?.csvProfile || null,
     lastSyncedAt: connection.last_synced_at,
     createdAt: connection.created_at,
     apiKeyConfigured: Boolean(connection.api_key),
     apiSecretConfigured: Boolean(connection.api_secret),
+    history: binanceHistoryView(connection),
+    tradeRepublic,
   };
+}
+
+function activeBinanceHistoryJob(connectionId) {
+  const jobs = db.prepare("SELECT * FROM background_jobs WHERE type = 'exchange_history_sync' AND status IN ('queued', 'running') ORDER BY id ASC").all();
+  return jobs.find((job) => {
+    try { return Number(JSON.parse(job.payload_json || "{}").connectionId) === Number(connectionId); } catch { return false; }
+  }) || null;
+}
+
+function queueBinanceHistoryIfNeeded(connection, { ignoreJobId = null } = {}) {
+  if (connection.provider !== "binance" || binanceHistoryIsComplete(connection)) return null;
+  const active = activeBinanceHistoryJob(connection.id);
+  if (active && Number(active.id) !== Number(ignoreJobId)) return active;
+  return enqueueJob("exchange_history_sync", { connectionId: connection.id });
 }
 
 async function exchangePortfolioResponse(id) {
@@ -3131,10 +3329,59 @@ async function syncExchangeConnection(connection) {
     rows = result.rows;
     warnings = result.warnings;
     limited = result.limited;
+  } else if (connection.provider === "trade_republic") {
+    if (!isActiveTradeRepublicConnection(connection)) throw makeError("Bitte die Trade-Republic-Geräteaktivierung mit dem Bestätigungscode abschließen.");
+    const result = await fetchTradeRepublicCryptoHistory({
+      phoneNumber: tradeRepublicPhoneNumber(connection.api_key), pin: tradeRepublicPin(connection.api_secret), privateKey: connection.trade_republic_device_key,
+    });
+    rows = result.rows;
+    warnings = result.warnings;
+    limited = result.limited;
   } else throw makeError("Für diese Börse ist noch kein Read-only-Adapter eingerichtet.");
   const imported = importExternalRows(wallet, rows, { source: `${connection.provider}-api`, purposeOrigin: "auto" });
   db.prepare("UPDATE exchange_connections SET last_synced_at = datetime('now') WHERE id = ?").run(connection.id);
   return { imported, provider: connection.provider, limited: limited || rows.length >= 2500, warnings, selectedSymbols };
+}
+
+async function syncBinanceHistoryBatch(connection) {
+  if (connection.provider !== "binance") throw makeError("Ein historischer Hintergrundimport ist nur für Binance verfügbar.");
+  if (connection.import_mode === "csv") throw makeError("Für diese Quelle gibt es keine direkte Read-only-API.");
+  if (binanceHistoryIsComplete(connection)) {
+    const history = binanceHistoryView(connection);
+    return { imported: 0, provider: connection.provider, complete: true, history, progress: { current: 400, total: 400, phase: "complete" }, warnings: [] };
+  }
+  const wallet = getWallet(connection.wallet_id);
+  const settings = runtimeSettings();
+  // Historical deposits, rewards and prior imports reveal markets that are no
+  // longer in the live account balance.  They are safely added to the bounded
+  // automatic market list; fully sold fiat pairs can still be entered by name.
+  const knownAssets = db.prepare("SELECT DISTINCT asset FROM transactions WHERE wallet_id = ? AND asset IS NOT NULL LIMIT 500").all(wallet.id).map((row) => row.asset);
+  const result = await fetchBinanceHistoryBatch({
+    apiBaseUrl: settings.binanceApiBaseUrl,
+    apiKey: connection.api_key,
+    apiSecret: connection.api_secret,
+    symbols: connection.symbols,
+    knownAssets,
+    state: connection.history_state,
+  });
+  const imported = importExternalRows(wallet, result.rows, { source: "binance-api", purposeOrigin: "auto" });
+  const serializedState = JSON.stringify(result.nextState);
+  db.prepare(`UPDATE exchange_connections
+    SET history_state = ?,
+      history_started_at = COALESCE(history_started_at, datetime('now')),
+      history_completed_at = CASE WHEN ? THEN datetime('now') ELSE NULL END,
+      history_last_error = NULL,
+      last_synced_at = datetime('now')
+    WHERE id = ?`).run(serializedState, result.complete ? 1 : 0, connection.id);
+  return {
+    imported,
+    provider: connection.provider,
+    complete: result.complete,
+    warnings: result.warnings,
+    selectedSymbols: result.selectedSymbols,
+    progress: result.progress,
+    history: binanceHistoryView(getExchangeConnection(connection.id)),
+  };
 }
 
 app.get("/api/import/csv-profiles", (_request, response) => {
@@ -3159,16 +3406,22 @@ app.get("/api/exchange-connections/:id/portfolio", async (request, response, nex
   } catch (error) { next(error); }
 });
 
-app.post("/api/exchange-connections", (request, response, next) => {
+app.post("/api/exchange-connections", async (request, response, next) => {
   try {
     const provider = String(request.body?.provider || "").trim().toLowerCase();
     const definition = EXCHANGE_PROVIDERS[provider];
     if (!definition) throw makeError("Bitte eine unterstützte Börse auswählen.");
     const label = cleanLabel(request.body?.label, 80) || definition.defaultLabel;
-    const apiKey = String(request.body?.apiKey || "").trim();
-    const apiSecret = String(request.body?.apiSecret || "").trim();
+    let apiKey = String(request.body?.apiKey || "").trim();
+    let apiSecret = String(request.body?.apiSecret || "").trim();
     const symbols = parseSymbols(request.body?.symbols).join(",");
-    if (definition.importMode === "api" && (apiKey.length < 8 || apiKey.length > 512 || apiSecret.length < 8 || apiSecret.length > 512)) {
+    if (provider === "trade_republic") {
+      if (request.body?.tradeRepublicConsent !== true) {
+        throw makeError("Bitte bestätige ausdrücklich die Hinweise zur inoffiziellen Trade-Republic-Geräteanmeldung.");
+      }
+      apiKey = tradeRepublicPhoneNumber(apiKey);
+      apiSecret = tradeRepublicPin(apiSecret);
+    } else if (definition.importMode === "api" && (apiKey.length < 8 || apiKey.length > 512 || apiSecret.length < 8 || apiSecret.length > 512)) {
       throw makeError("Die Zugangsdaten müssen jeweils zwischen 8 und 512 Zeichen lang sein.");
     }
     if (definition.importMode === "api" && (containsForbiddenKeyMaterial(apiKey) || containsForbiddenKeyMaterial(apiSecret))) {
@@ -3188,15 +3441,38 @@ app.post("/api/exchange-connections", (request, response, next) => {
       db.exec("ROLLBACK");
       throw error;
     }
-    const connection = exchangeConnectionView(getExchangeConnection(Number(result.lastInsertRowid)));
+    const connectionId = Number(result.lastInsertRowid);
+    if (provider === "trade_republic") {
+      db.prepare("UPDATE exchange_connections SET trade_republic_disclaimer_accepted_at = datetime('now') WHERE id = ?").run(connectionId);
+      await startStoredTradeRepublicActivation(connectionId);
+    }
+    const connection = exchangeConnectionView(getExchangeConnection(connectionId));
     // API sources start their serial import immediately. CSV-only sources are
     // deliberately left empty until the user selects a documented local file.
-    const job = definition.importMode === "api" ? enqueueJob("exchange_sync", { connectionId: connection.id }) : null;
+    const job = definition.importMode === "api" && provider !== "trade_republic" ? enqueueJob("exchange_sync", { connectionId: connection.id }) : null;
     response.status(201).json({ ...connection, job });
   } catch (error) {
     if (String(error.message).includes("UNIQUE constraint failed")) return next(makeError("Diese Börsenverbindung ist bereits hinterlegt."));
     next(error);
   }
+});
+
+app.post("/api/exchange-connections/:id/trade-republic/activation/start", async (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültige Börsenverbindung.");
+    const connection = await startStoredTradeRepublicActivation(id);
+    response.status(202).json(exchangeConnectionView(connection));
+  } catch (error) { next(error); }
+});
+
+app.post("/api/exchange-connections/:id/trade-republic/activation", async (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültige Börsenverbindung.");
+    const connection = await finishStoredTradeRepublicActivation(id, request.body?.code);
+    response.status(202).json({ ...exchangeConnectionView(connection), job: enqueueJob("exchange_sync", { connectionId: connection.id }) });
+  } catch (error) { next(error); }
 });
 
 app.post("/api/exchange-connections/:id/sync", (request, response, next) => {
@@ -3205,6 +3481,9 @@ app.post("/api/exchange-connections/:id/sync", (request, response, next) => {
     if (!id) throw makeError("Ungültige Börsenverbindung.");
     const connection = getExchangeConnection(id);
     if (connection.import_mode === "csv") throw makeError("Diese Quelle wird über den lokalen CSV-Import aktualisiert.");
+    if (connection.provider === "trade_republic" && !isActiveTradeRepublicConnection(connection)) {
+      throw makeError("Bitte die Trade-Republic-Geräteaktivierung mit dem Bestätigungscode abschließen.");
+    }
     response.status(202).json({ job: enqueueJob("exchange_sync", { connectionId: id }) });
   } catch (error) { next(error); }
 });
