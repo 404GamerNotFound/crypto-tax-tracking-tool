@@ -57,6 +57,8 @@ h1 em { color: var(--green); font-style: italic; }
 .button-primary:hover { background: var(--green-dark); }
 .button-secondary { color: var(--ink); background: transparent; border-color: var(--line); }
 .button-secondary:hover { background: #ecece4; }
+.button-danger { color: #fff; background: var(--red); }
+.button-danger:hover { background: #9c493f; }
 .button-dark { color: white; background: var(--ink); }
 .button-small { min-height: 34px; padding: 0 12px; font-size: 12px; }
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(172px, 1fr)); gap: 12px; margin-bottom: 48px; }
@@ -159,6 +161,10 @@ td:first-of-type + td { display: flex; align-items: center; gap: 8px; min-width:
 .history-help a { color: var(--green); }
 .data-note { margin: 0; padding: 13px 24px; color: var(--muted); border-top: 1px solid var(--line); font-size: 10px; }
 .data-note a { color: var(--green); }
+.danger-panel { margin-top: 28px; border-color: #e4b8b1; }
+.danger-panel .transactions-title { align-items: center; }
+.danger-panel .eyebrow { color: var(--red); }
+.danger-panel .data-note { border-top-color: #efd4cf; background: #fff8f6; color: #70504b; line-height: 1.45; }
 dialog { border: 0; padding: 0; width: min(570px, calc(100% - 32px)); color: var(--ink); background: var(--cream); border-radius: 10px; box-shadow: 0 25px 90px rgba(0,0,0,.3); }
 dialog::backdrop { background: rgba(13, 35, 27, .52); backdrop-filter: blur(2px); }
 dialog form { padding: 27px; }
@@ -196,6 +202,11 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
 .report-panel { margin-top: 18px; }
 .report-note { margin: 0 0 20px; }
 .report-year select { min-height: 42px; min-width: 100px; }
+.tax-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 0 24px 18px; }
+.tax-filters label { display: grid; gap: 5px; min-width: 0; color: var(--muted); font: 10px "DM Mono", monospace; text-transform: uppercase; letter-spacing: .06em; }
+.tax-filters select { min-width: 0; min-height: 36px; padding: 0 9px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); background: #fff; font: 12px "DM Sans", Arial, sans-serif; text-transform: none; letter-spacing: normal; }
+.table-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 24px 0; color: var(--muted); font: 11px "DM Mono", monospace; }
+.table-pagination button:disabled { cursor: not-allowed; opacity: .48; }
 .tax-workflow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin: 0 0 25px; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--line); }
 .tax-workflow article { display: grid; grid-template-columns: auto 1fr; gap: 2px 9px; padding: 14px 16px; background: var(--cream); }
 .tax-workflow span { grid-row: span 2; color: var(--green); font-family: var(--mono); font-size: 11px; font-weight: 700; }
@@ -584,6 +595,7 @@ a.market-availability:hover { text-decoration: underline; }
   .tax-workflow { grid-template-columns: 1fr 1fr; }
   .tax-profile-panel { grid-template-columns: 1fr; gap: 16px; padding: 18px; }
   .tax-optimizer-grid { grid-template-columns: 1fr; padding: 0 16px 18px; }
+  .tax-filters { grid-template-columns: 1fr 1fr; padding: 0 16px 16px; }
   .asset-hero-heading { align-items: flex-start; }
   .asset-hero-icon { width: 52px; height: 52px; font-size: 30px; }
   .asset-metrics { grid-template-columns: repeat(2, minmax(175px, 1fr)); padding-bottom: 3px; }
@@ -597,6 +609,8 @@ a.market-availability:hover { text-decoration: underline; }
   .summary-grid { gap: 8px; }
   .tax-workflow { grid-template-columns: 1fr; }
   .tax-profile-panel dl { grid-template-columns: 1fr; gap: 9px; }
+  .tax-filters { grid-template-columns: 1fr; }
+  .table-pagination { justify-content: space-between; padding: 12px 16px 0; }
   .summary-card { min-width: 0; }
   .card-label { letter-spacing: .04em; font-size: 8px; }
   .muted { font-size: 10px; }

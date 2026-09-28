@@ -1,1 +1,66 @@
-<!doctype html><html lang="de"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>CryptoBuch · Betrieb</title><link rel="stylesheet" href="/styles.css?v=20260922-14" /></head><body><div class="shell report-shell"><header class="topbar"><a class="brand" href="/"><span class="brand-mark">₿</span><span>CryptoBuch</span></a><nav class="topbar-nav"><a class="topbar-link" href="/">Dashboard</a><a class="topbar-link" href="/wallets.html">Crypto-Bestände</a><a class="topbar-link" href="/quality.html">Datenqualität</a><a class="topbar-link" href="/tax.html">Steuerreport</a><a class="topbar-link is-active" href="/maintenance.html">Betrieb</a><a class="topbar-link" href="/settings.html">Einstellungen</a></nav></header><main class="report-main"><section class="page-hero compact-hero"><div><p class="eyebrow">BETRIEB &amp; SICHERUNG</p><h1>Status und <em>Backups.</em></h1><p>Überwache Wallet-Synchronisationen und sichere die lokale Datenbank im persistenten Docker-Volume.</p></div><div class="hero-actions"><button class="button button-primary" id="create-backup">Backup erstellen</button><button class="button button-secondary" id="reload-status">Neu laden</button></div></section><section class="summary-grid"><article class="summary-card"><span class="card-label">Offene historische Kurse</span><strong id="pending-prices">—</strong><span class="muted" id="retry-status"></span></article><article class="summary-card"><span class="card-label">Wallets mit Fehler</span><strong id="sync-errors">—</strong><span class="muted">letzter Synchronisationsversuch</span></article><article class="summary-card"><span class="card-label">Backups</span><strong id="backup-count">—</strong><span class="muted">im Docker-Daten-Volume</span></article></section><section class="transactions-panel report-panel"><div class="section-heading transactions-title"><div><p class="eyebrow">SYNCHRONISATION</p><h2>Wallet-Status</h2></div></div><div class="table-wrap"><table><thead><tr><th>Wallet</th><th>Netzwerk</th><th>Letzter Sync</th><th>Status</th><th>Import</th><th>Hinweis</th></tr></thead><tbody id="wallet-status-list"></tbody></table></div></section><section class="transactions-panel report-panel"><div class="section-heading transactions-title"><div><p class="eyebrow">SICHERUNGEN</p><h2>Wiederherstellbare Backups</h2></div></div><div class="table-wrap"><table><thead><tr><th>Datei</th><th>Erstellt</th><th>Größe</th><th>Aktion</th></tr></thead><tbody id="backup-list"></tbody></table></div><p class="data-note">Eine Wiederherstellung ersetzt die aktuelle Datenbank, beendet den Container und startet ihn über Docker neu.</p></section></main></div><div id="toast" class="toast" hidden></div><script src="/maintenance.js?v=20260922-13" defer></script></body></html>
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CryptoBuch · Betrieb</title>
+    <link rel="stylesheet" href="/styles.css?v=20260928-2" />
+  </head>
+  <body>
+    <div class="shell report-shell">
+      <header class="topbar">
+        <a class="brand" href="/"><span class="brand-mark">₿</span><span>CryptoBuch</span></a>
+        <nav class="topbar-nav" aria-label="Hauptnavigation">
+          <a class="topbar-link" href="/">Dashboard</a>
+          <a class="topbar-link" href="/wallets.html">Crypto-Bestände</a>
+          <a class="topbar-link" href="/quality.html">Datenqualität</a>
+          <a class="topbar-link" href="/tax.html">Steuerreport</a>
+          <a class="topbar-link is-active" href="/maintenance.html">Betrieb</a>
+          <a class="topbar-link" href="/settings.html">Einstellungen</a>
+        </nav>
+      </header>
+      <main class="report-main">
+        <section class="page-hero compact-hero">
+          <div>
+            <p class="eyebrow">BETRIEB &amp; SICHERUNG</p>
+            <h1>Status und <em>Backups.</em></h1>
+            <p>Überwache Wallet-Synchronisationen und sichere die lokale Datenbank im persistenten Docker-Volume.</p>
+          </div>
+          <div class="hero-actions"><button class="button button-primary" id="create-backup">Backup erstellen</button><button class="button button-secondary" id="reload-status">Neu laden</button></div>
+        </section>
+        <section class="summary-grid">
+          <article class="summary-card"><span class="card-label">Offene historische Kurse</span><strong id="pending-prices">—</strong><span class="muted" id="retry-status"></span></article>
+          <article class="summary-card"><span class="card-label">Wallets mit Fehler</span><strong id="sync-errors">—</strong><span class="muted">letzter Synchronisationsversuch</span></article>
+          <article class="summary-card"><span class="card-label">Backups</span><strong id="backup-count">—</strong><span class="muted">im Docker-Daten-Volume</span></article>
+        </section>
+        <section class="transactions-panel report-panel">
+          <div class="section-heading transactions-title"><div><p class="eyebrow">SYNCHRONISATION</p><h2>Wallet-Status</h2></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Wallet</th><th>Netzwerk</th><th>Letzter Sync</th><th>Status</th><th>Import</th><th>Hinweis</th></tr></thead><tbody id="wallet-status-list"></tbody></table></div>
+        </section>
+        <section class="transactions-panel report-panel">
+          <div class="section-heading transactions-title"><div><p class="eyebrow">SICHERUNGEN</p><h2>Wiederherstellbare Backups</h2></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Datei</th><th>Erstellt</th><th>Größe</th><th>Aktion</th></tr></thead><tbody id="backup-list"></tbody></table></div>
+          <p class="data-note">Eine Wiederherstellung ersetzt die aktuelle Datenbank, beendet den Container und startet ihn über Docker neu.</p>
+        </section>
+        <section class="transactions-panel report-panel danger-panel">
+          <div class="section-heading transactions-title">
+            <div><p class="eyebrow">GEFAHRENBEREICH</p><h2>Alle lokalen Daten zurücksetzen</h2></div>
+            <button class="button button-danger" id="open-data-reset" type="button">Alle Daten zurücksetzen</button>
+          </div>
+          <p class="data-note">Löscht Wallets, Börsenverbindungen, Buchungen, Kurse, Steuer-Snapshots, Benachrichtigungen, lokale Nachweise, gespeicherte Einstellungen und lokale Trade-Republic-Sitzungen. Bestehende Backups bleiben erhalten; Umgebungsvariablen des Containers bleiben unverändert.</p>
+        </section>
+      </main>
+    </div>
+    <dialog id="data-reset-dialog" aria-labelledby="data-reset-title">
+      <form id="data-reset-form">
+        <div class="modal-head"><div><p class="eyebrow">NICHT RÜCKGÄNGIG ZU MACHEN</p><h2 id="data-reset-title">Alle Daten löschen?</h2></div><button class="modal-close" id="close-data-reset" type="button" aria-label="Dialog schließen">×</button></div>
+        <p class="modal-copy">Die aktive lokale Datenbank wird geleert und der Container neu gestartet. Backups werden nicht gelöscht. Gib zur Bestätigung <strong>ALLE DATEN LÖSCHEN</strong> ein.</p>
+        <label><span>Bestätigung</span><input id="data-reset-confirmation" autocomplete="off" spellcheck="false" required /></label>
+        <p id="data-reset-error" class="form-error" role="alert" hidden></p>
+        <div class="modal-actions"><button id="cancel-data-reset" class="button button-secondary" type="button">Abbrechen</button><button id="submit-data-reset" class="button button-danger" type="submit" disabled>Endgültig zurücksetzen</button></div>
+      </form>
+    </dialog>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/maintenance.js?v=20260928-2" defer></script>
+  </body>
+</html>

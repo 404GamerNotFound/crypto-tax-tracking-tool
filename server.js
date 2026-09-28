@@ -1924,12 +1924,15 @@ function createNotification(level, title, message) {
     .run(level, cleanLabel(title, 100), cleanLabel(message, 500));
 }
 
+const LOCAL_DATA_RESET_CONFIRMATION = "ALLE DATEN LÖSCHEN";
+let localDataResetting = false;
 let jobWorkerScheduled = false;
 function scheduleJobWorker() {
   if (jobWorkerScheduled) return;
   jobWorkerScheduled = true;
   setImmediate(async () => {
     jobWorkerScheduled = false;
+    if (localDataResetting) return;
     const job = db.prepare("SELECT * FROM background_jobs WHERE status = 'queued' ORDER BY id ASC LIMIT 1").get();
     if (!job) return;
     db.prepare("UPDATE background_jobs SET status = 'running', started_at = datetime('now') WHERE id = ?").run(job.id);
@@ -1994,9 +1997,11 @@ function scheduleJobWorker() {
       } else {
         throw makeError("Unbekannter Hintergrundjob.");
       }
+      if (localDataResetting) return;
       db.prepare("UPDATE background_jobs SET status = 'success', progress_current = ?, progress_total = ?, result_json = ?, finished_at = datetime('now') WHERE id = ?")
         .run(result.progress?.current || 1, result.progress?.total || 1, JSON.stringify(result), job.id);
     } catch (error) {
+      if (localDataResetting) return;
       db.prepare("UPDATE background_jobs SET status = 'error', error_message = ?, finished_at = datetime('now') WHERE id = ?")
         .run(String(error.message || error).slice(0, 500), job.id);
       if (job.type === "exchange_history_sync") {
@@ -2548,6 +2553,46 @@ function createBackup() {
   return listBackups().find((backup) => backup.name === name);
 }
 
+function resetLocalData() {
+  // Backups deliberately remain untouched: a reset must be reversible by a
+  // conscious restore, even though the active local database starts empty.
+  const counts = db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM wallets) AS wallets,
+      (SELECT COUNT(*) FROM transactions) AS transactions,
+      (SELECT COUNT(*) FROM transaction_documents) AS documents
+  `).get();
+
+  db.exec(`
+    BEGIN IMMEDIATE;
+    DELETE FROM background_jobs;
+    DELETE FROM notifications;
+    DELETE FROM tax_report_snapshots;
+    DELETE FROM app_settings;
+    DELETE FROM price_history;
+    DELETE FROM transaction_documents;
+    DELETE FROM transfer_links;
+    DELETE FROM historical_price_retries;
+    DELETE FROM transaction_price_audit;
+    DELETE FROM sync_events;
+    DELETE FROM wallet_addresses;
+    DELETE FROM wallet_metadata;
+    DELETE FROM exchange_connections;
+    DELETE FROM transactions;
+    DELETE FROM wallets;
+    COMMIT;
+  `);
+
+  fs.rmSync(DOCUMENT_DIR, { recursive: true, force: true });
+  fs.mkdirSync(DOCUMENT_DIR, { recursive: true });
+  if (fs.existsSync(TRADE_REPUBLIC_SESSION_KEY_PATH)) fs.unlinkSync(TRADE_REPUBLIC_SESSION_KEY_PATH);
+  return {
+    wallets: Number(counts.wallets || 0),
+    transactions: Number(counts.transactions || 0),
+    documents: Number(counts.documents || 0),
+  };
+}
+
 app.get("/api/backups", (_request, response, next) => {
   try {
     response.json({ backups: listBackups() });
@@ -2560,6 +2605,23 @@ app.post("/api/backups", (_request, response, next) => {
   try {
     response.status(201).json(createBackup());
   } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/data/reset", (request, response, next) => {
+  try {
+    if (String(request.body?.confirmation || "").trim() !== LOCAL_DATA_RESET_CONFIRMATION) {
+      throw makeError(`Zur Bestätigung bitte genau „${LOCAL_DATA_RESET_CONFIRMATION}“ eingeben.`);
+    }
+    localDataResetting = true;
+    const deleted = resetLocalData();
+    response.json({ reset: true, deleted, backupsPreserved: true, restarting: true });
+    // Stop any in-flight importer as soon as the response has left the local
+    // server. Docker then starts a clean process with the empty database.
+    setTimeout(() => process.exit(0), 500).unref();
+  } catch (error) {
+    localDataResetting = false;
     next(error);
   }
 });
@@ -3802,4 +3864,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, backfillHistoricalPrices, db, runtimeSettings, settingsResponse, updateSettings };
+module.exports = { app, backfillHistoricalPrices, db, resetLocalData, runtimeSettings, settingsResponse, updateSettings };
