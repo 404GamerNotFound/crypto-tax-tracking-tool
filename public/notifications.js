@@ -11,12 +11,7 @@
   const empty = menu.querySelector("[data-empty]");
   topbar.insertBefore(menu, topbar.querySelector(".topbar-status") || null);
 
-  async function request(url, options = {}) {
-    const response = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || "Benachrichtigungen konnten nicht geladen werden.");
-    return payload;
-  }
+  const request = window.CryptoBuchUI.api;
   function positionPopover() {
     const rect = bell.getBoundingClientRect();
     popover.style.setProperty("--notification-popover-top", `${Math.min(window.innerHeight - 16, rect.bottom + 10)}px`);

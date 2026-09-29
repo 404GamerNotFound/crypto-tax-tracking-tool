@@ -2,10 +2,10 @@ const params = new URLSearchParams(window.location.search);
 const requestedChain = String(params.get("chain") || "BTC").toUpperCase();
 const requestedAsset = String(params.get("asset") || "");
 const state = { portfolio: null, selected: new Set(), editingHistoricPriceTransaction: null, documentTransaction: null, chart: null, filters: { search: "", direction: "" } };
-const el = (id) => document.getElementById(id);
-const currency = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
+const { api, el, formatCurrency, priceProviderLabel, purposeInfo, toast } = window.CryptoBuchUI;
 const price = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 4 });
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
+const dateOnly = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" });
 
 function hasPrice(value) {
   return Number.isFinite(Number(value)) && Number(value) > 0;
@@ -15,8 +15,66 @@ function formatPrice(value) {
   return hasPrice(value) ? price.format(Number(value)) : "k. A.";
 }
 
-function formatCurrency(value) {
-  return value !== null && value !== "" && value !== undefined && Number.isFinite(Number(value)) ? currency.format(Number(value)) : "k. A.";
+function formatRecordedAt(value) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? dateTime.format(new Date(timestamp)) : "nicht dokumentiert";
+}
+
+function historicPriceProvenance(transaction) {
+  const hasHistoricPrice = hasPrice(transaction.price_transaction_eur);
+  const provider = String(transaction.price_provider || "");
+  const isImportedPrice = transaction.price_source === "manual" && provider && provider !== "manual" && provider !== "legacy";
+  const priceDate = transaction.timestamp && Number.isFinite(Date.parse(transaction.timestamp))
+    ? dateOnly.format(new Date(transaction.timestamp)) : "nicht dokumentiert";
+  const recordedAt = formatRecordedAt(transaction.price_recorded_at);
+  if (!hasHistoricPrice) {
+    return {
+      tone: "missing",
+      quality: "offen · kein historischer Kurs",
+      provider: "noch nicht ermittelt",
+      priceDate,
+      recordedAt: null,
+      recordedLabel: "",
+    };
+  }
+  if (isImportedPrice) {
+    return {
+      tone: "imported",
+      quality: "Direktimport · geschützt",
+      provider: priceProviderLabel(provider),
+      priceDate,
+      recordedAt,
+      recordedLabel: "Importiert",
+    };
+  }
+  if (transaction.price_source === "manual") {
+    return {
+      tone: "manual",
+      quality: "manuell festgelegt",
+      provider: priceProviderLabel(provider || "manual"),
+      priceDate,
+      recordedAt,
+      recordedLabel: "Erfasst",
+    };
+  }
+  if (!provider || provider === "legacy") {
+    return {
+      tone: "limited",
+      quality: "eingeschränkt · alte Herkunft fehlt",
+      provider: priceProviderLabel("legacy"),
+      priceDate,
+      recordedAt,
+      recordedLabel: "Zuletzt gespeichert",
+    };
+  }
+  return {
+    tone: "automatic",
+    quality: "automatisch ergänzt",
+    provider: priceProviderLabel(provider),
+    priceDate,
+    recordedAt,
+    recordedLabel: "Abgerufen",
+  };
 }
 
 function chainInfo() {
@@ -42,40 +100,12 @@ function shorten(value, start = 10, end = 7) {
   return value && value.length > start + end + 2 ? `${value.slice(0, start)}…${value.slice(-end)}` : value || "—";
 }
 
-function purposeInfo(transaction) {
-  const defaults = {
-    "Staking Rewards": ["✦", "staking", "Staking-Ertrag"], Kauf: ["↗", "purchase", "Kauf"], Verkauf: ["↘", "sale", "Verkauf"],
-    "Mining Reward": ["⛏", "mining", "Mining-Ertrag"], Airdrop: ["◇", "gift", "Airdrop"], "Lending-Ertrag": ["✦", "staking", "Lending-Ertrag"], "DeFi-Ertrag": ["✦", "staking", "DeFi-Ertrag"], "DeFi Swap": ["⇄", "transfer", "DeFi-Swap"], "Liquidity Pool": ["◒", "staking", "Liquiditätspool"], Bridge: ["⇆", "transfer", "Bridge"], NFT: ["▣", "gift", "NFT"], Spam: ["!", "other", "Spam / ignorieren"], Transfer: ["↔", "transfer", "Transfer"], Geschenk: ["◇", "gift", "Geschenk"],
-    Gebühr: ["−", "fee", "Gebühr"], Sonstiges: ["•", "other", "Sonstiges"],
-  };
-  const [icon, tone, label] = defaults[transaction.purpose] || (transaction.purpose ? ["•", "custom", transaction.purpose] : ["?", "unassigned", "Noch nicht zugeordnet"]);
-  const origin = transaction.purpose_origin === "auto" ? "automatisch erkannt" : transaction.purpose_origin === "manual" ? "manuell zugeordnet" : "Herkunft prüfen";
-  return { icon, tone, label, origin };
-}
-
 function directionLabel(direction) {
   return { in: "Zugang", out: "Abgang", self: "Eigener Transfer" }[direction] || "Unbekannt";
 }
 
 function explorerUrl(type, value) {
   return chainInfo().explorer?.[type]?.replace("{value}", encodeURIComponent(value)) || "#";
-}
-
-function toast(message, kind = "success") {
-  const container = el("toast");
-  container.textContent = message;
-  container.className = `toast ${kind}`;
-  container.hidden = false;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { container.hidden = true; }, 4200);
-}
-
-async function api(url, options = {}) {
-  const response = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
-  if (response.status === 204) return null;
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Der Vorgang ist fehlgeschlagen.");
-  return payload;
 }
 
 function metric(label, value, help = "", tone = "") {
@@ -296,6 +326,9 @@ function renderTransactions() {
     selectCell.append(checkbox);
 
     const operation = document.createElement("td");
+    operation.className = "operation-cell";
+    const operationLayout = document.createElement("div");
+    operationLayout.className = "operation-layout";
     const direction = document.createElement("span");
     direction.className = `direction ${transaction.direction}`;
     direction.textContent = transaction.direction === "in" ? "↓" : transaction.direction === "out" ? "↑" : "↔";
@@ -312,7 +345,8 @@ function renderTransactions() {
     const when = document.createElement("small");
     when.textContent = transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : isCardanoReward ? `Cardano-Epoche ${String(transaction.hash).split(":")[1]}` : "Unbestätigt";
     operationCopy.append(hash, when);
-    operation.append(direction, operationCopy);
+    operationLayout.append(direction, operationCopy);
+    operation.append(operationLayout);
 
     const wallet = document.createElement("td");
     const walletTitle = document.createElement("strong");
@@ -344,14 +378,28 @@ function renderTransactions() {
     const historicValue = hasPrice(transaction.price_transaction_eur) ? Number(transaction.price_transaction_eur) * Number(transaction.amount) : null;
     const historicDetail = document.createElement("small");
     historicDetail.textContent = historicValue === null ? "Nicht verfügbar" : `Wert: ${formatCurrency(historicValue)}`;
+    const provenance = historicPriceProvenance(transaction);
+    const historicProvenance = document.createElement("div");
+    historicProvenance.className = "price-provenance";
+    const quality = document.createElement("small");
+    quality.className = `price-provenance-status ${provenance.tone}`;
+    quality.textContent = `Datenqualität: ${provenance.quality}`;
     const historicSource = document.createElement("small");
-    historicSource.textContent = transaction.price_source === "manual" ? "Manuell festgelegt" : "Automatische Preisquelle";
+    historicSource.textContent = `Quelle: ${provenance.provider}`;
+    const historicDate = document.createElement("small");
+    historicDate.textContent = `Kursdatum: ${provenance.priceDate}`;
+    historicProvenance.append(quality, historicSource, historicDate);
+    if (provenance.recordedAt) {
+      const historicRecordedAt = document.createElement("small");
+      historicRecordedAt.textContent = `${provenance.recordedLabel}: ${provenance.recordedAt}`;
+      historicProvenance.append(historicRecordedAt);
+    }
     const editHistoricPrice = document.createElement("button");
     editHistoricPrice.type = "button";
     editHistoricPrice.className = "text-button historic-price-edit";
     editHistoricPrice.textContent = "Kurs bearbeiten";
     editHistoricPrice.addEventListener("click", () => openHistoricPriceModal(transaction));
-    historic.append(historicDetail, historicSource, editHistoricPrice);
+    historic.append(historicDetail, historicProvenance, editHistoricPrice);
     row.append(selectCell, operation, wallet, amount, now, historic, renderPurpose(transaction));
     body.append(row);
   }
@@ -478,11 +526,13 @@ async function openHistoricPriceModal(transaction) {
   setTimeout(() => el("historic-price-input").focus(), 0);
   try {
     const history = await api(`/api/transactions/${transaction.id}/price-history`);
-    if (history.changes.length) {
-      const latest = history.changes[0];
-      el("historic-price-history").textContent = `Letzte Änderung: ${latest.source === "manual" ? "manuell" : "automatisch"} · ${dateTime.format(new Date(latest.changed_at))}${latest.note ? ` · ${latest.note}` : ""}`;
-      el("historic-price-history").hidden = false;
-    }
+    const provenance = historicPriceProvenance({ ...transaction, ...history.transaction });
+    const latest = history.changes[0];
+    const audit = latest
+      ? ` Letzte Änderung: ${latest.source === "manual" ? "manuell" : "automatisch"} · ${formatRecordedAt(latest.changed_at)}${latest.note ? ` · ${latest.note}` : ""}`
+      : "";
+    el("historic-price-history").textContent = `Kursherkunft: ${provenance.provider} · Datenqualität: ${provenance.quality}.${audit}`;
+    el("historic-price-history").hidden = false;
   } catch (_) {
     // The editor remains usable even if older audit data is unavailable.
   }
@@ -505,6 +555,8 @@ async function saveHistoricPrice(useAutomatic = false) {
     });
     transaction.price_transaction_eur = result.price_transaction_eur;
     transaction.price_source = result.price_source;
+    transaction.price_provider = result.price_provider;
+    transaction.price_recorded_at = result.price_recorded_at;
     closeHistoricPriceModal();
     renderMetrics();
     renderChart();

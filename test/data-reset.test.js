@@ -42,7 +42,7 @@ test("setzt alle aktiven lokalen Daten zurück und behält Backups", () => {
   const deleted = resetLocalData();
 
   assert.deepEqual(deleted, { wallets: 1, transactions: 2, documents: 1 });
-  for (const table of ["wallets", "wallet_metadata", "wallet_addresses", "transactions", "historical_price_retries", "transaction_price_audit", "sync_events", "transfer_links", "exchange_connections", "exchange_balance_snapshot_meta", "exchange_balance_snapshots", "app_settings", "price_history", "background_jobs", "notifications", "tax_report_snapshots", "transaction_documents"]) {
+  for (const table of ["wallets", "wallet_metadata", "wallet_addresses", "transactions", "historical_price_retries", "historical_price_runs", "historical_price_fetch_events", "transaction_price_audit", "sync_events", "transfer_links", "exchange_connections", "exchange_balance_snapshot_meta", "exchange_balance_snapshots", "app_settings", "price_history", "background_jobs", "notifications", "tax_report_snapshots", "transaction_documents"]) {
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count, 0, `${table} wurde nicht geleert`);
   }
   assert.equal(fs.existsSync(path.join(dataDir, "documents", "reset-document")), false);

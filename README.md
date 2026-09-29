@@ -28,7 +28,7 @@ docker compose down
 - Historien mit dedizierten Netzwerkadaptern synchronisieren: Blockstream Esplora (BTC), TzKT (XTZ), TronGrid (TRX), Blockfrost (ADA), Etherscan (ETH/ERC-20), BscScan (BNB), Solscan (SOL), XRPL JSON-RPC (XRP), Stellar Horizon (XLM), BlockCypher (DOGE/LTC), Fulcrum (BCH), Blockchair (ZEC), NearBlocks (NEAR), Snowtrace (AVAX) und TonAPI (TON)
 - Ein- und Ausgänge, eigene Transfers, Gebühren und Gegenadressen in einer Tabelle darstellen
 - Datenqualität getrennt prüfen: fehlende historische Kurse, Transaktionen ohne Zweck und manuell fixierte Kurse
-- Historische EUR-Kurse je Transaktion manuell hinterlegen, mit Quelle, Begründung und vollständiger Änderungs-Historie; manuelle Werte werden bei späteren Synchronisierungen nicht überschrieben
+- Historische EUR-Kurse je Transaktion mit Kursquelle, Kursdatum, Abruf-/Erfassungszeitpunkt und Datenqualitätsstatus ausweisen; manuelle Werte sind begründet, vollständig historisiert und werden bei späteren Synchronisierungen nicht überschrieben
 - Jahresreport mit FIFO-Verkaufssegmenten, historischen Erlösen/Kosten, Haltedauer, bewertbaren Gebühren sowie Staking-, Mining-, Airdrop-, Lending- und DeFi-Erträgen erstellen; CSV- und druckoptimierter PDF-Export inklusive
 - Lokale Datenbank-Backups im Docker-Volume erstellen, herunterladen und nach ausdrücklicher Bestätigung wiederherstellen
 - Betriebsseite mit dem letzten Import je Wallet, Fehlermeldungen, Importanzahl und Preis-Retry-Status
@@ -40,7 +40,7 @@ docker compose down
 - Interaktive Coin-Charts mit Zoom und Cursor, QR-Codes für gespeicherte öffentliche Wallet-Adressen sowie eine reine Bitcoin-PSBT-Vorschau ohne Signieren oder Speichern
 - Direkter, read-only Ledger-Import für Bitcoin und Ethereum: Die öffentliche Empfangsadresse wird im Browser vom Gerät gelesen und auf dem Ledger bestätigt; Private Keys, Seed-Phrases und Signaturfunktionen bleiben ausgeschlossen
 - Cardano-Stake-Wallets zusätzlich um die von Blockfrost gelieferte Reward-Historie erweitern und ERC-20-Metadaten mit read-only Ethereum-RPC-Multicalls prüfen
-- Read-only-Börsenanbindung für Bitvavo und Binance Spot: Binance importiert Spot-Trades, Ein- und Auszahlungen, Earn-/Dividendenausschüttungen und Gebühren mit nachvollziehbarem Zweck-Mapping; die verfügbare Spot-Historie wird automatisch in seriellen, fortsetzbaren Zeitfenstern nachgeladen; die Binance-CSV ordnet zusätzlich Convert-, Airdrop- und sonstige Kontobewegungen ein
+- Read-only-Börsenanbindung für Bitvavo, Binance Spot, eToro und BSDEX: Binance importiert Spot-Trades, Ein- und Auszahlungen, Earn-/Dividendenausschüttungen und Gebühren mit nachvollziehbarem Zweck-Mapping; BSDEX importiert Salden, eigene Trades sowie abgeschlossene Krypto-Ein- und Auszahlungen und ergänzt einen optionalen privaten Live-Abgleich für Salden und Trades mit periodischem REST-Fallback
 
 ## Datenquellen und Grenzen
 
@@ -51,7 +51,7 @@ docker compose down
 - Ethereum-Transaktionen werden über die [Etherscan API V2](https://docs.etherscan.io/) abgerufen. Der Adapter importiert bestätigte native ETH-Transfers und ERC-20-Transfer-Events einer Ethereum-Mainnet-Adresse. Interne Transaktionen sowie ERC-721/1155-NFTs sind nicht Teil dieses Umfangs.
 - Weitere Top-30-Netzwerke nutzen absichtlich keinen universellen Multi-Chain-Importer. Ihre Quellen und optionalen Zugangsdaten werden getrennt unter **Einstellungen → Weitere Netzwerke** verwaltet. Die Adapter beziehen aktuell native Transfers; ERC-20-Token werden bereits beim Ethereum-Import erkannt.
 - Monero kann ohne privaten View-Key nicht aus einer öffentlichen Adresse synchronisiert werden. Shielded-Zcash-Adressen, Canton und Figure HELOC haben ebenfalls keine für diesen read-only Ansatz passende, frei zugängliche Adresshistorie; sie werden deshalb nicht als voll synchronisierbare Wallet angeboten.
-- Aktuelle EUR-Kurse kommen von [CoinGecko](https://www.coingecko.com/en/api). Historische Kurse werden pro Kalendertag in der lokalen Datenbank zwischengespeichert. Für native Coins ergänzt CryptoBuch fehlende CoinGecko-Historie automatisch mit EUR-Tageskerzen von Bitvavo. Fehlende Werte werden auch ohne geöffnete Browserseite in kleinen, seriellen Batches wiederholt; fehlgeschlagene Werte erhalten ein exponentiell wachsendes Retry-Intervall. Die öffentliche CoinGecko-API beschränkt historische Abrufe auf die letzten 365 Tage; für nicht verfügbare Märkte oder historische ERC-20-Preise kann eine CoinGecko-Pro-Basisadresse samt Pro-Key erforderlich sein. Falls keine Quelle einen Kurs kennt, bleiben Transaktionen sichtbar und zeigen `k. A.`.
+- Aktuelle EUR-Kurse kommen von [CoinGecko](https://www.coingecko.com/en/api). Historische Kurse werden pro Kalendertag samt Herkunft in der lokalen Datenbank zwischengespeichert und die verwendete Quelle samt Abrufzeitpunkt direkt an der jeweiligen Buchung festgehalten. Für native Coins und Börsenassets ergänzt CryptoBuch fehlende CoinGecko-Historie seriell mit EUR-Tageskerzen von Bitvavo, [Coinbase Exchange](https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles) und [Kraken](https://docs.kraken.com/api-reference/market-data/get-ohlc-data); mit einem eigenen CryptoCompare-Key kommt eine fünfte Quelle hinzu. Fehlende Werte werden auch ohne geöffnete Browserseite in kleinen, seriellen Batches wiederholt; fehlgeschlagene Werte erhalten ein exponentiell wachsendes Retry-Intervall. Die öffentliche CoinGecko-API beschränkt historische Abrufe auf die letzten 365 Tage; Kraken liefert nur die jüngsten etwa 720 Tageskerzen, und ERC-20-Preise bleiben contract-spezifisch auf CoinGecko beschränkt. Falls keine Quelle einen Kurs kennt, bleiben Transaktionen sichtbar und zeigen `k. A.`.
 - Die Top-30-Marktansicht bezieht ebenfalls CoinGecko-Marktdaten und wird für fünf Minuten im Speicher zwischengespeichert. Die Rangfolge ist daher stets aktuell und nicht als feste Coin-Liste im Programm hinterlegt.
 - TzKT liefert zu Tezos-Operationen neben dem Blockzeitstempel auch den zum Blockzeitpunkt errechneten EUR-Kurs. Deshalb kann die Anwendung für XTZ eine präzisere historische Zuordnung verwenden als den Tageskurs.
 - Die Anwendung ist eine Organisationshilfe und keine steuerliche Beratung. Für eine Steuererklärung sollten Zuordnungen und Kursdaten fachlich geprüft werden.
@@ -70,7 +70,7 @@ Unter **Betrieb & Backups** lassen sich Datenbank-Snapshots erstellen und herunt
 
 ## Konfiguration
 
-Alle fachlichen Einstellungen lassen sich nach der Installation unter **Einstellungen** in der Weboberfläche ändern. Dazu gehören Importlimits, Bitcoin-/Tezos-/TRON-/Cardano-/Ethereum-Datenquellen, CoinGecko, die xPub-Suchgrenzen und die vertrauenswürdigen XTZ-Staking-Payout-Aliase. Änderungen werden lokal in SQLite gespeichert und gelten ab der nächsten Synchronisierung. TronGrid- und Etherscan-API-Keys sowie die Blockfrost Project-ID werden aus Sicherheitsgründen nur gespeichert; sie werden nicht wieder an den Browser zurückgegeben.
+Alle fachlichen Einstellungen lassen sich nach der Installation unter **Einstellungen** in der Weboberfläche ändern. Dazu gehören Importlimits, Bitcoin-/Tezos-/TRON-/Cardano-/Ethereum-Datenquellen, die Preisquellen CoinGecko, Bitvavo, Coinbase Exchange, Kraken und optional CryptoCompare, die xPub-Suchgrenzen und die vertrauenswürdigen XTZ-Staking-Payout-Aliase. Änderungen werden lokal in SQLite gespeichert und gelten ab der nächsten Synchronisierung. Zugangsdaten werden aus Sicherheitsgründen nur gespeichert; sie werden nicht wieder an den Browser zurückgegeben.
 
 Die Umgebungsvariablen in `.env` bzw. Portainer dienen beim allerersten Start als Startwerte oder für automatisierte Deployments. Sobald ein Wert in der Weboberfläche gespeichert wurde, hat diese lokale Einstellung Vorrang. Port, Container-Name und Docker-Volume bleiben bewusst Portainer-/Docker-Einstellungen, da ihre Änderung einen Container-Neustart erfordert.
 
@@ -139,6 +139,14 @@ Die Basisadresse ist unter **Einstellungen → Preisdaten** konfigurierbar oder 
 ETORO_API_BASE_URL=https://public-api.etoro.com/api/v1
 ```
 
+### BSDEX · Read-only mit optionalen Live-Updates
+
+Für **BSDEX** wird ein separater API-Zugang mit ausschließlichem Leserecht benötigt. CryptoBuch verwendet nur `GET /api/v1/balance`, die eigenen Trades je EUR-Markt, die dokumentierten reinen Lese-Endpunkte `GET /api/v2/crypto/deposits` und `GET /api/v2/crypto/withdrawals` sowie – nach ausdrücklichem Opt-in im Verbindungsdialog – die privaten WebSocket-Kanäle `trade` und `balance`. Es werden niemals Order-, Storno- oder schreibende Auszahlungs-Endpunkte aufgerufen.
+
+Der erste und jeder manuelle Abgleich liest Salden, verfügbare Trade-Historie und abgeschlossene Krypto-Ein- bzw. Auszahlungen seriell ein. Letztere erhalten immer den Zweck `Transfer` und werden nur als nachvollziehbarer Vorschlag mit einer passenden lokalen Wallet verknüpft – nie als Kauf oder Verkauf. Ein bestätigter BSDEX-Saldo ist für die Bestandsanzeige maßgeblich; Abweichungen zum Journal bleiben sichtbar und erzeugen weder Käufe/Verkäufe noch FIFO-Lose. Ist der Live-Modus aktiv, verarbeitet die lokale Instanz neue eigene Trades und Salden direkt. Alle 15 Minuten (konfigurierbar über `BSDEX_RECONCILE_INTERVAL_MINUTES`, mindestens 5 Minuten) erfolgt zusätzlich ein serieller REST-Abgleich; dieser holt auch die Transfer-Historie nach einer Unterbrechung nach.
+
+Die API-Dokumentation weist historische Trades marktweise und Krypto-Transfer-Historien für die dort verfügbaren Assets aus. Ein nicht mehr abrufbarer alter oder delisteter Markt beziehungsweise eine von BSDEX nicht bereitgestellte Transferhistorie kann deshalb weiterhin einen BSDEX-Export erfordern; fehlende Buchungen werden nicht geraten. Siehe [offizielle BSDEX API-Dokumentation](https://docs.bsdex.de/).
+
 ### Trade Republic · expliziter inoffizieller Read-only-Import
 
 **Trade Republic** kann als separates Börsenkonto mit einem ausdrücklich opt-in-basierten, **inoffiziellen** Timeline-Import verbunden werden. Die Integration ist eigenständig in CryptoBuch implementiert und verwendet ausschließlich die lesenden Vorgänge `timeline` und `timelineDetail`. Sie enthält keinerlei Order-, Auszahlungs-, Transfer- oder Portfolio-Schreiboperationen.
@@ -187,18 +195,19 @@ Der Import ruft für Chain-ID `1` sowohl die normalen ETH-Transaktionen als auch
 
 ### Historische Kurse für alle Coins
 
-Bei jedem Import nutzt CryptoBuch für alle nativen Coins den hinterlegten CoinGecko-Coin und für ERC-20-Transfers die jeweilige Contract-Adresse. Falls CoinGecko für einen nativen Coin keinen historischen EUR-Kurs liefert – insbesondere bei älteren Daten – ergänzt die Anwendung automatisch verfügbare Bitvavo-EUR-Tageskerzen. TzKT-Kurse für Tezos bleiben ein zusätzlicher, genauerer Quellenwert. Bereits importierte Transaktionen lassen sich ohne erneuten Blockchain-Import im Dashboard über **Historische Kurse ergänzen** nachziehen.
+Bei jedem Import nutzt CryptoBuch für alle nativen Coins und Börsenassets den hinterlegten CoinGecko-Coin bzw. das Asset-Symbol und für ERC-20-Transfers die jeweilige Contract-Adresse. Falls CoinGecko für einen nativen Coin oder ein Börsenasset keinen historischen EUR-Kurs liefert – insbesondere bei älteren Daten – versucht die Anwendung nacheinander Bitvavo, Coinbase Exchange und Kraken. Mit einem hinterlegten CryptoCompare-Key folgt CryptoCompare als fünfte Quelle. Sobald ein Tageswert vorliegt, endet die Suche für dieses Datum; die Quelle wird lokal gespeichert. TzKT-Kurse für Tezos bleiben ein zusätzlicher, genauerer Quellenwert. Bereits importierte Transaktionen lassen sich ohne erneuten Blockchain-Import im Dashboard über **Historische Kurse ergänzen** nachziehen.
 
-Die öffentliche CoinGecko-API liefert historische Preise nur für die letzten 365 Tage. Für native Coins mit verfügbarem Bitvavo-EUR-Markt braucht es deshalb normalerweise keine weitere Konfiguration. Für nicht verfügbare Märkte oder ältere ERC-20-Transaktionen stelle unter **Einstellungen → Preisdaten** diese Werte ein:
+Die öffentliche CoinGecko-API liefert historische Preise nur für die letzten 365 Tage. Die vier öffentlichen Quellen benötigen keinen Zugangscode; jede Anfrage läuft durch dieselbe globale Warteschlange mit mindestens 1,75 Sekunden Abstand. Coinbase-Anfragen umfassen höchstens 300 Tage, Kraken kann nur die letzten etwa 720 Tage liefern. Für eine zusätzliche, weiter zurückreichende Quelle oder für nicht verfügbare Märkte hinterlege unter **Einstellungen → Preisdaten** einen CryptoCompare-Key. Für contract-spezifische ERC-20-Preise bleibt eine CoinGecko-Pro-Konfiguration die mögliche Erweiterung:
 
 ```dotenv
 COINGECKO_API_BASE_URL=https://pro-api.coingecko.com/api/v3
 COINGECKO_API_KEY=dein_coingecko_pro_key
+CRYPTOCOMPARE_API_KEY=dein_cryptocompare_api_key
 ```
 
-Die Anwendung verwendet dann automatisch den Header `x-cg-pro-api-key`; beim öffentlichen Standard-Endpunkt wird ein optionaler Key als Demo-Key übermittelt. Der Key bleibt serverseitig gespeichert und wird nicht an den Browser zurückgegeben.
+Die Anwendung verwendet für CoinGecko automatisch den Header `x-cg-pro-api-key`; beim öffentlichen Standard-Endpunkt wird ein optionaler Key als Demo-Key übermittelt. Beide API-Keys bleiben serverseitig gespeichert und werden nicht an den Browser zurückgegeben.
 
-Die automatische Nachbearbeitung läuft standardmäßig alle 15 Minuten, verarbeitet höchstens 60 fehlende Transaktionen je Durchlauf und startet historische HTTP-Anfragen mindestens 1,75 Sekunden versetzt. Beide Werte können unter **Einstellungen → Synchronisierung** oder beim ersten Start über `HISTORICAL_PRICE_RETRY_INTERVAL_MINUTES` und `HISTORICAL_PRICE_BACKFILL_BATCH_SIZE` angepasst werden. Der Button **Historische Kurse ergänzen** stößt denselben gedrosselten Durchlauf sofort an.
+Die automatische Nachbearbeitung läuft standardmäßig alle 15 Minuten, verarbeitet höchstens 60 fehlende Transaktionen je Durchlauf und startet historische HTTP-Anfragen mindestens 1,75 Sekunden versetzt. Beide Werte können unter **Einstellungen → Synchronisierung** oder beim ersten Start über `HISTORICAL_PRICE_RETRY_INTERVAL_MINUTES` und `HISTORICAL_PRICE_BACKFILL_BATCH_SIZE` angepasst werden. Der Button **Historische Kurse ergänzen** stößt denselben gedrosselten Durchlauf sofort an. Unter **Datenqualität → Datenabrufe** zeigt eine lokale Pipeline die nächsten Kandidaten, die aktive Quellenreihenfolge sowie ein paginiertes Abrufprotokoll mit Zeitpunkt, Quelle, Ergebnis und sicherer Fehlerklasse. API-Keys und vollständige Anfrage-URLs werden dort nicht protokolliert.
 
 ### Weitere Top-30-Netzwerke
 

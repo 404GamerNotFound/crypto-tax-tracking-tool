@@ -1,41 +1,128 @@
-const el = (id) => document.getElementById(id);
+const { api, cell, el, parseDbDate, toast: showToast } = window.CryptoBuchUI;
 const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
 const state = {};
 const RESET_CONFIRMATION = "ALLE DATEN LÖSCHEN";
 
-const parseDbDate = (value) => new Date(String(value).includes("T") ? value : `${value}Z`);
-
-async function api(url, options = {}) {
-  const response = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Vorgang fehlgeschlagen.");
-  return payload;
-}
-
 function toast(message, error = false) {
-  const node = el("toast");
-  node.textContent = message;
-  node.className = `toast${error ? " error" : ""}`;
-  node.hidden = false;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { node.hidden = true; }, 5000);
+  showToast(message, error ? "error" : "success", { duration: 5000 });
 }
 
-function cell(value) {
-  const node = document.createElement("td");
-  node.textContent = value;
-  return node;
+function readableDate(value, fallback = "—") {
+  if (!value) return fallback;
+  const parsed = parseDbDate(value);
+  return parsed ? date.format(parsed) : fallback;
+}
+
+function automationStateLabel(status) {
+  return ({
+    waiting: "Bereit", queued: "Eingeplant", running: "Läuft", attention: "Prüfen",
+    inactive: "Nicht aktiv", connecting: "Verbindet", connected: "Verbunden",
+    reconnecting: "Verbindet erneut", success: "Erfolgreich", error: "Fehler",
+  })[status] || "Unbekannt";
+}
+
+function automationState(status) {
+  const badge = document.createElement("span");
+  badge.className = `automation-state ${status || "waiting"}`;
+  badge.textContent = automationStateLabel(status);
+  return badge;
+}
+
+function automationDetail(label, value) {
+  const item = document.createElement("div");
+  const term = document.createElement("dt");
+  term.textContent = label;
+  const description = document.createElement("dd");
+  description.textContent = value;
+  item.append(term, description);
+  return item;
+}
+
+function renderAutomations(automations) {
+  state.automations = automations;
+  const schedules = automations.schedules || [];
+  const active = schedules.filter((schedule) => schedule.status !== "inactive").length;
+  el("automation-active-count").textContent = String(active);
+  el("automation-queue-status").textContent = `${automations.queue?.running || 0} läuft · ${automations.queue?.queued || 0} eingeplant`;
+
+  const scheduleList = el("automation-schedule-list");
+  scheduleList.replaceChildren(...schedules.map((schedule) => {
+    const card = document.createElement("article");
+    card.className = "automation-schedule";
+    const head = document.createElement("div");
+    head.className = "automation-schedule-head";
+    const title = document.createElement("h3");
+    title.textContent = schedule.label;
+    head.append(title, automationState(schedule.status));
+    const copy = document.createElement("p");
+    copy.textContent = schedule.description;
+    const details = document.createElement("dl");
+    details.className = "automation-details";
+    details.append(
+      automationDetail("Abstand", schedule.intervalMinutes ? `alle ${schedule.intervalMinutes} Min.` : "—"),
+      automationDetail("Nächster Lauf", readableDate(schedule.nextRunAt, schedule.status === "inactive" ? "nicht aktiv" : "—")),
+    );
+    if (schedule.lastRun) {
+      details.append(
+        automationDetail("Letzter Lauf", readableDate(schedule.lastRun.finishedAt || schedule.lastRun.startedAt)),
+        automationDetail("Ergebnis", schedule.lastRun.errorMessage ? "Fehler" : `${automationStateLabel(schedule.lastRun.status)} · ${schedule.lastRun.updatedCount || 0} ergänzt`),
+      );
+    }
+    card.append(head, copy, details);
+    if (schedule.connections?.length) {
+      const connections = document.createElement("ul");
+      connections.className = "automation-connection-list";
+      for (const connection of schedule.connections) {
+        const row = document.createElement("li");
+        const label = document.createElement("strong");
+        label.textContent = connection.label;
+        const meta = document.createElement("small");
+        meta.textContent = `${automationStateLabel(connection.status)} · ${readableDate(connection.nextRunAt)}`;
+        row.append(label, meta);
+        connections.append(row);
+      }
+      card.append(connections);
+    }
+    const firstError = schedule.connections?.find((connection) => connection.lastError)?.lastError || schedule.lastRun?.errorMessage;
+    if (firstError) {
+      const error = document.createElement("p");
+      error.className = "automation-error";
+      error.textContent = firstError;
+      card.append(error);
+    }
+    return card;
+  }));
+  if (!schedules.length) scheduleList.append(document.createTextNode("Keine automatischen Läufe eingerichtet."));
+
+  const jobs = automations.queue?.recent || [];
+  el("automation-queue-meta").textContent = `${automations.queue?.running || 0} läuft · ${automations.queue?.queued || 0} eingeplant`;
+  const jobList = el("automation-job-list");
+  jobList.replaceChildren(...jobs.map((job) => {
+    const row = document.createElement("tr");
+    const name = document.createElement("td");
+    name.textContent = `#${job.id} · ${job.label}`;
+    const status = document.createElement("td");
+    status.append(automationState(job.status));
+    const finished = job.errorMessage
+      ? `Fehler: ${job.errorMessage}`
+      : job.finishedAt ? readableDate(job.finishedAt)
+        : job.progressTotal > 1 ? `${job.progressCurrent}/${job.progressTotal}` : "—";
+    row.append(name, status, cell(readableDate(job.createdAt)), cell(readableDate(job.startedAt)), cell(finished));
+    return row;
+  }));
+  el("automation-job-empty").hidden = jobs.length > 0;
 }
 
 async function load() {
   try {
-    const [status, backup] = await Promise.all([api("/api/system-status"), api("/api/backups")]);
+    const [status, backup, automations] = await Promise.all([api("/api/system-status"), api("/api/backups"), api("/api/system-status/automations")]);
     state.status = status;
     state.backups = backup.backups;
     el("pending-prices").textContent = status.priceRetry.pending.toLocaleString("de-DE");
     el("retry-status").textContent = status.priceRetry.nextAttemptAt ? `Nächster Retry: ${date.format(parseDbDate(status.priceRetry.nextAttemptAt))}` : "Keine verzögerten Retries";
     el("sync-errors").textContent = status.wallets.filter((wallet) => wallet.last_status === "error").length;
     el("backup-count").textContent = backup.backups.length;
+    renderAutomations(automations);
 
     const wallets = el("wallet-status-list");
     wallets.replaceChildren(...status.wallets.map((wallet) => {
@@ -103,6 +190,7 @@ el("create-backup").addEventListener("click", async () => {
 });
 
 el("reload-status").addEventListener("click", load);
+el("reload-automations").addEventListener("click", load);
 el("open-data-reset").addEventListener("click", openResetDialog);
 el("close-data-reset").addEventListener("click", closeResetDialog);
 el("cancel-data-reset").addEventListener("click", closeResetDialog);

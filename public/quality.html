@@ -5,16 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Datenqualität für historische Kurse, Zwecke und Börsenabgleiche" />
     <title>CryptoBuch · Datenqualität</title>
-    <link rel="stylesheet" href="/styles.css?v=20260929-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260929-5" />
   </head>
   <body>
     <div class="shell report-shell">
       <header class="topbar">
         <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">₿</span><span>CryptoBuch</span></a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation">
-          <a class="topbar-link" href="/">Dashboard</a><a class="topbar-link" href="/wallets.html">Crypto-Bestände</a>
-          <a class="topbar-link is-active" href="/quality.html">Datenqualität</a><a class="topbar-link" href="/tax.html">Steuerreport</a><a class="topbar-link" href="/maintenance.html">Betrieb</a><a class="topbar-link" href="/settings.html">Einstellungen</a>
-        </nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
       </header>
       <main class="report-main quality-main">
         <section class="page-hero compact-hero quality-hero">
@@ -23,16 +20,17 @@
             <h1>Saubere <em>Buchungen.</em></h1>
             <p>Prüfe fehlende historische Kurse, offene Zwecke und Überträge zwischen Börse und eigenen Wallets. Manuelle Angaben bleiben bei jeder Synchronisierung geschützt.</p>
           </div>
-          <div class="hero-actions"><button class="button button-primary" id="retry-prices">Kurse jetzt ergänzen</button><button class="button button-secondary" id="reload-quality">Neu laden</button></div>
+          <div class="hero-actions"><a class="button button-secondary" href="/price-fetches.html">Datenabrufe</a><button class="button button-primary" id="retry-prices">Kurse jetzt ergänzen</button><button class="button button-secondary" id="reload-quality">Neu laden</button></div>
         </section>
+        <nav class="section-subnav" aria-label="Bereiche der Datenqualität" data-section-navigation="quality"></nav>
 
-        <section class="summary-grid quality-summary" aria-label="Datenqualitätsübersicht">
+        <section class="summary-grid quality-summary" id="qualitaetsueberblick" aria-label="Datenqualitätsübersicht">
           <article class="summary-card"><span class="card-label">Fehlende Kaufkurse</span><strong id="missing-price-count">—</strong><span class="muted">werden automatisch wiederholt</span></article>
           <article class="summary-card"><span class="card-label">Ohne Zweck</span><strong id="unassigned-count">—</strong><span class="muted">für Auswertung prüfen</span></article>
           <article class="summary-card"><span class="card-label">Manuelle Kurse</span><strong id="manual-price-count">—</strong><span class="muted">vor Automatik geschützt</span></article>
         </section>
 
-        <section class="transfer-review-panel" aria-labelledby="transfer-review-title">
+        <section class="transfer-review-panel" id="transfers" aria-labelledby="transfer-review-title">
           <div class="transfer-review-heading">
             <div class="transfer-review-icon" aria-hidden="true">↔</div>
             <div>
@@ -55,7 +53,7 @@
           <p class="transfer-review-footnote">Ein Vorschlag ist keine automatische steuerliche Einordnung. Unpassende Treffer einfach offen lassen; sie verändern keine Buchung.</p>
         </section>
 
-        <section class="transactions-panel report-panel">
+        <section class="transactions-panel report-panel" id="pruefungen">
           <div class="section-heading transactions-title"><div><p class="eyebrow">HISTORISCHE PREISE</p><h2>Fehlende Kurse</h2></div></div>
           <div class="table-wrap"><table><thead><tr><th>Datum</th><th>Coin</th><th>Wallet</th><th>Betrag</th><th>Aktion</th></tr></thead><tbody id="missing-price-list"></tbody></table></div>
           <p class="data-note" id="missing-price-empty" hidden>Keine offenen historischen Kurse.</p>
@@ -73,7 +71,7 @@
           <p class="data-note" id="duplicate-empty" hidden>Keine mehrfachen Transaktionshashes gefunden.</p>
         </section>
 
-        <section class="transactions-panel report-panel">
+        <section class="transactions-panel report-panel" id="importe">
           <div class="section-heading transactions-title"><div><p class="eyebrow">BÖRSEN- &amp; CSV-IMPORT</p><h2>Transaktionen nachtragen</h2></div></div>
           <p class="data-note" id="csv-profile-help">Wähle ein unterstütztes Börsenprofil oder die Standard-CryptoBuch-CSV. Maximal 2.500 Zeilen; importierte Werte bleiben manuell geschützt.</p>
           <form id="csv-import-form" class="quality-form"><div class="form-grid"><label><span>CSV-Profil</span><select id="csv-profile" required></select></label><label><span>Zielquelle</span><select id="csv-target" required></select></label><label><span>CSV-Datei</span><input id="csv-file" type="file" accept=".csv,text/csv" required /></label></div><div class="modal-actions"><button class="button button-primary" type="submit">CSV prüfen &amp; importieren</button></div></form>
@@ -94,13 +92,14 @@
               <label id="exchange-api-key-field"><span id="exchange-api-key-label">Read-only API-Key</span><input id="exchange-api-key" autocomplete="off" minlength="8" maxlength="512" required /></label>
               <label id="exchange-api-secret-field"><span id="exchange-api-secret-label">API-Secret</span><input id="exchange-api-secret" type="password" autocomplete="new-password" minlength="8" maxlength="512" required /></label>
               <label class="form-wide" id="exchange-symbols-field" hidden><span>Frühere Binance Spot-Märkte <small>optional</small></span><input id="exchange-symbols" maxlength="1600" placeholder="z. B. BTCEUR, BTCUSDT, ETHEUR" /><small>Leer: Bestände und bereits gefundene Assets ergänzen Märkte automatisch. Trage nur Märkte ein, deren Coin komplett verkauft wurde und deshalb nicht mehr erkennbar ist.</small></label>
+              <label class="form-wide exchange-live-updates" id="exchange-live-updates-field" hidden><input id="exchange-live-updates" type="checkbox" /><span><strong>BSDEX-Live-Updates aktivieren</strong><br />Private Salden- und Trade-Ereignisse werden lokal read-only übernommen. Krypto-Ein- und Auszahlungen werden über den regelmäßigen seriellen REST-Abgleich importiert und anschließend mit lokalen Wallets abgeglichen.</span></label>
               <label class="form-wide exchange-trade-republic-consent" id="exchange-trade-republic-consent-field" hidden><input id="exchange-trade-republic-consent" type="checkbox" /><span>Ich verstehe: Der Trade-Republic-Import verwendet eine <strong>inoffizielle</strong>, nur lesende Web-Schnittstelle. Die Anmeldung wird in meiner Trade-Republic-App bestätigt und meldet die App nicht als neues Gerät an. Die PIN wird nur für diese Anmeldung übertragen und nicht gespeichert. CryptoBuch legt danach ausschließlich eine verschlüsselte lokale Web-Sitzung ab und fragt nur Transaktions-Timeline und Details ab; Orders, Auszahlungen und Transfers werden nie ausgelöst.</span></label>
             </div>
             <div class="exchange-security-notice" id="exchange-security-notice"><span aria-hidden="true">⌁</span><p id="exchange-security-copy"><strong>Read-only &amp; lokal:</strong> Der Schlüssel darf nur Kontostände und Historie lesen. Er wird nach dem Speichern nicht erneut angezeigt.</p></div>
             <div class="modal-actions"><button class="button button-primary" type="submit">Börse speichern &amp; abgleichen</button></div>
           </form>
           <div class="exchange-connection-section">
-            <div class="exchange-connection-heading"><div><p class="eyebrow">VERBUNDENE BÖRSEN</p><h3>Deine Datenquellen</h3></div><span class="muted">Binance-Historienimporte laufen automatisch und seriell weiter.</span></div>
+            <div class="exchange-connection-heading"><div><p class="eyebrow">VERBUNDENE BÖRSEN</p><h3>Deine Datenquellen</h3></div><span class="muted">Historienimporte und aktivierte BSDEX-Live-Abgleiche laufen lokal und seriell weiter.</span></div>
             <ul id="exchange-connection-list" class="exchange-connection-list"><li class="muted">Börsenverbindungen werden geladen …</li></ul>
           </div>
         </section>
@@ -111,6 +110,6 @@
     <dialog id="trade-republic-web-login-modal"><form id="trade-republic-web-login-form"><div class="modal-head"><div><p class="eyebrow">TRADE REPUBLIC</p><h2>Web-Anmeldung bestätigen</h2></div><button class="modal-close" id="close-trade-republic-web-login" type="button">×</button></div><p class="modal-copy" id="trade-republic-web-login-copy">Bestätige die Anmeldung jetzt in deiner Trade-Republic-App. Sie wird nicht als neues Gerät registriert.</p><label id="trade-republic-web-login-pin-field"><span>Trade-Republic-PIN <small>wird nicht gespeichert</small></span><input id="trade-republic-web-login-pin" type="password" inputmode="numeric" autocomplete="current-password" minlength="4" maxlength="16" /></label><p class="form-error" id="trade-republic-web-login-error" hidden></p><div class="modal-actions"><button class="button button-primary" id="trade-republic-web-login-submit" type="submit">App-Bestätigung anfordern</button></div></form></dialog>
     <dialog id="quality-document-modal"><div class="modal-head"><div><p class="eyebrow">NACHWEISARCHIV</p><h2>Belege zur Transaktion</h2></div><button class="modal-close" id="close-quality-document" type="button">×</button></div><p class="modal-copy" id="quality-document-copy"></p><form id="quality-document-form"><label><span>PDF, PNG, JPEG oder CSV · max. 5 MB</span><input id="quality-document-file" type="file" accept="application/pdf,image/png,image/jpeg,text/csv,.csv" required /></label><p class="form-error" id="quality-document-error" hidden></p><div class="modal-actions"><button class="button button-primary" type="submit">Nachweis lokal anhängen</button></div></form><ul id="quality-document-list" class="tax-snapshot-list"><li class="muted">Nachweise werden geladen …</li></ul><p class="data-note">Anhänge bleiben ausschließlich im lokalen Datenverzeichnis und werden nicht an Blockchain- oder Kursanbieter übertragen.</p></dialog>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/notifications.js?v=20260925-1" defer></script><script src="/quality.js?v=20260929-1" defer></script>
+    <script src="/ui.js?v=20260929-1" defer></script><script src="/navigation.js?v=20260929-2" defer></script><script src="/notifications.js?v=20260925-1" defer></script><script src="/quality.js?v=20260929-2" defer></script>
   </body>
 </html>

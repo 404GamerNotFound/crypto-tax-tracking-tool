@@ -1,7 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  bitvavoDailyClosePrices, coinGeckoDate, coinGeckoHeaders, closestPriceForDate, needsExtendedCoinGeckoHistory, usesCoinGeckoPro,
+  bitvavoDailyClosePrices, coinbaseDailyClosePrices, coinGeckoDate, coinGeckoHeaders, closestPriceForDate,
+  cryptoCompareDailyClosePrices, krakenDailyClosePrices, needsExtendedCoinGeckoHistory, usesCoinGeckoPro,
 } = require("../lib/historical-prices");
 
 test("wählt den passenden CoinGecko-Authentifizierungsheader", () => {
@@ -20,4 +21,10 @@ test("ordnet tägliche Kurse deterministisch dem Transaktionsdatum zu", () => {
 test("liest Bitvavo-Tages-Schlusskurse als EUR-Historie", () => {
   const prices = bitvavoDailyClosePrices([[1745798400000, "82661", "84255", "81785", "83318", "821.82"]]);
   assert.equal(prices.get("2025-04-28"), 83318);
+});
+
+test("liest Tages-Schlusskurse aus den zusätzlichen Preisquellen", () => {
+  assert.equal(coinbaseDailyClosePrices([[1745798400, "82661", "84255", "81785", "83318", "821.82"]]).get("2025-04-28"), 83318);
+  assert.equal(cryptoCompareDailyClosePrices({ Data: { Data: [{ time: 1745798400, close: "83319" }] } }).get("2025-04-28"), 83319);
+  assert.equal(krakenDailyClosePrices({ result: { BTCEUR: [[1745798400, "82661", "84255", "81785", "83320", "821.82"]], last: 1745884800 } }).get("2025-04-28"), 83320);
 });

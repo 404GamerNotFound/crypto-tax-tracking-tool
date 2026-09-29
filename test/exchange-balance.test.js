@@ -7,7 +7,7 @@ const test = require("node:test");
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "cryptobuch-exchange-balance-"));
 const previousDataDir = process.env.DATA_DIR;
 process.env.DATA_DIR = dataDir;
-const { db, exchangePosition, replaceExchangeBalanceSnapshot } = require("../server");
+const { db, exchangePosition, exchangeTransferSuggestions, replaceExchangeBalanceSnapshot } = require("../server");
 
 test.after(() => {
   db.close();
@@ -40,5 +40,53 @@ test("verwendet den bestätigten Binance-Spot-Saldo statt eines negativen Buchun
     difference: 104.006747,
     source: "binance_spot_snapshot",
     observedAt: result.snapshot.observedAt,
+  });
+});
+
+test("verwendet den bestätigten BSDEX-Saldo statt eines unvollständigen Journals", () => {
+  const walletId = Number(db.prepare("INSERT INTO wallets (chain, address, label, source_type) VALUES ('EXCHANGE', 'exchange:bsdex:balance-test', 'BSDEX', 'exchange')").run().lastInsertRowid);
+  const connectionId = Number(db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret) VALUES ('bsdex', ?, 'BSDEX', 'key', 'secret')").run(walletId).lastInsertRowid);
+  replaceExchangeBalanceSnapshot(connectionId, [{ asset: "ETH", free: 1.5, locked: 0 }]);
+
+  const result = exchangePosition(
+    { id: walletId, label: "BSDEX" },
+    { id: connectionId, provider: "bsdex", label: "BSDEX" },
+    new Map([["ETH", -0.5]]),
+  );
+
+  assert.deepEqual([...result.positions.entries()], [["ETH", 1.5]]);
+  assert.equal(result.reconciliations[0].source, "bsdex_snapshot");
+  assert.equal(result.reconciliations[0].difference, 2);
+});
+
+test("schlägt eine abgeschlossene BSDEX-Auszahlung zur lokalen Wallet als Transfer vor", () => {
+  const exchangeWalletId = Number(db.prepare("INSERT INTO wallets (chain, address, label, source_type) VALUES ('EXCHANGE', 'exchange:bsdex:transfer-test', 'BSDEX', 'exchange')").run().lastInsertRowid);
+  const localWalletId = Number(db.prepare("INSERT INTO wallets (chain, address, label) VALUES ('BTC', 'bc1-local-transfer-test', 'Hardware-Wallet')").run().lastInsertRowid);
+  const insert = db.prepare(`INSERT INTO transactions (
+    wallet_id, external_id, hash, timestamp, direction, asset, asset_symbol, asset_name, asset_decimals,
+    amount, fee, fee_asset, purpose, purpose_origin, raw_json
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const timestamp = "2024-01-02T12:00:00.000Z";
+  const outgoingId = Number(insert.run(
+    exchangeWalletId, "bsdex:withdrawal:transfer-1:btc", "bsdex:withdrawal:transfer-1", timestamp,
+    "out", "BTC", "BTC", "BTC", 8, 0.125, 0, "BTC", "Transfer", "auto", JSON.stringify({ source: "bsdex-api" }),
+  ).lastInsertRowid);
+  const incomingId = Number(insert.run(
+    localWalletId, "wallet:transfer-1", "wallet:transfer-1", "2024-01-02T12:03:00.000Z",
+    "in", "BTC", "BTC", "BTC", 8, 0.125, 0, "BTC", "Transfer", "auto", JSON.stringify({ source: "bitcoin" }),
+  ).lastInsertRowid);
+
+  const suggestion = exchangeTransferSuggestions(20).find((item) => item.outgoing_id === outgoingId && item.incoming_id === incomingId);
+  assert.deepEqual(suggestion, {
+    outgoing_id: outgoingId,
+    incoming_id: incomingId,
+    asset: "BTC",
+    amount: 0.125,
+    outgoing_at: timestamp,
+    incoming_at: "2024-01-02T12:03:00.000Z",
+    outgoing_wallet: "BSDEX · Börse",
+    incoming_wallet: "Hardware-Wallet",
+    origin: "exchange",
+    fee_adjusted: false,
   });
 });

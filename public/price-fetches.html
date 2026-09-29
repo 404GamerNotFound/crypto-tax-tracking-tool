@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Lokale Pipeline und Protokoll für historische Kursabrufe" />
+    <title>CryptoBuch · Datenabrufe</title>
+    <link rel="stylesheet" href="/styles.css?v=20260929-5" />
+  </head>
+  <body>
+    <div class="shell report-shell">
+      <header class="topbar">
+        <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">₿</span><span>CryptoBuch</span></a>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
+      </header>
+      <main class="report-main price-fetch-main">
+        <section class="page-hero compact-hero price-fetch-hero">
+          <div>
+            <p class="eyebrow"><a href="/quality.html">DATENQUALITÄT</a> / DATENABRUFE</p>
+            <h1>Kurse <em>abrufen.</em></h1>
+            <p>Die lokale Pipeline zeigt, welche fehlenden historischen Kurse als Nächstes geprüft werden und dokumentiert jeden tatsächlichen Abruf ohne API-Keys oder Anfragedaten zu speichern.</p>
+          </div>
+          <div class="hero-actions"><a class="button button-secondary" href="/quality.html">Zur Datenqualität</a><button class="button button-primary" id="start-price-fetch">Jetzt prüfen</button><button class="button button-secondary" id="reload-price-fetches">Neu laden</button></div>
+        </section>
+        <nav class="section-subnav" aria-label="Bereiche der Datenqualität" data-section-navigation="quality"></nav>
+
+        <section class="price-pipeline-panel" aria-labelledby="price-pipeline-title">
+          <div class="price-pipeline-heading">
+            <div>
+              <p class="eyebrow">AUTOMATISCHE PIPELINE</p>
+              <h2 id="price-pipeline-title">Nächster Kursabruf</h2>
+              <p id="price-pipeline-copy">Pipeline wird geladen …</p>
+            </div>
+            <span class="price-pipeline-status" id="price-pipeline-status">—</span>
+          </div>
+          <div class="price-pipeline-metrics" aria-label="Status der Kurs-Pipeline">
+            <article><span>Offene Kurse</span><strong id="pipeline-pending">—</strong><small>ohne manuellen Kurs</small></article>
+            <article><span>Im nächsten Batch</span><strong id="pipeline-due">—</strong><small>maximal <span id="pipeline-batch-size">—</span> je Durchlauf</small></article>
+            <article><span>Später eingeplant</span><strong id="pipeline-scheduled">—</strong><small>nach Retry-Zeitpunkt</small></article>
+          </div>
+          <ol class="price-pipeline-stages" id="price-pipeline-stages" aria-label="Reihenfolge der Preisquellen"></ol>
+          <p class="price-pipeline-note">Alle historischen HTTP-Anfragen teilen sich eine serielle Warteschlange. Ein Treffer beendet die Suche für dieses Datum; fehlende Werte erhalten einen lokalen Retry-Zeitpunkt.</p>
+        </section>
+
+        <section class="transactions-panel report-panel price-fetch-upcoming" aria-labelledby="price-fetch-upcoming-title">
+          <div class="section-heading transactions-title">
+            <div><p class="eyebrow">WARTESCHLANGE</p><h2 id="price-fetch-upcoming-title">Demnächst automatisch prüfen</h2></div>
+            <span class="count-badge" id="price-fetch-upcoming-count">—</span>
+          </div>
+          <p class="data-note" id="price-fetch-next-at">Zeitplan wird geladen …</p>
+          <div class="table-wrap"><table><thead><tr><th>Transaktionsdatum</th><th>Coin</th><th>Quelle</th><th>Nächste Prüfung</th><th>Versuche</th></tr></thead><tbody id="price-fetch-upcoming-list"></tbody></table></div>
+          <p class="data-note" id="price-fetch-upcoming-empty" hidden>Keine fehlenden historischen Kurse in der Warteschlange.</p>
+        </section>
+
+        <section class="transactions-panel report-panel price-fetch-log" aria-labelledby="price-fetch-log-title">
+          <div class="section-heading transactions-title">
+            <div><p class="eyebrow">LOKALES ABRUFPROTOKOLL</p><h2 id="price-fetch-log-title">Abgeschlossen, teilweise offen oder fehlgeschlagen</h2></div>
+            <span class="muted" id="price-fetch-log-meta">—</span>
+          </div>
+          <p class="data-note">Das Protokoll speichert Zeitpunkt, Quelle, Asset, Ergebnis und sichere Fehlerklasse. Es speichert weder API-Keys noch vollständige Anfrage-URLs.</p>
+          <div class="price-fetch-run-list" id="price-fetch-run-list" aria-live="polite"></div>
+          <p class="data-note" id="price-fetch-run-empty" hidden>Es wurden noch keine historischen Kursabrufe protokolliert.</p>
+          <div class="pagination-actions" id="price-fetch-pagination" hidden><button class="button button-secondary button-small" id="price-fetch-previous" type="button">Neuere Einträge</button><span id="price-fetch-page-label"></span><button class="button button-secondary button-small" id="price-fetch-next" type="button">Ältere Einträge</button></div>
+        </section>
+      </main>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/ui.js?v=20260929-1" defer></script><script src="/navigation.js?v=20260929-2" defer></script><script src="/notifications.js?v=20260925-1" defer></script><script src="/price-fetches.js?v=20260929-2" defer></script>
+  </body>
+</html>

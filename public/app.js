@@ -1,11 +1,6 @@
 const state = { portfolio: null, market: null };
-const el = (id) => document.getElementById(id);
-const currency = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
+const { api, el, formatCurrency, hasNumber, toast } = window.CryptoBuchUI;
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
-
-function hasNumber(value) {
-  return value !== null && value !== "" && value !== undefined && Number.isFinite(Number(value));
-}
 
 function assetInfo(assetId) {
   return state.portfolio?.assets?.[assetId] || state.portfolio?.chains?.[assetId] || { symbol: assetId, decimals: 6, chain: assetId };
@@ -14,10 +9,6 @@ function assetInfo(assetId) {
 function formatAmount(value, assetId) {
   const asset = assetInfo(assetId);
   return `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: asset.decimals || 6 }).format(Number(value || 0))} ${asset.symbol || asset.asset || assetId}`;
-}
-
-function formatCurrency(value) {
-  return hasNumber(value) ? currency.format(Number(value)) : "k. A.";
 }
 
 function formatMarketPrice(value) {
@@ -31,23 +22,6 @@ function formatMarketCap(value) {
   return hasNumber(value)
     ? new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", notation: "compact", maximumFractionDigits: 1 }).format(Number(value))
     : "k. A.";
-}
-
-function toast(message, kind = "success") {
-  const container = el("toast");
-  container.textContent = message;
-  container.className = `toast ${kind}`;
-  container.hidden = false;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { container.hidden = true; }, 4200);
-}
-
-async function api(url, options = {}) {
-  const response = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
-  if (response.status === 204) return null;
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Der Vorgang ist fehlgeschlagen.");
-  return payload;
 }
 
 function renderAssetCard(assetId, asset) {

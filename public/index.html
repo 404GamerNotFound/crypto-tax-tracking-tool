@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokales Crypto-Portfolio für öffentliche Blockchain-Wallets" />
     <title>CryptoBuch · Dashboard</title>
-    <link rel="stylesheet" href="/styles.css?v=20260929-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260929-5" />
   </head>
   <body>
     <div class="shell dashboard-shell">
@@ -14,14 +14,7 @@
           <span class="brand-mark" aria-hidden="true">₿</span>
           <span>CryptoBuch</span>
         </a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation">
-          <a class="topbar-link is-active" href="/">Dashboard</a>
-          <a class="topbar-link" href="/wallets.html">Crypto-Bestände</a>
-          <a class="topbar-link" href="/quality.html">Datenqualität</a>
-          <a class="topbar-link" href="/tax.html">Steuerreport</a>
-          <a class="topbar-link" href="/maintenance.html">Betrieb</a>
-          <a class="topbar-link" href="/settings.html">Einstellungen</a>
-        </nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
         <div class="topbar-status" id="price-status" aria-live="polite">Preise werden geladen …</div>
       </header>
 
@@ -81,7 +74,7 @@
           <article class="overview-stat"><span class="card-label">Netto-Kapitalzufluss</span><strong id="net-investment">—</strong><span class="muted">Käufe minus Verkäufe · bekannte Kurse</span></article>
         </section>
 
-        <section class="asset-section" aria-labelledby="asset-section-title">
+        <section class="asset-section" id="coins" aria-labelledby="asset-section-title">
           <div class="section-heading asset-section-heading">
             <div>
               <p class="eyebrow">COIN-AUSWERTUNG</p>
@@ -121,7 +114,9 @@
       </main>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/ui.js?v=20260929-1" defer></script>
+    <script src="/navigation.js?v=20260929-2" defer></script>
     <script src="/notifications.js?v=20260925-1" defer></script>
-    <script src="/app.js?v=20260929-1" defer></script>
+    <script src="/app.js?v=20260929-2" defer></script>
   </body>
 </html>

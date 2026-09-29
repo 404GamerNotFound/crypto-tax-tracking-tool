@@ -1,4 +1,4 @@
-const el = (id) => document.getElementById(id);
+const { api, cell, el, toast: showToast } = window.CryptoBuchUI;
 const currency = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
 const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" });
 const PAGE_SIZE = 25;
@@ -12,14 +12,7 @@ const state = {
 const money = (value) => value === null || value === undefined ? "k. A." : currency.format(Number(value));
 const amount = (value, asset) => `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 8 }).format(Number(value || 0))} ${asset}`;
 
-async function api(url, options = {}) {
-  const response = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Der Steuerreport konnte nicht geladen werden.");
-  return payload;
-}
-function toast(message, kind = "success") { const node = el("toast"); node.textContent = message; node.className = `toast ${kind}`; node.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => { node.hidden = true; }, 5000); }
-function cell(value) { const node = document.createElement("td"); node.textContent = value; return node; }
+function toast(message, kind = "success") { showToast(message, kind, { duration: 5000 }); }
 function salesTaxStatus(sale, profile) { if (!sale.complete) return "Prüfung offen"; if (!profile.disposalTaxEnabled) return "Nicht aktiviert"; if (sale.holdingPeriodMet) return "Haltefrist erfüllt"; return "steuerlich relevant"; }
 function pageRows(rows, page) { const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE)); const safePage = Math.min(Math.max(1, page), totalPages); return { rows: rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE), page: safePage, totalPages }; }
 function renderPagination(prefix, totalRows, page, onChange) {

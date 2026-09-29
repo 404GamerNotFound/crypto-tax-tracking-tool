@@ -1,5 +1,5 @@
 const state = { portfolio: null, exchange: null };
-const el = (id) => document.getElementById(id);
+const { api, el, exchangeProviderLabel, toast } = window.CryptoBuchUI;
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
 
 function chainInfo(chain) {
@@ -24,23 +24,6 @@ function isExtendedPublicKey(value) {
 function xpubAddressTypeFor(value) {
   const prefix = normalizeExtendedPublicKey(value).slice(0, 4).toLowerCase();
   return prefix === "ypub" ? "p2sh-p2wpkh" : prefix === "zpub" ? "p2wpkh" : null;
-}
-
-function toast(message, kind = "success") {
-  const container = el("toast");
-  container.textContent = message;
-  container.className = `toast ${kind}`;
-  container.hidden = false;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { container.hidden = true; }, 4200);
-}
-
-async function api(url, options = {}) {
-  const response = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
-  if (response.status === 204) return null;
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Der Vorgang ist fehlgeschlagen.");
-  return payload;
 }
 
 function walletName(wallet) {
@@ -111,14 +94,12 @@ function renderWallet(wallet) {
 }
 
 function exchangeName(connection) {
-  const defaults = { binance: "Binance Spot", bitvavo: "Bitvavo", etoro: "eToro", trade_republic: "Trade Republic" };
-  return connection.label || defaults[connection.provider] || "Börsenkonto";
+  return connection.label || exchangeProviderLabel(connection.provider, "Börsenkonto");
 }
 
-function exchangeProviderLabel(connection) {
+function exchangeSourceLabel(connection) {
   if (connection.provider === "trade_republic") return connection.importMode === "csv" ? "Trade Republic · lokaler CSV-Import" : "Trade Republic · inoffiziell · Read-only";
-  const labels = { binance: "Binance Spot · Read-only", bitvavo: "Bitvavo · Read-only", etoro: "eToro · Read-only" };
-  return labels[connection.provider] || "Börsenquelle";
+  return `${exchangeProviderLabel(connection.provider)} · Read-only`;
 }
 
 function renderExchange(connection) {
@@ -128,12 +109,12 @@ function renderExchange(connection) {
   identity.className = "wallet-page-identity";
   const icon = document.createElement("span");
   icon.className = `exchange-source-icon ${connection.provider || ""}`;
-  icon.textContent = connection.provider === "binance" ? "B" : connection.provider === "bitvavo" ? "V" : connection.provider === "etoro" ? "eT" : "TR";
+  icon.textContent = connection.provider === "binance" ? "B" : connection.provider === "bitvavo" ? "V" : connection.provider === "etoro" ? "eT" : connection.provider === "bsdex" ? "BS" : "TR";
   const copy = document.createElement("div");
   const title = document.createElement("h3");
   title.textContent = exchangeName(connection);
   const meta = document.createElement("p");
-  meta.textContent = `${exchangeProviderLabel(connection)} · eigenes Börsenkonto`;
+  meta.textContent = `${exchangeSourceLabel(connection)} · eigenes Börsenkonto`;
   copy.append(title, meta);
   identity.append(icon, copy);
 
@@ -154,6 +135,11 @@ function renderExchange(connection) {
       history.textContent = `Historie lädt automatisch · ${percent} %`;
     }
     sync.append(history);
+  }
+  if (connection.live?.enabled) {
+    const live = document.createElement("small");
+    live.textContent = connection.live.status === "connected" ? "BSDEX-Live-Abgleich verbunden" : connection.live.status === "reconnecting" ? "BSDEX-Live-Abgleich verbindet erneut" : "BSDEX-Live-Abgleich wird hergestellt";
+    sync.append(live);
   }
 
   const actions = document.createElement("div");

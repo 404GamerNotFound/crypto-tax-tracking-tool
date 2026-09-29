@@ -1,23 +1,4 @@
-const el = (id) => document.getElementById(id);
-
-function toast(message, kind = "success") {
-  const container = el("toast");
-  container.textContent = message;
-  container.className = `toast ${kind}`;
-  container.hidden = false;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { container.hidden = true; }, 4200);
-}
-
-async function api(url, options = {}) {
-  const response = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Der Vorgang ist fehlgeschlagen.");
-  return payload;
-}
+const { api, el, toast } = window.CryptoBuchUI;
 
 function render(settings) {
   el("max-transactions").value = settings.maxTransactionsPerSync;
@@ -58,6 +39,9 @@ function render(settings) {
   el("blockcypher-api").value = settings.blockCypherApiBaseUrl;
   el("coingecko-api").value = settings.coinGeckoBaseUrl;
   el("bitvavo-api").value = settings.bitvavoApiBaseUrl;
+  el("coinbase-exchange-api").value = settings.coinbaseExchangeApiBaseUrl;
+  el("kraken-api").value = settings.krakenApiBaseUrl;
+  el("cryptocompare-api").value = settings.cryptoCompareApiBaseUrl;
   el("binance-api").value = settings.binanceApiBaseUrl;
   el("etoro-api").value = settings.etoroApiBaseUrl;
   el("xpub-gap").value = settings.xpubGapLimit;
@@ -82,6 +66,9 @@ function render(settings) {
   el("coingecko-key-status").textContent = settings.coinGeckoApiKeyConfigured
     ? "Ein API-Key ist gespeichert. Bei pro-api.coingecko.com wird er als Pro-Key verwendet."
     : "Kein API-Key gespeichert. Die öffentliche CoinGecko-API liefert historische Daten nur für die letzten 365 Tage.";
+  el("cryptocompare-key-status").textContent = settings.cryptoCompareApiKeyConfigured
+    ? "Ein API-Key ist gespeichert. Die Quelle wird erst nach den vier vorherigen Preisquellen verwendet."
+    : "Kein API-Key gespeichert; CryptoCompare wird übersprungen, die vier öffentlichen Quellen bleiben aktiv.";
 }
 
 function setSaving(button, saving) {
@@ -149,10 +136,15 @@ el("settings-form").addEventListener("submit", async (event) => {
         blockCypherApiBaseUrl: form.get("blockCypherApiBaseUrl"),
         coinGeckoBaseUrl: form.get("coinGeckoBaseUrl"),
         bitvavoApiBaseUrl: form.get("bitvavoApiBaseUrl"),
+        coinbaseExchangeApiBaseUrl: form.get("coinbaseExchangeApiBaseUrl"),
+        krakenApiBaseUrl: form.get("krakenApiBaseUrl"),
+        cryptoCompareApiBaseUrl: form.get("cryptoCompareApiBaseUrl"),
         binanceApiBaseUrl: form.get("binanceApiBaseUrl"),
         etoroApiBaseUrl: form.get("etoroApiBaseUrl"),
         coinGeckoApiKey: form.get("coinGeckoApiKey"),
         clearCoinGeckoApiKey: form.get("clearCoinGeckoApiKey") === "on",
+        cryptoCompareApiKey: form.get("cryptoCompareApiKey"),
+        clearCryptoCompareApiKey: form.get("clearCryptoCompareApiKey") === "on",
         xpubGapLimit: form.get("xpubGapLimit"),
         xpubMaxDerivationsPerBranch: form.get("xpubMaxDerivationsPerBranch"),
         xtzStakingPayoutAliases: form.get("xtzStakingPayoutAliases"),
@@ -180,6 +172,8 @@ el("settings-form").addEventListener("submit", async (event) => {
     el("clear-etherscan-key").checked = false;
     el("coingecko-key").value = "";
     el("clear-coingecko-key").checked = false;
+    el("cryptocompare-key").value = "";
+    el("clear-cryptocompare-key").checked = false;
     for (const id of ["bscscan-key", "snowtrace-key", "solscan-key", "nearblocks-key", "tonapi-key", "blockchair-key", "blockcypher-token"]) el(id).value = "";
     el("clear-additional-network-keys").checked = false;
     render(settings);

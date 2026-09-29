@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
     <title>CryptoBuch · Einstellungen</title>
-    <link rel="stylesheet" href="/styles.css?v=20260922-15" />
+    <link rel="stylesheet" href="/styles.css?v=20260929-5" />
   </head>
   <body>
     <div class="shell settings-shell">
@@ -14,14 +14,7 @@
           <span class="brand-mark" aria-hidden="true">₿</span>
           <span>CryptoBuch</span>
         </a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation">
-          <a class="topbar-link" href="/">Dashboard</a>
-          <a class="topbar-link" href="/wallets.html">Crypto-Bestände</a>
-          <a class="topbar-link" href="/quality.html">Datenqualität</a>
-          <a class="topbar-link" href="/tax.html">Steuerreport</a>
-          <a class="topbar-link" href="/maintenance.html">Betrieb</a>
-          <a class="topbar-link is-active" href="/settings.html">Einstellungen</a>
-        </nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
       </header>
 
       <main class="settings-main">
@@ -31,8 +24,9 @@
           <p>Änderungen gelten beim nächsten Synchronisieren und werden lokal in der CryptoBuch-Datenbank gespeichert. Hinterlegte TronGrid- und Etherscan-Keys sowie Blockfrost Project-IDs werden nicht wieder an den Browser zurückgegeben.</p>
         </section>
 
+        <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
         <form id="settings-form" class="settings-form">
-          <section class="settings-card" aria-labelledby="sync-title">
+          <section class="settings-card" id="synchronisierung" aria-labelledby="sync-title">
             <div class="settings-heading">
               <div>
                 <p class="eyebrow">IMPORT</p>
@@ -64,7 +58,7 @@
             </div>
           </section>
 
-          <section class="settings-card" aria-labelledby="tax-profile-title">
+          <section class="settings-card" id="steuerprofil" aria-labelledby="tax-profile-title">
             <div class="settings-heading"><div><p class="eyebrow">STEUERPROFIL</p><h2 id="tax-profile-title">Regelwerk &amp; Steuerreserve</h2></div><span class="settings-mark">02</span></div>
             <p class="settings-inline-note">Die Deutschland-Vorlage ist ein Startwert, keine Rechtsberatung. Alle Felder können für dein Steuerland, Steuerjahr oder nach Rücksprache mit einer Fachperson angepasst werden. Es wird ausschließlich in EUR gerechnet.</p>
             <div class="form-grid settings-grid"><label><span>Profilname</span><input id="tax-profile-label" type="text" maxlength="160" required /></label><label><span>Land / Region (Code)</span><input id="tax-country-code" type="text" maxlength="8" placeholder="DE" required /></label></div>
@@ -199,7 +193,7 @@
             </label>
           </section>
 
-          <section class="settings-card" aria-labelledby="market-data-title">
+          <section class="settings-card" id="preisdaten" aria-labelledby="market-data-title">
             <div class="settings-heading">
               <div>
                 <p class="eyebrow">MARKTDATEN</p>
@@ -215,7 +209,22 @@
             <label>
               <span>Bitvavo-Kerzen-API-Basisadresse</span>
               <input id="bitvavo-api" name="bitvavoApiBaseUrl" type="url" inputmode="url" required />
-              <small>Kostenloser EUR-Tageskurs-Fallback für native Coins, wenn CoinGecko für ein altes Datum keinen Kurs liefert. Kein API-Key erforderlich.</small>
+              <small>Zweite Quelle: kostenloser EUR-Tageskurs-Fallback für native Coins, wenn CoinGecko für ein altes Datum keinen Kurs liefert.</small>
+            </label>
+            <label>
+              <span>Coinbase-Exchange-API-Basisadresse</span>
+              <input id="coinbase-exchange-api" name="coinbaseExchangeApiBaseUrl" type="url" inputmode="url" required />
+              <small>Dritte Quelle: öffentliche EUR-Tageskerzen. Pro Anfrage werden höchstens 300 Tage abgefragt.</small>
+            </label>
+            <label>
+              <span>Kraken-API-Basisadresse</span>
+              <input id="kraken-api" name="krakenApiBaseUrl" type="url" inputmode="url" required />
+              <small>Vierte Quelle: öffentliche EUR-Tageskerzen der letzten etwa 720 Tage.</small>
+            </label>
+            <label>
+              <span>CryptoCompare-API-Basisadresse</span>
+              <input id="cryptocompare-api" name="cryptoCompareApiBaseUrl" type="url" inputmode="url" required />
+              <small>Fünfte Quelle bei hinterlegtem API-Key; erweitert die Historie für native Coins und Börsenassets.</small>
             </label>
             <label>
               <span>Binance-API-Basisadresse</span>
@@ -236,9 +245,19 @@
               <input id="clear-coingecko-key" name="clearCoinGeckoApiKey" type="checkbox" />
               <span>Gespeicherten CoinGecko-API-Key entfernen</span>
             </label>
+            <label>
+              <span>CryptoCompare-API-Key <small>optional</small></span>
+              <input id="cryptocompare-key" name="cryptoCompareApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
+              <small id="cryptocompare-key-status">Key-Status wird geladen …</small>
+            </label>
+            <label class="check-setting">
+              <input id="clear-cryptocompare-key" name="clearCryptoCompareApiKey" type="checkbox" />
+              <span>Gespeicherten CryptoCompare-API-Key entfernen</span>
+            </label>
+            <p class="settings-inline-note">Reihenfolge: CoinGecko, Bitvavo, Coinbase Exchange, Kraken, CryptoCompare (nur mit Key). Ein Treffer wird lokal mit Quelle gespeichert; fehlende Werte werden später seriell erneut versucht.</p>
           </section>
 
-          <section class="settings-card" aria-labelledby="evm-networks-title">
+          <section class="settings-card" id="netzwerke" aria-labelledby="evm-networks-title">
             <div class="settings-heading">
               <div>
                 <p class="eyebrow">WEITERE NETZWERKE</p>
@@ -373,7 +392,9 @@
       </main>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/ui.js?v=20260929-1" defer></script>
+    <script src="/navigation.js?v=20260929-2" defer></script>
     <script src="/notifications.js?v=20260925-1" defer></script>
-    <script src="/settings.js?v=20260927-1" defer></script>
+    <script src="/settings.js?v=20260929-1" defer></script>
   </body>
 </html>

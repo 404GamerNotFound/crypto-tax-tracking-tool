@@ -1,31 +1,8 @@
-const el = (id) => document.getElementById(id);
+const { api, el, node, toast } = window.CryptoBuchUI;
 const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" });
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
 const amount = (value, asset) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 8 }).format(Number(value || 0)) + " " + asset;
 const state = { data: null, transaction: null, portfolio: null, csvProfiles: [], exchange: { providers: [], connections: [] }, tradeRepublicWebLoginConnectionId: null, tradeRepublicWebLoginTimer: null };
-
-function node(tag, className, text) {
-  const value = document.createElement(tag);
-  if (className) value.className = className;
-  if (text !== undefined) value.textContent = text;
-  return value;
-}
-
-function toast(message, kind = "success") {
-  const notice = el("toast");
-  notice.textContent = message;
-  notice.className = "toast " + kind;
-  notice.hidden = false;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { notice.hidden = true; }, 4200);
-}
-
-async function api(url, options = {}) {
-  const response = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Der Vorgang ist fehlgeschlagen.");
-  return payload;
-}
 
 function readableDateTime(value) {
   const parsed = new Date(value);
@@ -160,7 +137,12 @@ function updateExchangeProviderForm() {
   const provider = providerDefinition(el("exchange-provider").value);
   const api = provider.importMode === "api";
   const tradeRepublic = Boolean(provider.requiresWebLogin);
+  const liveUpdates = Boolean(provider.supportsLiveUpdates);
   el("exchange-symbols-field").hidden = !provider.supportsSymbols;
+  el("exchange-live-updates-field").hidden = !liveUpdates;
+  // Live data stays an explicit choice. The user can also enable or pause it
+  // later on the connection card without recreating the API connection.
+  el("exchange-live-updates").checked = false;
   el("exchange-label").placeholder = `z. B. ${provider.defaultLabel || "Börse"}`;
   el("exchange-api-key-field").hidden = !api;
   el("exchange-api-secret-field").hidden = !api;
@@ -186,6 +168,7 @@ function updateExchangeProviderForm() {
     el("exchange-api-key").value = "";
     el("exchange-api-secret").value = "";
     el("exchange-symbols").value = "";
+    el("exchange-live-updates").checked = false;
     el("exchange-trade-republic-consent").checked = false;
   }
   el("exchange-connection-form").querySelector('button[type="submit"]').textContent = tradeRepublic ? "Web-Anmeldung starten" : api ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
@@ -260,7 +243,7 @@ function openExchangeCsvImport(connection) {
 }
 
 function providerMark(provider) {
-  return provider === "binance" ? "BN" : provider === "bitvavo" ? "BV" : provider === "etoro" ? "eT" : provider === "trade_republic" ? "TR" : "EX";
+  return provider === "binance" ? "BN" : provider === "bitvavo" ? "BV" : provider === "etoro" ? "eT" : provider === "bsdex" ? "BS" : provider === "trade_republic" ? "TR" : "EX";
 }
 
 function historyCopy(history) {
@@ -311,10 +294,20 @@ function connectionCard(connection) {
   if (connection.balance) {
     const balance = node("div");
     const copy = connection.balance.status === "confirmed"
-      ? `Spot-Saldo bestätigt${connection.balance.observedAt ? ` · ${readableDateTime(connection.balance.observedAt)}` : ""}`
-      : "Spot-Saldo wird beim nächsten Binance-Sync bestätigt";
+      ? `Kontostand bestätigt${connection.balance.observedAt ? ` · ${readableDateTime(connection.balance.observedAt)}` : ""}`
+      : `Kontostand wird beim nächsten ${connection.provider === "bsdex" ? "BSDEX" : "Binance"}-Sync bestätigt`;
     balance.append(node("dt", "", "Kontostand"), node("dd", connection.balance.status === "pending" ? "history-error" : "", copy));
     details.append(balance);
+  }
+  if (connection.live) {
+    const live = node("div");
+    const copy = !connection.live.enabled ? "Deaktiviert"
+      : connection.live.status === "connected" ? `Verbunden${connection.live.lastEventAt ? ` · letztes Ereignis ${readableDateTime(connection.live.lastEventAt)}` : ""}`
+        : connection.live.status === "reconnecting" ? "Verbindung wird wiederhergestellt"
+          : connection.live.status === "error" ? `Prüfen: ${connection.live.lastError || "Verbindung fehlgeschlagen"}`
+            : "Wird verbunden";
+    live.append(node("dt", "", "Live-Updates"), node("dd", connection.live.status === "error" ? "history-error" : "", copy));
+    details.append(live);
   }
   if (tradeRepublic) {
     const activation = node("div");
@@ -325,7 +318,7 @@ function connectionCard(connection) {
     details.append(activation);
   }
   const footer = node("div", "exchange-connection-card-footer");
-  footer.append(node("p", "", csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : activationNeeded ? "Vor dem ersten Import muss die inoffizielle Trade-Republic-Webanmeldung in der App bestätigt werden. Der Import ruft ausschließlich Timeline und Details ab." : connection.history?.status === "attention" ? "Die API kann nicht alle historischen Märkte liefern. Ergänze die genannten Märkte oder den vollständigen Binance-CSV-Export; fehlende Buchungen werden nie als Kauf oder Verkauf erfunden." : connection.history && connection.history.status !== "complete" ? "Die Binance-Historie wird automatisch in kleinen, seriellen Schritten nachgeladen. Der Transfer-Abgleich folgt nach Abschluss." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
+  footer.append(node("p", "", csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : activationNeeded ? "Vor dem ersten Import muss die inoffizielle Trade-Republic-Webanmeldung in der App bestätigt werden. Der Import ruft ausschließlich Timeline und Details ab." : connection.provider === "bsdex" && connection.live?.enabled ? `BSDEX-Live-Updates laufen nur lesend lokal. Krypto-Ein- und Auszahlungen kommen im seriellen REST-Abgleich alle ${connection.live.reconcileIntervalMinutes} Minuten mit und werden danach als Transfer-Vorschläge mit lokalen Wallets verglichen.` : connection.provider === "bsdex" ? "Abgeschlossene Krypto-Ein- und Auszahlungen werden read-only importiert und danach als Transfer-Vorschläge mit lokalen Wallets verglichen." : connection.history?.status === "attention" ? "Die API kann nicht alle historischen Märkte liefern. Ergänze die genannten Märkte oder den vollständigen Binance-CSV-Export; fehlende Buchungen werden nie als Kauf oder Verkauf erfunden." : connection.history && connection.history.status !== "complete" ? "Die Binance-Historie wird automatisch in kleinen, seriellen Schritten nachgeladen. Der Transfer-Abgleich folgt nach Abschluss." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
   const actions = node("div", "exchange-connection-actions");
   const sync = node("button", "button button-secondary button-small", csv ? "CSV importieren" : activationPending ? "App-Bestätigung öffnen" : activationNeeded ? "Web-Anmeldung starten" : "Jetzt synchronisieren");
   sync.type = "button";
@@ -365,6 +358,21 @@ function connectionCard(connection) {
       }
     });
     actions.append(markets);
+  }
+  if (connection.live) {
+    const liveToggle = node("button", "text-button", connection.live.enabled ? "Live-Updates pausieren" : "Live-Updates aktivieren");
+    liveToggle.type = "button";
+    liveToggle.addEventListener("click", async () => {
+      liveToggle.disabled = true;
+      try {
+        const result = await api("/api/exchange-connections/" + connection.id + "/live-updates", { method: "PATCH", body: JSON.stringify({ enabled: !connection.live.enabled }) });
+        toast(result.job ? "Live-Updates werden nach dem aktuellen Read-only-Abgleich aktiviert." : "BSDEX-Live-Updates pausiert.");
+        await load();
+      } catch (error) {
+        toast(error.message, "error");
+      } finally { liveToggle.disabled = false; }
+    });
+    actions.append(liveToggle);
   }
   const remove = node("button", "text-button exchange-remove", "Verbindung entfernen");
   remove.type = "button";
@@ -546,6 +554,7 @@ el("exchange-connection-form").addEventListener("submit", async (event) => {
       provider: el("exchange-provider").value, label: el("exchange-label").value,
       apiKey: el("exchange-api-key").value, apiSecret: el("exchange-api-secret").value, symbols: el("exchange-symbols").value,
       tradeRepublicConsent: el("exchange-trade-republic-consent").checked,
+      liveUpdatesEnabled: el("exchange-live-updates").checked,
     }) });
     form.reset();
     if (result.tradeRepublic?.status === "approval_pending") {

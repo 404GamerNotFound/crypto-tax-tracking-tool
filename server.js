@@ -39,6 +39,13 @@ const {
 } = require("./lib/binance");
 const { fetchEtoroHistory } = require("./lib/etoro");
 const {
+  createBsdexLiveClient,
+  fetchBsdexHistory,
+  fetchBsdexSubscriptionInfo,
+  normalizeBsdexTrade,
+  normalizeBsdexBalances,
+} = require("./lib/bsdex");
+const {
   createTradeRepublicWebDeviceId,
   startTradeRepublicWebLogin,
   pollTradeRepublicWebLogin,
@@ -49,9 +56,12 @@ const {
 const { matchExchangeTransfer } = require("./lib/exchange-transfer-matcher");
 const {
   bitvavoDailyClosePrices,
+  coinbaseDailyClosePrices,
   coinGeckoDate,
   coinGeckoHeaders,
   closestPriceForDate,
+  cryptoCompareDailyClosePrices,
+  krakenDailyClosePrices,
   needsExtendedCoinGeckoHistory,
   usesCoinGeckoPro,
 } = require("./lib/historical-prices");
@@ -103,8 +113,12 @@ const SETTINGS_DEFAULTS = Object.freeze({
   blockCypherApiBaseUrl: (process.env.BLOCKCYPHER_API_BASE_URL || "https://api.blockcypher.com/v1").replace(/\/$/, ""),
   coinGeckoBaseUrl: (process.env.COINGECKO_API_BASE_URL || "https://api.coingecko.com/api/v3").replace(/\/$/, ""),
   bitvavoApiBaseUrl: (process.env.BITVAVO_API_BASE_URL || "https://api.bitvavo.com/v2").replace(/\/$/, ""),
+  coinbaseExchangeApiBaseUrl: (process.env.COINBASE_EXCHANGE_API_BASE_URL || "https://api.exchange.coinbase.com").replace(/\/$/, ""),
+  krakenApiBaseUrl: (process.env.KRAKEN_API_BASE_URL || "https://api.kraken.com/0/public").replace(/\/$/, ""),
+  cryptoCompareApiBaseUrl: (process.env.CRYPTOCOMPARE_API_BASE_URL || "https://min-api.cryptocompare.com/data/v2").replace(/\/$/, ""),
   binanceApiBaseUrl: (process.env.BINANCE_API_BASE_URL || "https://api.binance.com").replace(/\/$/, ""),
   etoroApiBaseUrl: (process.env.ETORO_API_BASE_URL || "https://public-api.etoro.com/api/v1").replace(/\/$/, ""),
+  bsdexApiBaseUrl: (process.env.BSDEX_API_BASE_URL || "https://api-public.bsdex.de").replace(/\/$/, ""),
   tronGridApiKey: String(process.env.TRONGRID_API_KEY || "").trim(),
   blockfrostProjectId: String(process.env.BLOCKFROST_PROJECT_ID || "").trim(),
   etherscanApiKey: String(process.env.ETHERSCAN_API_KEY || "").trim(),
@@ -116,6 +130,7 @@ const SETTINGS_DEFAULTS = Object.freeze({
   blockchairApiKey: String(process.env.BLOCKCHAIR_API_KEY || "").trim(),
   blockCypherApiToken: String(process.env.BLOCKCYPHER_API_TOKEN || "").trim(),
   coinGeckoApiKey: String(process.env.COINGECKO_API_KEY || "").trim(),
+  cryptoCompareApiKey: String(process.env.CRYPTOCOMPARE_API_KEY || "").trim(),
   xpubGapLimit: DEFAULT_XPUB_GAP_LIMIT,
   xpubMaxDerivationsPerBranch: boundedInteger(process.env.XPUB_MAX_DERIVATIONS_PER_BRANCH, 200, DEFAULT_XPUB_GAP_LIMIT, 1000),
   xtzStakingPayoutAliases: String(process.env.XTZ_STAKING_PAYOUT_ALIASES || "Stake.fish Payouts").trim(),
@@ -136,6 +151,11 @@ const EXCHANGE_PROVIDERS = Object.freeze({
     id: "etoro", label: "eToro · Read-only API", defaultLabel: "eToro", importMode: "api",
     apiKeyLabel: "eToro Public API-Key", apiSecretLabel: "eToro User-Key",
     help: "eToro: Public API-Key und User-Key werden nur für lesende Historienabfragen verwendet. CryptoBuch sendet keine Handels-, Auszahlungs- oder Transfer-Anfragen; die API wird seriell und gedrosselt abgefragt.",
+  }),
+  bsdex: Object.freeze({
+    id: "bsdex", label: "BSDEX · Read-only API + Live", defaultLabel: "BSDEX", importMode: "api",
+    apiKeyLabel: "BSDEX API-Key", apiSecretLabel: "BSDEX API-Secret", supportsLiveUpdates: true,
+    help: "BSDEX: API-Zugang ausschließlich mit Leserechten erstellen. CryptoBuch ruft Salden, eigene Trades sowie abgeschlossene Krypto-Ein- und Auszahlungen ab und gleicht sie mit lokalen Wallets ab. Der optionale Live-Modus verarbeitet private Salden- und Trade-Updates. Orders, Stornos und Auszahlungen werden niemals ausgelöst.",
   }),
   trade_republic: Object.freeze({
     id: "trade_republic", label: "Trade Republic · inoffizieller Read-only-Import", defaultLabel: "Trade Republic", importMode: "api",
@@ -250,6 +270,8 @@ db.exec(`
     counterparty TEXT,
     price_transaction_eur REAL,
     price_source TEXT NOT NULL DEFAULT 'auto' CHECK (price_source IN ('auto', 'manual')),
+    price_provider TEXT,
+    price_recorded_at TEXT,
     purpose TEXT,
     purpose_origin TEXT NOT NULL DEFAULT 'unspecified' CHECK (purpose_origin IN ('unspecified', 'auto', 'manual')),
     raw_json TEXT NOT NULL,
@@ -261,6 +283,7 @@ db.exec(`
     coin_id TEXT NOT NULL,
     price_date TEXT NOT NULL,
     price_eur REAL NOT NULL,
+    source TEXT NOT NULL DEFAULT 'coingecko',
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (coin_id, price_date)
   );
@@ -269,6 +292,33 @@ db.exec(`
     attempt_count INTEGER NOT NULL DEFAULT 0,
     last_attempt_at TEXT NOT NULL,
     next_attempt_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS historical_price_runs (
+    id INTEGER PRIMARY KEY,
+    trigger TEXT NOT NULL,
+    force_run INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'success', 'error', 'interrupted')),
+    pending_count INTEGER,
+    attempted_count INTEGER NOT NULL DEFAULT 0,
+    updated_count INTEGER NOT NULL DEFAULT 0,
+    unresolved_count INTEGER NOT NULL DEFAULT 0,
+    result_json TEXT,
+    error_message TEXT,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at TEXT
+  );
+  CREATE TABLE IF NOT EXISTS historical_price_fetch_events (
+    id INTEGER PRIMARY KEY,
+    run_id INTEGER REFERENCES historical_price_runs(id) ON DELETE CASCADE,
+    source TEXT NOT NULL,
+    asset TEXT NOT NULL,
+    date_from TEXT,
+    date_to TEXT,
+    status TEXT NOT NULL CHECK (status IN ('success', 'error')),
+    returned_prices INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS transaction_price_audit (
     id INTEGER PRIMARY KEY,
@@ -361,6 +411,10 @@ db.exec(`
     ON wallet_addresses(wallet_id, branch, derivation_index);
   CREATE INDEX IF NOT EXISTS idx_historical_price_retries_next_attempt
     ON historical_price_retries(next_attempt_at);
+  CREATE INDEX IF NOT EXISTS idx_historical_price_runs_started
+    ON historical_price_runs(started_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_historical_price_fetch_events_run
+    ON historical_price_fetch_events(run_id, id DESC);
   CREATE INDEX IF NOT EXISTS idx_transaction_price_audit_transaction
     ON transaction_price_audit(transaction_id, changed_at DESC);
   CREATE INDEX IF NOT EXISTS idx_sync_events_wallet_created
@@ -456,6 +510,9 @@ migrateBackgroundJobSchema();
 // job that was marked running just before shutdown. Re-queueing is safe:
 // imports are deduplicated by their external IDs and manual fields survive.
 db.prepare("UPDATE background_jobs SET status = 'queued', started_at = NULL WHERE status = 'running'").run();
+db.prepare(`UPDATE historical_price_runs
+  SET status = 'interrupted', finished_at = datetime('now'), error_message = 'Lokaler Dienst wurde vor Abschluss beendet.'
+  WHERE status = 'running'`).run();
 
 // Erst nach einer möglichen Wallet-Tabellenmigration anlegen, damit bestehende
 // Datenbanken mit älterem UNIQUE-Schema ohne Fremdschlüssel-Konflikt migrieren.
@@ -468,7 +525,7 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS exchange_connections (
     id INTEGER PRIMARY KEY,
-    provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance', 'etoro', 'trade_republic')),
+    provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance', 'etoro', 'bsdex', 'trade_republic')),
     wallet_id INTEGER NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
     label TEXT NOT NULL DEFAULT '',
     api_key TEXT NOT NULL,
@@ -492,6 +549,12 @@ db.exec(`
     trade_republic_web_login_started_at TEXT,
     trade_republic_web_login_error TEXT,
     trade_republic_web_connected_at TEXT,
+    live_updates_enabled INTEGER NOT NULL DEFAULT 0 CHECK (live_updates_enabled IN (0, 1)),
+    live_status TEXT NOT NULL DEFAULT 'disabled' CHECK (live_status IN ('disabled', 'connecting', 'connected', 'reconnecting', 'error')),
+    live_connected_at TEXT,
+    live_last_event_at TEXT,
+    live_last_error TEXT,
+    live_last_reconciled_at TEXT,
     last_synced_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(provider, wallet_id, label)
@@ -503,7 +566,7 @@ db.exec(`
 function migrateExchangeConnectionSchema() {
   const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'exchange_connections'").get()?.sql || "";
   const columns = new Set(db.prepare("PRAGMA table_info(exchange_connections)").all().map((column) => column.name));
-  if (sql.includes("binance") && sql.includes("etoro") && sql.includes("trade_republic") && columns.has("symbols") && columns.has("import_mode") && columns.has("history_state") && columns.has("history_started_at") && columns.has("history_completed_at") && columns.has("history_last_error") && columns.has("trade_republic_device_key") && columns.has("trade_republic_activation_id") && columns.has("trade_republic_activation_started_at") && columns.has("trade_republic_activation_error") && columns.has("trade_republic_activated_at") && columns.has("trade_republic_disclaimer_accepted_at") && columns.has("trade_republic_web_session") && columns.has("trade_republic_web_pending_session") && columns.has("trade_republic_web_device_id") && columns.has("trade_republic_web_login_id") && columns.has("trade_republic_web_login_started_at") && columns.has("trade_republic_web_login_error") && columns.has("trade_republic_web_connected_at")) return;
+  if (sql.includes("binance") && sql.includes("etoro") && sql.includes("bsdex") && sql.includes("trade_republic") && columns.has("symbols") && columns.has("import_mode") && columns.has("history_state") && columns.has("history_started_at") && columns.has("history_completed_at") && columns.has("history_last_error") && columns.has("trade_republic_device_key") && columns.has("trade_republic_activation_id") && columns.has("trade_republic_activation_started_at") && columns.has("trade_republic_activation_error") && columns.has("trade_republic_activated_at") && columns.has("trade_republic_disclaimer_accepted_at") && columns.has("trade_republic_web_session") && columns.has("trade_republic_web_pending_session") && columns.has("trade_republic_web_device_id") && columns.has("trade_republic_web_login_id") && columns.has("trade_republic_web_login_started_at") && columns.has("trade_republic_web_login_error") && columns.has("trade_republic_web_connected_at") && columns.has("live_updates_enabled") && columns.has("live_status") && columns.has("live_connected_at") && columns.has("live_last_event_at") && columns.has("live_last_error") && columns.has("live_last_reconciled_at")) return;
   const symbols = columns.has("symbols") ? "symbols" : "''";
   const importMode = columns.has("import_mode") ? "import_mode" : "'api'";
   const historyState = columns.has("history_state") ? "history_state" : "''";
@@ -523,11 +586,17 @@ function migrateExchangeConnectionSchema() {
   const tradeRepublicWebLoginStartedAt = columns.has("trade_republic_web_login_started_at") ? "trade_republic_web_login_started_at" : "NULL";
   const tradeRepublicWebLoginError = columns.has("trade_republic_web_login_error") ? "trade_republic_web_login_error" : "NULL";
   const tradeRepublicWebConnectedAt = columns.has("trade_republic_web_connected_at") ? "trade_republic_web_connected_at" : "NULL";
+  const liveUpdatesEnabled = columns.has("live_updates_enabled") ? "live_updates_enabled" : "0";
+  const liveStatus = columns.has("live_status") ? "live_status" : "'disabled'";
+  const liveConnectedAt = columns.has("live_connected_at") ? "live_connected_at" : "NULL";
+  const liveLastEventAt = columns.has("live_last_event_at") ? "live_last_event_at" : "NULL";
+  const liveLastError = columns.has("live_last_error") ? "live_last_error" : "NULL";
+  const liveLastReconciledAt = columns.has("live_last_reconciled_at") ? "live_last_reconciled_at" : "NULL";
   db.exec(`
     BEGIN;
     CREATE TABLE exchange_connections_migration (
       id INTEGER PRIMARY KEY,
-      provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance', 'etoro', 'trade_republic')),
+      provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance', 'etoro', 'bsdex', 'trade_republic')),
       wallet_id INTEGER NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
       label TEXT NOT NULL DEFAULT '',
       api_key TEXT NOT NULL,
@@ -551,12 +620,18 @@ function migrateExchangeConnectionSchema() {
       trade_republic_web_login_started_at TEXT,
       trade_republic_web_login_error TEXT,
       trade_republic_web_connected_at TEXT,
+      live_updates_enabled INTEGER NOT NULL DEFAULT 0 CHECK (live_updates_enabled IN (0, 1)),
+      live_status TEXT NOT NULL DEFAULT 'disabled' CHECK (live_status IN ('disabled', 'connecting', 'connected', 'reconnecting', 'error')),
+      live_connected_at TEXT,
+      live_last_event_at TEXT,
+      live_last_error TEXT,
+      live_last_reconciled_at TEXT,
       last_synced_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(provider, wallet_id, label)
     );
-    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, symbols, import_mode, history_state, history_started_at, history_completed_at, history_last_error, trade_republic_device_key, trade_republic_activation_id, trade_republic_activation_started_at, trade_republic_activation_error, trade_republic_activated_at, trade_republic_disclaimer_accepted_at, trade_republic_web_session, trade_republic_web_pending_session, trade_republic_web_device_id, trade_republic_web_login_id, trade_republic_web_login_started_at, trade_republic_web_login_error, trade_republic_web_connected_at, last_synced_at, created_at)
-      SELECT id, provider, wallet_id, label, api_key, api_secret, ${symbols}, ${importMode}, ${historyState}, ${historyStartedAt}, ${historyCompletedAt}, ${historyLastError}, ${tradeRepublicDeviceKey}, ${tradeRepublicActivationId}, ${tradeRepublicActivationStartedAt}, ${tradeRepublicActivationError}, ${tradeRepublicActivatedAt}, ${tradeRepublicDisclaimerAcceptedAt}, ${tradeRepublicWebSession}, ${tradeRepublicWebPendingSession}, ${tradeRepublicWebDeviceId}, ${tradeRepublicWebLoginId}, ${tradeRepublicWebLoginStartedAt}, ${tradeRepublicWebLoginError}, ${tradeRepublicWebConnectedAt}, last_synced_at, created_at FROM exchange_connections;
+    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, symbols, import_mode, history_state, history_started_at, history_completed_at, history_last_error, trade_republic_device_key, trade_republic_activation_id, trade_republic_activation_started_at, trade_republic_activation_error, trade_republic_activated_at, trade_republic_disclaimer_accepted_at, trade_republic_web_session, trade_republic_web_pending_session, trade_republic_web_device_id, trade_republic_web_login_id, trade_republic_web_login_started_at, trade_republic_web_login_error, trade_republic_web_connected_at, live_updates_enabled, live_status, live_connected_at, live_last_event_at, live_last_error, live_last_reconciled_at, last_synced_at, created_at)
+      SELECT id, provider, wallet_id, label, api_key, api_secret, ${symbols}, ${importMode}, ${historyState}, ${historyStartedAt}, ${historyCompletedAt}, ${historyLastError}, ${tradeRepublicDeviceKey}, ${tradeRepublicActivationId}, ${tradeRepublicActivationStartedAt}, ${tradeRepublicActivationError}, ${tradeRepublicActivatedAt}, ${tradeRepublicDisclaimerAcceptedAt}, ${tradeRepublicWebSession}, ${tradeRepublicWebPendingSession}, ${tradeRepublicWebDeviceId}, ${tradeRepublicWebLoginId}, ${tradeRepublicWebLoginStartedAt}, ${tradeRepublicWebLoginError}, ${tradeRepublicWebConnectedAt}, ${liveUpdatesEnabled}, ${liveStatus}, ${liveConnectedAt}, ${liveLastEventAt}, ${liveLastError}, ${liveLastReconciledAt}, last_synced_at, created_at FROM exchange_connections;
     DROP TABLE exchange_connections;
     ALTER TABLE exchange_connections_migration RENAME TO exchange_connections;
     COMMIT;
@@ -641,6 +716,24 @@ if (!transactionColumnNames.has("asset_contract")) db.exec("ALTER TABLE transact
 if (!transactionColumnNames.has("asset_type")) db.exec("ALTER TABLE transactions ADD COLUMN asset_type TEXT NOT NULL DEFAULT 'native'");
 if (!transactionColumnNames.has("fee_asset")) db.exec("ALTER TABLE transactions ADD COLUMN fee_asset TEXT");
 if (!transactionColumnNames.has("price_source")) db.exec("ALTER TABLE transactions ADD COLUMN price_source TEXT NOT NULL DEFAULT 'auto'");
+if (!transactionColumnNames.has("price_provider")) db.exec("ALTER TABLE transactions ADD COLUMN price_provider TEXT");
+if (!transactionColumnNames.has("price_recorded_at")) db.exec("ALTER TABLE transactions ADD COLUMN price_recorded_at TEXT");
+// Earlier installations stored the amount and whether it was protected, but
+// not the actual provider. Do not invent one retroactively: make that gap
+// visible in the journal instead.
+db.prepare(`
+  UPDATE transactions
+  SET price_provider = CASE WHEN price_source = 'manual' THEN 'manual' ELSE 'legacy' END
+  WHERE price_provider IS NULL AND price_transaction_eur IS NOT NULL AND price_transaction_eur > 0
+`).run();
+db.prepare(`
+  UPDATE transactions
+  SET price_recorded_at = updated_at
+  WHERE price_recorded_at IS NULL AND price_transaction_eur IS NOT NULL AND price_transaction_eur > 0
+`).run();
+
+const priceHistoryColumnNames = new Set(db.prepare("PRAGMA table_info(price_history)").all().map((column) => column.name));
+if (!priceHistoryColumnNames.has("source")) db.exec("ALTER TABLE price_history ADD COLUMN source TEXT NOT NULL DEFAULT 'legacy'");
 
 const app = express();
 app.disable("x-powered-by");
@@ -735,6 +828,9 @@ function runtimeSettings() {
     blockCypherApiBaseUrl: values.blockCypherApiBaseUrl || SETTINGS_DEFAULTS.blockCypherApiBaseUrl,
     coinGeckoBaseUrl: values.coinGeckoBaseUrl || SETTINGS_DEFAULTS.coinGeckoBaseUrl,
     bitvavoApiBaseUrl: values.bitvavoApiBaseUrl || SETTINGS_DEFAULTS.bitvavoApiBaseUrl,
+    coinbaseExchangeApiBaseUrl: values.coinbaseExchangeApiBaseUrl || SETTINGS_DEFAULTS.coinbaseExchangeApiBaseUrl,
+    krakenApiBaseUrl: values.krakenApiBaseUrl || SETTINGS_DEFAULTS.krakenApiBaseUrl,
+    cryptoCompareApiBaseUrl: values.cryptoCompareApiBaseUrl || SETTINGS_DEFAULTS.cryptoCompareApiBaseUrl,
     binanceApiBaseUrl: values.binanceApiBaseUrl || SETTINGS_DEFAULTS.binanceApiBaseUrl,
     etoroApiBaseUrl: values.etoroApiBaseUrl || SETTINGS_DEFAULTS.etoroApiBaseUrl,
     tronGridApiKey: values.tronGridApiKey || "",
@@ -748,6 +844,7 @@ function runtimeSettings() {
     blockchairApiKey: values.blockchairApiKey || "",
     blockCypherApiToken: values.blockCypherApiToken || "",
     coinGeckoApiKey: values.coinGeckoApiKey || "",
+    cryptoCompareApiKey: values.cryptoCompareApiKey || "",
     xpubGapLimit,
     xpubMaxDerivationsPerBranch: boundedInteger(values.xpubMaxDerivationsPerBranch, SETTINGS_DEFAULTS.xpubMaxDerivationsPerBranch, xpubGapLimit, 1000),
     xtzStakingPayoutAliases: values.xtzStakingPayoutAliases || "",
@@ -782,6 +879,9 @@ function settingsResponse() {
     blockCypherApiBaseUrl: settings.blockCypherApiBaseUrl,
     coinGeckoBaseUrl: settings.coinGeckoBaseUrl,
     bitvavoApiBaseUrl: settings.bitvavoApiBaseUrl,
+    coinbaseExchangeApiBaseUrl: settings.coinbaseExchangeApiBaseUrl,
+    krakenApiBaseUrl: settings.krakenApiBaseUrl,
+    cryptoCompareApiBaseUrl: settings.cryptoCompareApiBaseUrl,
     binanceApiBaseUrl: settings.binanceApiBaseUrl,
     etoroApiBaseUrl: settings.etoroApiBaseUrl,
     tronGridApiKeyConfigured: Boolean(settings.tronGridApiKey),
@@ -795,6 +895,7 @@ function settingsResponse() {
     blockchairApiKeyConfigured: Boolean(settings.blockchairApiKey),
     blockCypherApiTokenConfigured: Boolean(settings.blockCypherApiToken),
     coinGeckoApiKeyConfigured: Boolean(settings.coinGeckoApiKey),
+    cryptoCompareApiKeyConfigured: Boolean(settings.cryptoCompareApiKey),
     xpubGapLimit: settings.xpubGapLimit,
     xpubMaxDerivationsPerBranch: settings.xpubMaxDerivationsPerBranch,
     xtzStakingPayoutAliases: settings.xtzStakingPayoutAliases,
@@ -859,6 +960,9 @@ function updateSettings(input) {
     blockCypherApiBaseUrl: cleanServiceUrl(input.blockCypherApiBaseUrl, "Die BlockCypher-URL"),
     coinGeckoBaseUrl: cleanServiceUrl(input.coinGeckoBaseUrl, "Die CoinGecko-URL"),
     bitvavoApiBaseUrl: cleanServiceUrl(input.bitvavoApiBaseUrl, "Die Bitvavo-URL"),
+    coinbaseExchangeApiBaseUrl: cleanServiceUrl(input.coinbaseExchangeApiBaseUrl, "Die Coinbase-Exchange-URL"),
+    krakenApiBaseUrl: cleanServiceUrl(input.krakenApiBaseUrl, "Die Kraken-URL"),
+    cryptoCompareApiBaseUrl: cleanServiceUrl(input.cryptoCompareApiBaseUrl, "Die CryptoCompare-URL"),
     binanceApiBaseUrl: cleanServiceUrl(input.binanceApiBaseUrl, "Die Binance-URL"),
     etoroApiBaseUrl: cleanServiceUrl(input.etoroApiBaseUrl, "Die eToro-URL"),
     xpubGapLimit,
@@ -875,6 +979,7 @@ function updateSettings(input) {
     blockchairApiKey: input.clearAdditionalNetworkApiKeys ? "" : String(input.blockchairApiKey || "").trim() || current.blockchairApiKey,
     blockCypherApiToken: input.clearAdditionalNetworkApiKeys ? "" : String(input.blockCypherApiToken || "").trim() || current.blockCypherApiToken,
     coinGeckoApiKey: input.clearCoinGeckoApiKey ? "" : String(input.coinGeckoApiKey || "").trim() || current.coinGeckoApiKey,
+    cryptoCompareApiKey: input.clearCryptoCompareApiKey ? "" : String(input.cryptoCompareApiKey || "").trim() || current.cryptoCompareApiKey,
   };
   if (next.tronGridApiKey.length > 300) throw makeError("Der TronGrid-API-Key ist zu lang.");
   if (next.blockfrostProjectId.length > 300) throw makeError("Die Blockfrost Project-ID ist zu lang.");
@@ -990,6 +1095,69 @@ function fetchHistoricalJson(url, additionalHeaders = {}) {
   return request;
 }
 
+function historicalPriceFetchError(error) {
+  const status = Number(error?.status);
+  const message = String(error?.message || "");
+  if (status === 429 || /rate.?limit|begrenzt/i.test(message)) return "Rate-Limit oder temporäre Begrenzung der Preisquelle.";
+  if (status === 401 || status === 403 || /zugriff abgelehnt/i.test(message)) return "Zugang zur Preisquelle wurde abgelehnt.";
+  if (status >= 500 || /nicht verfügbar/i.test(message)) return "Preisquelle momentan nicht verfügbar.";
+  return "Für diese Preisquelle waren keine verwertbaren historischen Daten verfügbar.";
+}
+
+function recordHistoricalPriceFetch({ runId, source, asset, dates, status, returnedPrices = 0, error = null, startedAt = null }) {
+  if (!runId) return;
+  const requestedDates = Array.isArray(dates) ? dates.filter(Boolean).sort() : [];
+  db.prepare(`
+    INSERT INTO historical_price_fetch_events (
+      run_id, source, asset, date_from, date_to, status, returned_prices, error_message, started_at, finished_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), datetime('now'))
+  `).run(
+    runId,
+    cleanLabel(source, 40) || "unbekannt",
+    cleanLabel(asset, 80) || "unbekannt",
+    requestedDates[0] || null,
+    requestedDates.at(-1) || null,
+    status,
+    Math.max(0, Number(returnedPrices) || 0),
+    error ? historicalPriceFetchError(error) : null,
+    startedAt,
+  );
+}
+
+function startHistoricalPriceRun({ trigger, force = false, pendingCount = null }) {
+  const result = db.prepare(`
+    INSERT INTO historical_price_runs (trigger, force_run, pending_count)
+    VALUES (?, ?, ?)
+  `).run(cleanLabel(trigger, 40) || "automatisch", force ? 1 : 0, Number.isFinite(pendingCount) ? pendingCount : null);
+  return Number(result.lastInsertRowid);
+}
+
+function finishHistoricalPriceRun(runId, result) {
+  if (!runId) return;
+  const summary = {
+    candidates: Number(result?.candidates || 0),
+    attempted: Number(result?.attempted || 0),
+    updated: Number(result?.updated || 0),
+    unresolved: Number(result?.unresolved || 0),
+    remaining: Number(result?.remaining || 0),
+    hint: result?.hint || null,
+  };
+  db.prepare(`
+    UPDATE historical_price_runs
+    SET status = 'success', attempted_count = ?, updated_count = ?, unresolved_count = ?, result_json = ?, finished_at = datetime('now')
+    WHERE id = ?
+  `).run(summary.attempted, summary.updated, summary.unresolved, JSON.stringify(summary), runId);
+}
+
+function failHistoricalPriceRun(runId, error) {
+  if (!runId) return;
+  db.prepare(`
+    UPDATE historical_price_runs
+    SET status = 'error', error_message = ?, finished_at = datetime('now')
+    WHERE id = ?
+  `).run(historicalPriceFetchError(error), runId);
+}
+
 async function getCurrentPrices() {
   if (currentPriceCache.expiresAt > Date.now()) return currentPriceCache.data;
 
@@ -1091,45 +1259,34 @@ async function getErc20CurrentPrices(contracts, settings) {
   return Object.fromEntries(uniqueContracts.map((contract) => [contract, cached[contract] || null]));
 }
 
+function historicalPriceRecord(coinId, date) {
+  return db.prepare(`
+    SELECT price_eur, source, updated_at
+    FROM price_history
+    WHERE coin_id = ? AND price_date = ?
+  `).get(coinId, date) || null;
+}
+
 function cachedHistoricalPrice(coinId, date) {
-  const row = db.prepare("SELECT price_eur FROM price_history WHERE coin_id = ? AND price_date = ?").get(coinId, date);
+  const row = historicalPriceRecord(coinId, date);
   return row ? Number(row.price_eur) : null;
 }
 
-function saveHistoricalPrice(coinId, date, price) {
+function saveHistoricalPrice(coinId, date, price, source = "coingecko") {
   if (!Number.isFinite(price) || price <= 0) return;
   db.prepare(`
-    INSERT INTO price_history (coin_id, price_date, price_eur, updated_at)
-    VALUES (?, ?, ?, datetime('now'))
-    ON CONFLICT(coin_id, price_date) DO UPDATE SET price_eur = excluded.price_eur, updated_at = excluded.updated_at
-  `).run(coinId, date, price);
+    INSERT INTO price_history (coin_id, price_date, price_eur, source, updated_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(coin_id, price_date) DO UPDATE SET price_eur = excluded.price_eur, source = excluded.source, updated_at = excluded.updated_at
+  `).run(coinId, date, price, source);
 }
 
-async function hydrateBitvavoHistoricalPrices(chain, timestamps, settings) {
-  const asset = CHAIN_CONFIG[chain]?.asset;
-  const dates = [...new Set(timestamps.filter(Boolean).map(isoDay))].sort();
-  if (!asset || dates.length === 0) return new Map();
-
-  // Keep this cache separate from CoinGecko: the stored value retains its
-  // provider context while the caller still receives one unified EUR price.
-  const coinId = `bitvavo:${asset}`;
-  const result = new Map();
-  const missing = [];
-  for (const date of dates) {
-    const cached = cachedHistoricalPrice(coinId, date);
-    if (cached) result.set(date, cached);
-    else missing.push(date);
-  }
-  if (missing.length === 0) return result;
-
-  // Bitvavo's daily candle endpoint accepts up to 1,000 candles. 330-day
-  // chunks leave enough room for the inclusive range and keep old imports
-  // reliable without requesting a full, unnecessary market history.
+function historicalDateRanges(dates, maximumDays) {
   const ranges = [];
-  const maxRangeMs = 330 * 86400000;
+  const maxRangeMs = maximumDays * 86400000;
   let range = [];
   let rangeStart = 0;
-  for (const date of missing) {
+  for (const date of [...new Set(dates)].sort()) {
     const at = new Date(`${date}T00:00:00.000Z`).getTime();
     if (range.length && at - rangeStart > maxRangeMs) {
       ranges.push(range);
@@ -1139,8 +1296,25 @@ async function hydrateBitvavoHistoricalPrices(chain, timestamps, settings) {
     range.push(date);
   }
   if (range.length) ranges.push(range);
+  return ranges;
+}
 
-  for (const requestedDates of ranges) {
+function mergeHistoricalPrices(result, prices, dates, coinId, source) {
+  for (const date of dates) {
+    const value = positiveNumber(prices.get(date));
+    if (!value) continue;
+    saveHistoricalPrice(coinId, date, value, source);
+    result.set(date, value);
+  }
+}
+
+async function hydrateBitvavoHistoricalPrices(asset, dates, settings, priceFetchRunId = null) {
+  const result = new Map();
+  if (!asset || dates.length === 0) return result;
+
+  // Bitvavo accepts up to 1,000 candles. 330-day chunks leave enough room for
+  // the inclusive bounds and keep old imports reliable.
+  for (const requestedDates of historicalDateRanges(dates, 330)) {
     const start = new Date(`${requestedDates[0]}T00:00:00.000Z`).getTime();
     const end = new Date(`${requestedDates.at(-1)}T23:59:59.999Z`).getTime();
     const url = new URL(`${settings.bitvavoApiBaseUrl}/${encodeURIComponent(asset)}-EUR/candles`);
@@ -1150,25 +1324,100 @@ async function hydrateBitvavoHistoricalPrices(chain, timestamps, settings) {
       start: String(start),
       end: String(end),
     }).toString();
+    const startedAt = new Date().toISOString();
     try {
       const prices = bitvavoDailyClosePrices(await fetchHistoricalJson(url.toString()));
+      recordHistoricalPriceFetch({ runId: priceFetchRunId, source: "bitvavo", asset, dates: requestedDates, status: "success", returnedPrices: prices.size, startedAt });
       for (const date of requestedDates) {
         const value = positiveNumber(prices.get(date));
         if (!value) continue;
-        saveHistoricalPrice(coinId, date, value);
         result.set(date, value);
       }
-    } catch (_) {
-      // Not every asset has a EUR market. CoinGecko/Pro remains available for
-      // those assets and ERC-20 contracts.
+    } catch (error) {
+      recordHistoricalPriceFetch({ runId: priceFetchRunId, source: "bitvavo", asset, dates: requestedDates, status: "error", error, startedAt });
+      // Not every asset has a Bitvavo EUR market.
     }
   }
   return result;
 }
 
-async function hydrateHistoricalPrices(chain, timestamps, settings, coinIdOverride = null) {
+async function hydrateCoinbaseHistoricalPrices(asset, dates, settings, priceFetchRunId = null) {
+  const result = new Map();
+  if (!asset || dates.length === 0) return result;
+  // Coinbase limits a request to 300 candles, so keep ranges below that cap.
+  for (const requestedDates of historicalDateRanges(dates, 295)) {
+    const start = `${requestedDates[0]}T00:00:00Z`;
+    const end = `${requestedDates.at(-1)}T23:59:59Z`;
+    const url = new URL(`${settings.coinbaseExchangeApiBaseUrl}/products/${encodeURIComponent(`${asset}-EUR`)}/candles`);
+    url.search = new URLSearchParams({ granularity: "86400", start, end }).toString();
+    const startedAt = new Date().toISOString();
+    try {
+      const prices = coinbaseDailyClosePrices(await fetchHistoricalJson(url.toString()));
+      recordHistoricalPriceFetch({ runId: priceFetchRunId, source: "coinbase", asset, dates: requestedDates, status: "success", returnedPrices: prices.size, startedAt });
+      for (const date of requestedDates) {
+        const value = positiveNumber(prices.get(date));
+        if (value) result.set(date, value);
+      }
+    } catch (error) {
+      recordHistoricalPriceFetch({ runId: priceFetchRunId, source: "coinbase", asset, dates: requestedDates, status: "error", error, startedAt });
+      // A product may not exist on Coinbase or may not have traded on a day.
+    }
+  }
+  return result;
+}
+
+async function hydrateCryptoCompareHistoricalPrices(asset, dates, settings, priceFetchRunId = null) {
+  const result = new Map();
+  if (!asset || !settings.cryptoCompareApiKey || dates.length === 0) return result;
+  // CryptoCompare's historic endpoint returns a bounded daily window. Keep
+  // requests below its documented 2,000-day maximum.
+  for (const requestedDates of historicalDateRanges(dates, 1900)) {
+    const end = Math.floor(new Date(`${requestedDates.at(-1)}T23:59:59.999Z`).getTime() / 1000);
+    const url = new URL(`${settings.cryptoCompareApiBaseUrl}/histoday`);
+    url.search = new URLSearchParams({ fsym: asset, tsym: "EUR", limit: "1900", toTs: String(end), api_key: settings.cryptoCompareApiKey }).toString();
+    const startedAt = new Date().toISOString();
+    try {
+      const prices = cryptoCompareDailyClosePrices(await fetchHistoricalJson(url.toString()));
+      recordHistoricalPriceFetch({ runId: priceFetchRunId, source: "cryptocompare", asset, dates: requestedDates, status: "success", returnedPrices: prices.size, startedAt });
+      for (const date of requestedDates) {
+        const value = positiveNumber(prices.get(date));
+        if (value) result.set(date, value);
+      }
+    } catch (error) {
+      recordHistoricalPriceFetch({ runId: priceFetchRunId, source: "cryptocompare", asset, dates: requestedDates, status: "error", error, startedAt });
+      // A configured key can still be rate-limited; later providers remain
+      // isolated and the retry job applies exponential backoff.
+    }
+  }
+  return result;
+}
+
+async function hydrateKrakenHistoricalPrices(asset, dates, settings, priceFetchRunId = null) {
+  const result = new Map();
+  const oldestRecentDay = Date.now() - 720 * 86400000;
+  const recentDates = dates.filter((date) => new Date(`${date}T00:00:00.000Z`).getTime() >= oldestRecentDay);
+  if (!asset || recentDates.length === 0) return result;
+  const url = new URL(`${settings.krakenApiBaseUrl}/OHLC`);
+  url.search = new URLSearchParams({ pair: `${asset}EUR`, interval: "1440", assetVersion: "1" }).toString();
+  const startedAt = new Date().toISOString();
+  try {
+    const prices = krakenDailyClosePrices(await fetchHistoricalJson(url.toString()));
+    recordHistoricalPriceFetch({ runId: priceFetchRunId, source: "kraken", asset, dates: recentDates, status: "success", returnedPrices: prices.size, startedAt });
+    for (const date of recentDates) {
+      const value = positiveNumber(prices.get(date));
+      if (value) result.set(date, value);
+    }
+  } catch (error) {
+    recordHistoricalPriceFetch({ runId: priceFetchRunId, source: "kraken", asset, dates: recentDates, status: "error", error, startedAt });
+    // Kraken intentionally retains only its latest 720 OHLC entries.
+  }
+  return result;
+}
+
+async function hydrateHistoricalPrices(chain, timestamps, settings, coinIdOverride = null, assetOverride = null, priceFetchRunId = null) {
   const coinId = coinIdOverride || CHAIN_CONFIG[chain]?.coinGeckoId;
   const dates = [...new Set(timestamps.filter(Boolean).map(isoDay))].sort();
+  const asset = assetOverride || CHAIN_CONFIG[chain]?.asset;
   if (!coinId || dates.length === 0) return new Map();
 
   const result = new Map();
@@ -1180,56 +1429,54 @@ async function hydrateHistoricalPrices(chain, timestamps, settings, coinIdOverri
   }
   if (missing.length === 0) return result;
 
-  // The public chart endpoint can omit dates from very large time spans. Query
-  // only compact, date-driven windows so old portfolio records are backfilled.
-  const ranges = [];
-  const maxRangeMs = 330 * 86400000;
-  let range = [];
-  let rangeStart = 0;
-  for (const date of missing) {
-    const at = new Date(`${date}T00:00:00.000Z`).getTime();
-    if (range.length && at - rangeStart > maxRangeMs) {
-      ranges.push(range);
-      range = [];
-    }
-    if (range.length === 0) rangeStart = at;
-    range.push(date);
-  }
-  if (range.length) ranges.push(range);
-
-  for (const requestedDates of ranges) {
+  // The public chart endpoint can omit dates from large spans. Query compact,
+  // date-driven windows so old portfolio records are backfilled.
+  for (const requestedDates of historicalDateRanges(missing, 330)) {
     const from = Math.floor(new Date(`${requestedDates[0]}T00:00:00.000Z`).getTime() / 1000) - 86400;
     const to = Math.floor(new Date(`${requestedDates.at(-1)}T23:59:59.999Z`).getTime() / 1000) + 86400;
+    const startedAt = new Date().toISOString();
     try {
       const payload = await fetchHistoricalJson(
         `${settings.coinGeckoBaseUrl}/coins/${coinId}/market_chart/range?vs_currency=eur&from=${from}&to=${to}`,
         coinGeckoHeaders(settings.coinGeckoBaseUrl, settings.coinGeckoApiKey),
       );
       const samples = Array.isArray(payload.prices) ? payload.prices : [];
+      let returnedPrices = 0;
       for (const date of requestedDates) {
         const value = closestPriceForDate(samples, date);
         // Daily samples are accepted only if they are close enough to the requested day.
         if (value) {
-          saveHistoricalPrice(coinId, date, value);
+          saveHistoricalPrice(coinId, date, value, "coingecko");
           result.set(date, value);
+          returnedPrices += 1;
         }
       }
-    } catch (_) {
+      recordHistoricalPriceFetch({ runId: priceFetchRunId, source: "coingecko", asset: asset || coinId, dates: requestedDates, status: "success", returnedPrices, startedAt });
+    } catch (error) {
+      recordHistoricalPriceFetch({ runId: priceFetchRunId, source: "coingecko", asset: asset || coinId, dates: requestedDates, status: "error", error, startedAt });
       // Historic price is optional metadata. The transaction itself remains usable.
     }
   }
 
-  // CoinGecko's public history is time-limited. If it cannot answer a date,
-  // use independent EUR daily candles for native assets where a market exists.
-  const unresolvedDates = missing.filter((date) => !result.has(date));
-  if (unresolvedDates.length > 0 && CHAIN_CONFIG[chain]) {
-    const fallback = await hydrateBitvavoHistoricalPrices(chain, unresolvedDates, settings);
-    for (const [date, price] of fallback) result.set(date, price);
+  // Stop at the first independent source that has a valid daily EUR close.
+  // All historic requests are serialized by fetchHistoricalJson, so a limit at
+  // one provider never creates a parallel burst at the remaining providers.
+  const unresolvedDates = () => missing.filter((date) => !result.has(date));
+  const fallbacks = [
+    ["bitvavo", () => hydrateBitvavoHistoricalPrices(asset, unresolvedDates(), settings, priceFetchRunId)],
+    ["coinbase", () => hydrateCoinbaseHistoricalPrices(asset, unresolvedDates(), settings, priceFetchRunId)],
+    ["kraken", () => hydrateKrakenHistoricalPrices(asset, unresolvedDates(), settings, priceFetchRunId)],
+    ["cryptocompare", () => hydrateCryptoCompareHistoricalPrices(asset, unresolvedDates(), settings, priceFetchRunId)],
+  ];
+  for (const [source, load] of fallbacks) {
+    const unresolved = unresolvedDates();
+    if (!unresolved.length) break;
+    mergeHistoricalPrices(result, await load(), unresolved, coinId, source);
   }
   return result;
 }
 
-async function hydrateHistoricalTokenPrices(contract, timestamps, settings) {
+async function hydrateHistoricalTokenPrices(contract, timestamps, settings, priceFetchRunId = null) {
   const normalizedContract = String(contract || "").toLowerCase();
   if (!/^0x[a-f0-9]{40}$/.test(normalizedContract)) return new Map();
   const dates = [...new Set(timestamps.filter(Boolean).map(isoDay))].sort();
@@ -1241,6 +1488,7 @@ async function hydrateHistoricalTokenPrices(contract, timestamps, settings) {
       prices.set(date, cached);
       continue;
     }
+    const startedAt = new Date().toISOString();
     try {
       const payload = await fetchHistoricalJson(
         `${settings.coinGeckoBaseUrl}/coins/ethereum/contract/${encodeURIComponent(normalizedContract)}/history?date=${coinGeckoDate(date)}`,
@@ -1251,7 +1499,9 @@ async function hydrateHistoricalTokenPrices(contract, timestamps, settings) {
         saveHistoricalPrice(coinId, date, value);
         prices.set(date, value);
       }
-    } catch (_) {
+      recordHistoricalPriceFetch({ runId: priceFetchRunId, source: "coingecko", asset: `ERC-20 ${normalizedContract}`, dates: [date], status: "success", returnedPrices: value ? 1 : 0, startedAt });
+    } catch (error) {
+      recordHistoricalPriceFetch({ runId: priceFetchRunId, source: "coingecko", asset: `ERC-20 ${normalizedContract}`, dates: [date], status: "error", error, startedAt });
       // Token prices are optional. Unknown contracts remain visible as k. A.
     }
   }
@@ -1845,6 +2095,7 @@ function normalizeTezosTransaction(transaction, address, settings) {
     fee: direction === "out" ? decimal(feeMutez / 1000000, 6) : 0,
     counterparty: direction === "in" ? sender : target,
     historicalPrice: positiveNumber(transaction.quote?.eur),
+    historicalPriceProvider: "tzkt",
     autoPurpose: isConfirmedStakingPayout(transaction, address, settings.trustedStakingPayoutAliases) ? "Staking Rewards" : null,
     rawJson: JSON.stringify(transaction),
   };
@@ -2037,7 +2288,7 @@ function scheduleJobWorker() {
         recordSyncEvent(wallet.id, "success", result.imported);
         createNotification("success", "Wallet synchronisiert", `${wallet.label || wallet.address}: ${result.imported.toLocaleString("de-DE")} Transaktionen verarbeitet.`);
       } else if (job.type === "price_backfill") {
-        result = await backfillHistoricalPrices({ force: Boolean(payload.force) });
+        result = await runHistoricalPriceBackfill({ force: Boolean(payload.force), trigger: "manuell" });
         if (result.remaining > 0) createNotification("warning", "Historische Kurse offen", `${result.remaining.toLocaleString("de-DE")} historische Kurse werden weiter automatisch geprüft.`);
         else createNotification("success", "Historische Kurse ergänzt", `${result.updated.toLocaleString("de-DE")} Kurse wurden ergänzt.`);
       } else if (job.type === "exchange_sync") {
@@ -2132,12 +2383,160 @@ function resumeMissingBinanceBalanceSnapshots() {
   }
 }
 
+const BSDEX_RECONCILE_INTERVAL_MS = boundedInteger(process.env.BSDEX_RECONCILE_INTERVAL_MINUTES, 15, 5, 1440) * 60 * 1000;
+const bsdexLiveConnections = new Map();
+
+function hasActiveExchangeSync(connectionId) {
+  return Boolean(db.prepare("SELECT id FROM background_jobs WHERE type = 'exchange_sync' AND status IN ('queued', 'running') AND payload_json LIKE ? LIMIT 1")
+    .get(`%\"connectionId\":${Number(connectionId)}%`));
+}
+
+function queueBsdexReconciliation(connectionId) {
+  if (!connectionId || hasActiveExchangeSync(connectionId)) return null;
+  return enqueueJob("exchange_sync", { connectionId });
+}
+
+function setBsdexLiveStatus(connectionId, status, error = "") {
+  db.prepare(`UPDATE exchange_connections
+    SET live_status = ?,
+      live_connected_at = CASE WHEN ? = 'connected' THEN datetime('now') ELSE live_connected_at END,
+      live_last_error = CASE WHEN ? THEN ? ELSE NULL END
+    WHERE id = ?`).run(status, status, error ? 1 : 0, error ? String(error).slice(0, 500) : null, connectionId);
+}
+
+function stopBsdexLiveUpdates(connectionId, { persist = true } = {}) {
+  const state = bsdexLiveConnections.get(Number(connectionId));
+  if (state) {
+    state.stopped = true;
+    if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
+    state.client?.close();
+    bsdexLiveConnections.delete(Number(connectionId));
+  }
+  if (persist) db.prepare("UPDATE exchange_connections SET live_status = 'disabled', live_last_error = NULL WHERE id = ?").run(connectionId);
+}
+
+function handleBsdexLiveTrade(connectionId, rawTrade, market) {
+  const connection = getExchangeConnection(connectionId);
+  if (connection.provider !== "bsdex" || !connection.live_updates_enabled) return;
+  const row = normalizeBsdexTrade(rawTrade, market);
+  if (!row) return;
+  importExternalRows(getWallet(connection.wallet_id), [row], { source: "bsdex-api", purposeOrigin: "auto" });
+  db.prepare("UPDATE exchange_connections SET live_last_event_at = datetime('now') WHERE id = ?").run(connectionId);
+}
+
+function handleBsdexLiveBalance(connectionId, rawBalance) {
+  const connection = getExchangeConnection(connectionId);
+  if (connection.provider !== "bsdex" || !connection.live_updates_enabled) return;
+  const asset = String(rawBalance?.asset_id || "").trim().toUpperCase();
+  if (!asset || asset === "EUR") return;
+  const free = Number(rawBalance?.available || 0);
+  const locked = Number(rawBalance?.locked || 0);
+  if (!Number.isFinite(free) || !Number.isFinite(locked)) return;
+  updateExchangeBalanceSnapshotAsset(connectionId, { asset, free, locked });
+  db.prepare("UPDATE exchange_connections SET live_last_event_at = datetime('now') WHERE id = ?").run(connectionId);
+}
+
+function scheduleBsdexReconnect(connectionId, state, error = "") {
+  if (state.stopped || bsdexLiveConnections.get(Number(connectionId)) !== state) return;
+  if (state.reconnectTimer) return;
+  state.attempts += 1;
+  const delay = Math.min(60000, 1000 * (2 ** Math.min(state.attempts, 6)));
+  setBsdexLiveStatus(connectionId, "reconnecting", error);
+  state.reconnectTimer = setTimeout(() => {
+    if (state.stopped || bsdexLiveConnections.get(Number(connectionId)) !== state) return;
+    bsdexLiveConnections.delete(Number(connectionId));
+    let connection;
+    try { connection = getExchangeConnection(connectionId); } catch { return; }
+    startBsdexLiveUpdates(connection, { reconcileAfterConnect: true }).catch((startError) => {
+      const next = bsdexLiveConnections.get(Number(connectionId));
+      if (next) scheduleBsdexReconnect(connectionId, next, startError.message);
+    });
+  }, delay);
+  state.reconnectTimer.unref?.();
+}
+
+async function startBsdexLiveUpdates(connection, { subscription = null, reconcileAfterConnect = false } = {}) {
+  if (connection?.provider !== "bsdex" || !connection.live_updates_enabled || connection.import_mode !== "api") return null;
+  const existing = bsdexLiveConnections.get(Number(connection.id));
+  if (existing) return existing;
+  const state = { stopped: false, attempts: 0, client: null, reconnectTimer: null, reconcileAfterConnect };
+  bsdexLiveConnections.set(Number(connection.id), state);
+  setBsdexLiveStatus(connection.id, "connecting");
+  try {
+    const settings = runtimeSettings();
+    const details = subscription || await fetchBsdexSubscriptionInfo({
+      apiBaseUrl: settings.bsdexApiBaseUrl, apiKey: connection.api_key, apiSecret: connection.api_secret,
+    });
+    state.client = createBsdexLiveClient({
+      apiBaseUrl: settings.bsdexApiBaseUrl,
+      apiKey: connection.api_key,
+      apiSecret: connection.api_secret,
+      markets: details.markets,
+      // Subscribe to all currently available EUR-market base assets, not only
+      // assets held at connection time. A first purchase of a new asset can
+      // therefore update its balance without waiting for the REST fallback.
+      assets: [...details.balances.map((entry) => entry.asset), ...details.markets.map((market) => String(market).split("-")[0])],
+      onTrade: (trade, market) => {
+        try { handleBsdexLiveTrade(connection.id, trade, market); }
+        catch (error) { setBsdexLiveStatus(connection.id, "error", error.message); }
+      },
+      onBalance: (balance) => {
+        try { handleBsdexLiveBalance(connection.id, balance); }
+        catch (error) { setBsdexLiveStatus(connection.id, "error", error.message); }
+      },
+      onStatus: ({ status, error }) => {
+        if (state.stopped || bsdexLiveConnections.get(Number(connection.id)) !== state) return;
+        if (status === "connected") {
+          state.attempts = 0;
+          setBsdexLiveStatus(connection.id, "connected");
+          if (state.reconcileAfterConnect) queueBsdexReconciliation(connection.id);
+        } else if (status === "error") {
+          setBsdexLiveStatus(connection.id, "error", error);
+          scheduleBsdexReconnect(connection.id, state, error);
+          state.client?.close();
+        } else if (status === "closed") {
+          scheduleBsdexReconnect(connection.id, state, error);
+        }
+      },
+    });
+  } catch (error) {
+    setBsdexLiveStatus(connection.id, "error", error.message);
+    scheduleBsdexReconnect(connection.id, state, error.message);
+    // A WebSocket outage does not invalidate the completed read-only REST
+    // reconciliation. Reconnect runs separately and never blocks accounting.
+    return state;
+  }
+  return state;
+}
+
+function resumeBsdexLiveUpdates() {
+  const connections = db.prepare("SELECT * FROM exchange_connections WHERE provider = 'bsdex' AND import_mode = 'api' AND live_updates_enabled = 1").all();
+  // A serial REST sync creates a fresh balance snapshot before WebSocket data
+  // is accepted. It also determines current subscription targets on restart.
+  for (const connection of connections) {
+    setBsdexLiveStatus(connection.id, "connecting");
+    queueBsdexReconciliation(connection.id);
+  }
+}
+
+function queueDueBsdexReconciliations() {
+  const dueBefore = new Date(Date.now() - BSDEX_RECONCILE_INTERVAL_MS).toISOString().replace("T", " ").slice(0, 19);
+  const connections = db.prepare(`SELECT id FROM exchange_connections
+    WHERE provider = 'bsdex' AND import_mode = 'api' AND live_updates_enabled = 1
+      AND (live_last_reconciled_at IS NULL OR live_last_reconciled_at < ?)`).all(dueBefore);
+  for (const connection of connections) queueBsdexReconciliation(connection.id);
+}
+
+const bsdexReconciliationTimer = setInterval(queueDueBsdexReconciliations, 60000);
+bsdexReconciliationTimer.unref?.();
+
 // Existing Binance connections receive the same background import as newly
 // created ones. A missing snapshot runs first so an old, incomplete journal
 // cannot be shown as a live negative position while the serial history import
 // continues in the background.
 resumeMissingBinanceBalanceSnapshots();
 resumeBinanceHistoryImports();
+resumeBsdexLiveUpdates();
 
 async function syncWallet(wallet) {
   if (wallet.source_type === "exchange") {
@@ -2157,30 +2556,52 @@ async function syncWallet(wallet) {
     feeAsset: transaction.feeAsset || transaction.asset,
     priceKind: transaction.priceKind || "native",
   }));
-  const pricesByDate = await hydrateHistoricalPrices(
-    wallet.chain,
-    transactions.filter((transaction) => transaction.priceKind === "native" && !positiveNumber(transaction.historicalPrice)).map((transaction) => transaction.timestamp),
-    settings,
-  );
+  const nativePriceTimestamps = transactions
+    .filter((transaction) => transaction.priceKind === "native" && !positiveNumber(transaction.historicalPrice))
+    .map((transaction) => transaction.timestamp)
+    .filter(Boolean);
   const tokenDates = new Map();
   for (const transaction of transactions) {
-    if (transaction.priceKind !== "erc20" || !transaction.assetContract || positiveNumber(transaction.historicalPrice)) continue;
+    if (transaction.priceKind !== "erc20" || !transaction.assetContract || !transaction.timestamp || positiveNumber(transaction.historicalPrice)) continue;
     if (!tokenDates.has(transaction.assetContract)) tokenDates.set(transaction.assetContract, []);
     tokenDates.get(transaction.assetContract).push(transaction.timestamp);
   }
+  let pricesByDate = new Map();
   const tokenPricesByContract = new Map();
-  for (const [contract, timestamps] of tokenDates) tokenPricesByContract.set(contract, await hydrateHistoricalTokenPrices(contract, timestamps, settings));
+  const requestedPriceCount = nativePriceTimestamps.length + [...tokenDates.values()].reduce((sum, timestamps) => sum + timestamps.length, 0);
+  if (requestedPriceCount) {
+    const priceRunId = startHistoricalPriceRun({ trigger: "wallet_sync", pendingCount: null });
+    try {
+      pricesByDate = await hydrateHistoricalPrices(wallet.chain, nativePriceTimestamps, settings, null, null, priceRunId);
+      for (const [contract, timestamps] of tokenDates) {
+        tokenPricesByContract.set(contract, await hydrateHistoricalTokenPrices(contract, timestamps, settings, priceRunId));
+      }
+      const resolvedPriceCount = nativePriceTimestamps.filter((timestamp) => positiveNumber(pricesByDate.get(isoDay(timestamp)))).length
+        + [...tokenDates.entries()].reduce((sum, [contract, timestamps]) => sum + timestamps.filter((timestamp) => positiveNumber(tokenPricesByContract.get(contract)?.get(isoDay(timestamp)))).length, 0);
+      finishHistoricalPriceRun(priceRunId, {
+        candidates: requestedPriceCount,
+        attempted: requestedPriceCount,
+        updated: resolvedPriceCount,
+        unresolved: Math.max(0, requestedPriceCount - resolvedPriceCount),
+        remaining: pendingHistoricalPriceCount(),
+      });
+    } catch (error) {
+      failHistoricalPriceRun(priceRunId, error);
+      throw error;
+    }
+  }
 
   const existingTransaction = db.prepare(
-    "SELECT price_transaction_eur, price_source, purpose, purpose_origin FROM transactions WHERE wallet_id = ? AND external_id = ?",
+    "SELECT price_transaction_eur, price_source, price_provider, price_recorded_at, updated_at, purpose, purpose_origin FROM transactions WHERE wallet_id = ? AND external_id = ?",
   );
   const upsert = db.prepare(`
     INSERT INTO transactions (
       wallet_id, external_id, hash, timestamp, direction, asset, asset_symbol, asset_name, asset_decimals, asset_contract,
       asset_type,
       amount, fee, fee_asset, counterparty,
-      price_transaction_eur, purpose, purpose_origin, raw_json, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      price_transaction_eur, price_source, price_provider, price_recorded_at,
+      purpose, purpose_origin, raw_json, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(wallet_id, external_id) DO UPDATE SET
       hash = excluded.hash,
       timestamp = excluded.timestamp,
@@ -2203,6 +2624,16 @@ async function syncWallet(wallet) {
         WHEN transactions.price_source = 'manual' THEN 'manual'
         ELSE 'auto'
       END,
+      price_provider = CASE
+        WHEN transactions.price_source = 'manual' THEN transactions.price_provider
+        WHEN excluded.price_transaction_eur IS NOT NULL THEN excluded.price_provider
+        ELSE transactions.price_provider
+      END,
+      price_recorded_at = CASE
+        WHEN transactions.price_source = 'manual' THEN transactions.price_recorded_at
+        WHEN excluded.price_transaction_eur IS NOT NULL THEN excluded.price_recorded_at
+        ELSE transactions.price_recorded_at
+      END,
       purpose = CASE
         WHEN transactions.purpose_origin = 'manual' THEN transactions.purpose
         WHEN excluded.purpose IS NOT NULL THEN excluded.purpose
@@ -2222,11 +2653,25 @@ async function syncWallet(wallet) {
   try {
     for (const transaction of transactions) {
       const existing = existingTransaction.get(wallet.id, transaction.externalId);
-      const historicPrice = positiveNumber(transaction.historicalPrice)
-        ?? positiveNumber(existing?.price_transaction_eur)
-        ?? (transaction.timestamp && transaction.priceKind === "erc20"
-          ? positiveNumber(tokenPricesByContract.get(transaction.assetContract)?.get(isoDay(transaction.timestamp)))
-          : transaction.timestamp && transaction.priceKind === "native" ? positiveNumber(pricesByDate.get(isoDay(transaction.timestamp)) ) : null);
+      const directHistoricPrice = positiveNumber(transaction.historicalPrice);
+      const existingHistoricPrice = positiveNumber(existing?.price_transaction_eur);
+      const mappedHistoricPrice = transaction.timestamp && transaction.priceKind === "erc20"
+        ? positiveNumber(tokenPricesByContract.get(transaction.assetContract)?.get(isoDay(transaction.timestamp)))
+        : transaction.timestamp && transaction.priceKind === "native" ? positiveNumber(pricesByDate.get(isoDay(transaction.timestamp)) ) : null;
+      const historicPrice = directHistoricPrice ?? existingHistoricPrice ?? mappedHistoricPrice;
+      let priceProvider = null;
+      let priceRecordedAt = null;
+      if (directHistoricPrice) {
+        priceProvider = transaction.historicalPriceProvider || "adapter";
+        priceRecordedAt = new Date().toISOString();
+      } else if (existingHistoricPrice) {
+        priceProvider = existing.price_provider || "legacy";
+        priceRecordedAt = existing.price_recorded_at || existing.updated_at || null;
+      } else if (mappedHistoricPrice) {
+        const record = historicalPriceRecord(historicalPriceCoinId({ ...transaction, chain: wallet.chain }), isoDay(transaction.timestamp));
+        priceProvider = record?.source || "legacy";
+        priceRecordedAt = record?.updated_at || null;
+      }
       upsert.run(
         wallet.id,
         transaction.externalId,
@@ -2244,6 +2689,9 @@ async function syncWallet(wallet) {
         transaction.feeAsset,
         transaction.counterparty,
         historicPrice,
+        "auto",
+        priceProvider,
+        priceRecordedAt,
         transaction.autoPurpose,
         transaction.autoPurpose ? "auto" : "unspecified",
         transaction.rawJson,
@@ -2281,7 +2729,15 @@ function chainForNativeAsset(asset, fallbackChain = null) {
   return CHAIN_CONFIG[fallbackChain]?.asset === symbol ? fallbackChain : null;
 }
 
-async function backfillHistoricalPrices({ force = false } = {}) {
+function historicalPriceCoinId(transaction) {
+  const contract = String(transaction.assetContract || transaction.asset_contract || "").toLowerCase();
+  if (contract) return `erc20:ethereum:${contract}`;
+  const chain = chainForNativeAsset(transaction.asset, transaction.chain);
+  if (chain && CHAIN_CONFIG[chain]?.coinGeckoId) return CHAIN_CONFIG[chain].coinGeckoId;
+  return EXCHANGE_ASSET_CONFIG[transaction.asset]?.coinGeckoId || null;
+}
+
+async function backfillHistoricalPrices({ force = false, priceFetchRunId = null } = {}) {
   const settings = runtimeSettings();
   const totalPending = pendingHistoricalPriceCount();
   const retryFilter = force ? "1 = 1" : "(retry.next_attempt_at IS NULL OR retry.next_attempt_at <= ?)";
@@ -2330,18 +2786,22 @@ async function backfillHistoricalPrices({ force = false } = {}) {
   }
 
   const nativePrices = new Map();
-  for (const [chain, timestamps] of nativeDates) nativePrices.set(chain, await hydrateHistoricalPrices(chain, timestamps, settings));
+  for (const [chain, timestamps] of nativeDates) nativePrices.set(chain, await hydrateHistoricalPrices(chain, timestamps, settings, null, null, priceFetchRunId));
   const tokenPrices = new Map();
-  for (const [contract, timestamps] of tokenDates) tokenPrices.set(contract, await hydrateHistoricalTokenPrices(contract, timestamps, settings));
+  for (const [contract, timestamps] of tokenDates) tokenPrices.set(contract, await hydrateHistoricalTokenPrices(contract, timestamps, settings, priceFetchRunId));
   const exchangeAssetPrices = new Map();
   for (const [asset, timestamps] of exchangeAssetDates) {
-    exchangeAssetPrices.set(asset, await hydrateHistoricalPrices(null, timestamps, settings, EXCHANGE_ASSET_CONFIG[asset].coinGeckoId));
+    exchangeAssetPrices.set(asset, await hydrateHistoricalPrices(null, timestamps, settings, EXCHANGE_ASSET_CONFIG[asset].coinGeckoId, asset, priceFetchRunId));
   }
 
   const update = db.prepare(`
     UPDATE transactions
-    SET price_transaction_eur = ?, updated_at = datetime('now')
+    SET price_transaction_eur = ?, price_provider = ?, price_recorded_at = ?, updated_at = datetime('now')
     WHERE id = ? AND price_source <> 'manual' AND (price_transaction_eur IS NULL OR price_transaction_eur <= 0)
+  `);
+  const recordAutomaticPriceAudit = db.prepare(`
+    INSERT INTO transaction_price_audit (transaction_id, price_eur, source, note)
+    VALUES (?, ?, 'auto', ?)
   `);
   const removeRetry = db.prepare("DELETE FROM historical_price_retries WHERE transaction_id = ?");
   const saveRetry = db.prepare(`
@@ -2365,7 +2825,12 @@ async function backfillHistoricalPrices({ force = false } = {}) {
         : mappedChain ? positiveNumber(nativePrices.get(mappedChain)?.get(date))
           : exchangeAsset ? positiveNumber(exchangeAssetPrices.get(transaction.asset)?.get(date)) : null;
       if (price) {
-        updated += update.run(price, transaction.id).changes;
+        const record = historicalPriceRecord(historicalPriceCoinId(transaction), date);
+        const provider = record?.source || "legacy";
+        const recordedAt = record?.updated_at || null;
+        const result = update.run(price, provider, recordedAt, transaction.id);
+        updated += result.changes;
+        if (result.changes) recordAutomaticPriceAudit.run(transaction.id, price, `Automatisch ergänzt · ${provider}`);
         removeRetry.run(transaction.id);
       } else {
         unresolvedTransactions.push(transaction);
@@ -2405,17 +2870,27 @@ async function backfillHistoricalPrices({ force = false } = {}) {
     requiresExtendedHistory,
     usingPro,
     hint: unresolved && requiresExtendedHistory && !usingPro
-      ? "Für ältere native Coins wurde der kostenlose EUR-Tageskurs-Fallback versucht. Für nicht verfügbare Märkte und ERC-20-Token bitte unter Einstellungen eine CoinGecko-Pro-API-Basisadresse und einen Pro-API-Key hinterlegen."
+      ? "Für ältere native Coins wurden die verfügbaren EUR-Tageskursquellen seriell versucht. Für nicht verfügbare Märkte und ERC-20-Token kann unter Einstellungen ein CoinGecko-Pro- oder CryptoCompare-API-Key helfen."
       : unresolved ? "Einige Kurse waren bei der Preisquelle nicht verfügbar und bleiben als k. A. markiert." : null,
   };
 }
 
 let historicalPriceBackfillInFlight = null;
 let nextAutomaticHistoricalPriceBackfillAt = 0;
+const historicalPriceInitialCheckAt = Date.now() + 15000;
 
-function runHistoricalPriceBackfill(options) {
+function runHistoricalPriceBackfill({ force = false, trigger = "automatisch" } = {}) {
   if (historicalPriceBackfillInFlight) return historicalPriceBackfillInFlight;
-  historicalPriceBackfillInFlight = backfillHistoricalPrices(options)
+  const priceRunId = startHistoricalPriceRun({ trigger, force, pendingCount: pendingHistoricalPriceCount() });
+  historicalPriceBackfillInFlight = backfillHistoricalPrices({ force, priceFetchRunId: priceRunId })
+    .then((result) => {
+      finishHistoricalPriceRun(priceRunId, result);
+      return result;
+    })
+    .catch((error) => {
+      failHistoricalPriceRun(priceRunId, error);
+      throw error;
+    })
     .finally(() => { historicalPriceBackfillInFlight = null; });
   return historicalPriceBackfillInFlight;
 }
@@ -2424,9 +2899,272 @@ function scheduleHistoricalPriceBackfill() {
   const settings = runtimeSettings();
   if (Date.now() < nextAutomaticHistoricalPriceBackfillAt || historicalPriceBackfillInFlight) return;
   nextAutomaticHistoricalPriceBackfillAt = Date.now() + settings.historicalPriceRetryIntervalMinutes * 60000;
-  runHistoricalPriceBackfill({ force: false }).catch((error) => {
+  runHistoricalPriceBackfill({ force: false, trigger: "automatisch" }).catch((error) => {
     console.error("Automatische Preisergänzung fehlgeschlagen:", error.message);
   });
+}
+
+const BACKGROUND_JOB_LABELS = Object.freeze({
+  wallet_sync: "Wallet synchronisieren",
+  price_backfill: "Historische Kurse ergänzen",
+  exchange_sync: "Börse synchronisieren",
+  exchange_history_sync: "Börsenhistorie nachladen",
+  exchange_transfer_check: "Börsen-Transfers abgleichen",
+});
+
+function sqliteDate(value) {
+  if (!value) return null;
+  const text = String(value);
+  const date = new Date(text.includes("T") ? text : `${text}Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function safeAutomationMessage(value) {
+  const message = String(value || "")
+    .replace(/https?:\/\/\S+/gi, "[URL verborgen]")
+    .replace(/\b(api[ _-]?key|secret|authorization)\s*[:=]\s*\S+/gi, "$1: [verborgen]")
+    .trim();
+  return message ? message.slice(0, 220) : null;
+}
+
+function automationStatusResponse() {
+  const settings = runtimeSettings();
+  const now = new Date();
+  const latestPriceRun = db.prepare(`
+    SELECT id, status, started_at, finished_at, error_message, updated_count, unresolved_count
+    FROM historical_price_runs
+    WHERE trigger = 'automatisch'
+    ORDER BY id DESC
+    LIMIT 1
+  `).get();
+  const priceNextAt = historicalPriceBackfillInFlight ? null : new Date(Math.max(
+    now.getTime(),
+    nextAutomaticHistoricalPriceBackfillAt || historicalPriceInitialCheckAt,
+  )).toISOString();
+  const activeBsdexJobs = new Map(db.prepare(`
+    SELECT status, payload_json
+    FROM background_jobs
+    WHERE type = 'exchange_sync' AND status IN ('queued', 'running')
+  `).all().flatMap((job) => {
+    const connectionId = Number(safeJson(job.payload_json, {})?.connectionId);
+    return Number.isInteger(connectionId) && connectionId > 0 ? [[connectionId, job.status]] : [];
+  }));
+  const bsdexConnections = db.prepare(`
+    SELECT id, label, live_status, live_last_reconciled_at, live_last_error
+    FROM exchange_connections
+    WHERE provider = 'bsdex' AND import_mode = 'api' AND live_updates_enabled = 1
+    ORDER BY id ASC
+  `).all().map((connection) => {
+    const lastRun = sqliteDate(connection.live_last_reconciled_at);
+    const nextRun = lastRun
+      ? new Date(lastRun.getTime() + BSDEX_RECONCILE_INTERVAL_MS)
+      : now;
+    const jobStatus = activeBsdexJobs.get(connection.id) || null;
+    return {
+      id: connection.id,
+      label: connection.label || "BSDEX",
+      status: jobStatus || connection.live_status || "waiting",
+      lastRunAt: lastRun?.toISOString() || null,
+      nextRunAt: nextRun.toISOString(),
+      lastError: safeAutomationMessage(connection.live_last_error),
+    };
+  });
+  const queueRows = db.prepare(`
+    SELECT id, type, status, progress_current, progress_total, error_message, created_at, started_at, finished_at
+    FROM background_jobs
+    ORDER BY id DESC
+    LIMIT 25
+  `).all();
+  const queueCounts = db.prepare(`
+    SELECT
+      SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
+      SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running
+    FROM background_jobs
+  `).get();
+  const latestPriceRunView = latestPriceRun ? {
+    id: latestPriceRun.id,
+    status: latestPriceRun.status,
+    startedAt: latestPriceRun.started_at,
+    finishedAt: latestPriceRun.finished_at,
+    updatedCount: Number(latestPriceRun.updated_count || 0),
+    unresolvedCount: Number(latestPriceRun.unresolved_count || 0),
+    errorMessage: safeAutomationMessage(latestPriceRun.error_message),
+  } : null;
+  const bsdexNextAt = bsdexConnections.length
+    ? bsdexConnections.map((connection) => connection.nextRunAt).sort()[0]
+    : null;
+  return {
+    generatedAt: now.toISOString(),
+    schedules: [
+      {
+        id: "historical-price-backfill",
+        label: "Historische Kurse ergänzen",
+        description: "Prüft fehlende historische EUR-Kurse über die lokale, serielle Preis-Pipeline.",
+        status: historicalPriceBackfillInFlight ? "running" : "waiting",
+        intervalMinutes: settings.historicalPriceRetryIntervalMinutes,
+        nextRunAt: priceNextAt,
+        lastRun: latestPriceRunView,
+      },
+      {
+        id: "bsdex-reconciliation",
+        label: "BSDEX-REST-Abgleich",
+        description: "Holt bei aktivierten Live-Updates Salden, Trades und Krypto-Transfers nach.",
+        status: !bsdexConnections.length ? "inactive" : bsdexConnections.some((connection) => connection.status === "running") ? "running" : bsdexConnections.some((connection) => connection.status === "queued") ? "queued" : bsdexConnections.some((connection) => connection.status === "error") ? "attention" : "waiting",
+        intervalMinutes: Math.round(BSDEX_RECONCILE_INTERVAL_MS / 60000),
+        nextRunAt: bsdexNextAt,
+        connections: bsdexConnections,
+      },
+    ],
+    queue: {
+      queued: Number(queueCounts.queued || 0),
+      running: Number(queueCounts.running || 0),
+      recent: queueRows.map((job) => ({
+        id: job.id,
+        label: BACKGROUND_JOB_LABELS[job.type] || job.type,
+        status: job.status,
+        progressCurrent: Number(job.progress_current || 0),
+        progressTotal: Number(job.progress_total || 0),
+        errorMessage: safeAutomationMessage(job.error_message),
+        createdAt: job.created_at,
+        startedAt: job.started_at,
+        finishedAt: job.finished_at,
+      })),
+    },
+  };
+}
+
+function safeJson(value, fallback = null) {
+  try { return value ? JSON.parse(value) : fallback; } catch (_) { return fallback; }
+}
+
+function historicalPricePipelineResponse(page = 1) {
+  const settings = runtimeSettings();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const scheduledAt = Math.max(
+    now.getTime(),
+    nextAutomaticHistoricalPriceBackfillAt || historicalPriceInitialCheckAt,
+  );
+  const scheduledAtIso = new Date(scheduledAt).toISOString();
+  const retryCondition = `t.timestamp IS NOT NULL
+    AND t.asset_type <> 'nft'
+    AND t.price_source <> 'manual'
+    AND (t.price_transaction_eur IS NULL OR t.price_transaction_eur <= 0)`;
+  const pending = pendingHistoricalPriceCount();
+  const due = Number(db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM transactions t
+    LEFT JOIN historical_price_retries retry ON retry.transaction_id = t.id
+    WHERE ${retryCondition}
+      AND (retry.next_attempt_at IS NULL OR retry.next_attempt_at <= ?)
+  `).get(nowIso).count || 0);
+  const upcoming = db.prepare(`
+    SELECT t.id, t.timestamp, t.asset, COALESCE(NULLIF(t.asset_symbol, ''), t.asset) AS asset_symbol,
+      COALESCE(NULLIF(w.label, ''), CASE WHEN w.source_type = 'exchange' THEN 'Börsenkonto' ELSE w.chain END) AS source_label,
+      w.source_type, retry.attempt_count, retry.last_attempt_at, retry.next_attempt_at
+    FROM transactions t
+    JOIN wallets w ON w.id = t.wallet_id
+    LEFT JOIN historical_price_retries retry ON retry.transaction_id = t.id
+    WHERE ${retryCondition}
+    ORDER BY
+      CASE WHEN retry.next_attempt_at IS NULL OR retry.next_attempt_at <= ? THEN 0 ELSE 1 END,
+      COALESCE(retry.next_attempt_at, ?) ASC,
+      t.timestamp ASC
+    LIMIT 120
+  `).all(nowIso, scheduledAtIso).map((row) => ({
+    id: row.id,
+    timestamp: row.timestamp,
+    asset: row.asset,
+    assetSymbol: row.asset_symbol,
+    sourceLabel: row.source_label,
+    sourceType: row.source_type,
+    attempts: Number(row.attempt_count || 0),
+    lastAttemptAt: row.last_attempt_at || null,
+    nextAttemptAt: row.next_attempt_at || scheduledAtIso,
+    due: !row.next_attempt_at || row.next_attempt_at <= nowIso,
+  }));
+
+  const pageSize = 20;
+  const currentPage = Math.max(1, Math.min(1000, Number.parseInt(page, 10) || 1));
+  const totalRuns = Number(db.prepare("SELECT COUNT(*) AS count FROM historical_price_runs").get().count || 0);
+  const rows = db.prepare(`
+    SELECT * FROM historical_price_runs
+    ORDER BY id DESC
+    LIMIT ? OFFSET ?
+  `).all(pageSize, (currentPage - 1) * pageSize);
+  const ids = rows.map((row) => row.id);
+  const eventsByRun = new Map(ids.map((id) => [id, []]));
+  if (ids.length) {
+    const events = db.prepare(`
+      SELECT id, run_id, source, asset, date_from, date_to, status, returned_prices, error_message, started_at, finished_at
+      FROM historical_price_fetch_events
+      WHERE run_id IN (${ids.map(() => "?").join(",")})
+      ORDER BY id ASC
+    `).all(...ids);
+    for (const event of events) eventsByRun.get(event.run_id)?.push({
+      id: event.id,
+      source: event.source,
+      asset: event.asset,
+      dateFrom: event.date_from,
+      dateTo: event.date_to,
+      status: event.status,
+      returnedPrices: Number(event.returned_prices || 0),
+      errorMessage: event.error_message || null,
+      startedAt: event.started_at,
+      finishedAt: event.finished_at,
+    });
+  }
+  const runs = rows.map((row) => ({
+    id: row.id,
+    trigger: row.trigger,
+    force: Boolean(row.force_run),
+    status: row.status,
+    pendingCount: row.pending_count === null ? null : Number(row.pending_count),
+    attemptedCount: Number(row.attempted_count || 0),
+    updatedCount: Number(row.updated_count || 0),
+    unresolvedCount: Number(row.unresolved_count || 0),
+    result: safeJson(row.result_json, null),
+    errorMessage: row.error_message || null,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    events: eventsByRun.get(row.id) || [],
+  }));
+  const jobs = db.prepare(`
+    SELECT id, status, created_at, started_at
+    FROM background_jobs
+    WHERE type = 'price_backfill' AND status IN ('queued', 'running')
+    ORDER BY id ASC
+    LIMIT 12
+  `).all().map((job) => ({ id: job.id, status: job.status, createdAt: job.created_at, startedAt: job.started_at }));
+
+  return {
+    pipeline: {
+      status: historicalPriceBackfillInFlight ? "running" : jobs.length ? "queued" : "waiting",
+      pending,
+      ready: due,
+      due: Math.min(due, settings.historicalPriceBackfillBatchSize),
+      scheduled: Math.max(0, pending - Math.min(due, settings.historicalPriceBackfillBatchSize)),
+      nextAutomaticAt: historicalPriceBackfillInFlight ? null : scheduledAtIso,
+      retryIntervalMinutes: settings.historicalPriceRetryIntervalMinutes,
+      batchSize: settings.historicalPriceBackfillBatchSize,
+      jobs,
+      sources: [
+        { id: "coingecko", label: "CoinGecko", active: true },
+        { id: "bitvavo", label: "Bitvavo", active: true },
+        { id: "coinbase", label: "Coinbase Exchange", active: true },
+        { id: "kraken", label: "Kraken", active: true },
+        { id: "cryptocompare", label: "CryptoCompare", active: Boolean(settings.cryptoCompareApiKey) },
+      ],
+    },
+    upcoming,
+    runs,
+    pagination: {
+      page: currentPage,
+      pageSize,
+      total: totalRuns,
+      totalPages: Math.max(1, Math.ceil(totalRuns / pageSize)),
+    },
+  };
 }
 
 function nativeAssetDescriptors() {
@@ -2567,14 +3305,44 @@ function replaceExchangeBalanceSnapshot(connectionId, balances) {
   return true;
 }
 
+function updateExchangeBalanceSnapshotAsset(connectionId, balance) {
+  const asset = cleanLabel(balance?.asset, 48).toUpperCase();
+  const free = Number(balance?.free || 0);
+  const locked = Number(balance?.locked || 0);
+  if (!connectionId || !asset || !Number.isFinite(free) || !Number.isFinite(locked)) return false;
+  db.exec("BEGIN");
+  try {
+    if (free + locked <= HOLDING_EPSILON) {
+      db.prepare("DELETE FROM exchange_balance_snapshots WHERE connection_id = ? AND asset = ?").run(connectionId, asset);
+    } else {
+      db.prepare(`INSERT INTO exchange_balance_snapshots (connection_id, asset, free_amount, locked_amount)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(connection_id, asset) DO UPDATE SET
+          free_amount = excluded.free_amount, locked_amount = excluded.locked_amount`).run(connectionId, asset, free, locked);
+    }
+    db.prepare(`INSERT INTO exchange_balance_snapshot_meta (connection_id, observed_at)
+      VALUES (?, datetime('now'))
+      ON CONFLICT(connection_id) DO UPDATE SET observed_at = excluded.observed_at`).run(connectionId);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  return true;
+}
+
+function exchangeSnapshotSource(provider) {
+  return provider === "binance" ? "binance_spot_snapshot" : `${provider}_snapshot`;
+}
+
 function exchangePosition(wallet, connection, journalHoldings) {
-  const snapshot = connection?.provider === "binance" ? exchangeBalanceSnapshot(connection.id) : null;
+  const snapshot = ["binance", "bsdex"].includes(connection?.provider) ? exchangeBalanceSnapshot(connection.id) : null;
   const assets = new Set([...journalHoldings.keys(), ...(snapshot?.balances.keys() || [])]);
   const positions = new Map();
   const reconciliations = [];
   for (const assetId of assets) {
     const journalAmount = Number(journalHoldings.get(assetId) || 0);
-    // A Binance snapshot is an authenticated account fact.  Without one,
+    // An authenticated exchange snapshot is an account fact. Without one,
     // the journal can only contribute non-negative amounts; a missing input
     // is a data-quality issue, never a negative crypto holding.
     const balanceAmount = snapshot ? Number(snapshot.balances.get(assetId) || 0) : Math.max(0, journalAmount);
@@ -2590,7 +3358,7 @@ function exchangePosition(wallet, connection, journalHoldings) {
         journalAmount,
         balanceAmount,
         difference,
-        source: snapshot ? "binance_spot_snapshot" : "journal_clamped",
+        source: snapshot ? exchangeSnapshotSource(connection?.provider) : "journal_clamped",
         observedAt: snapshot?.observedAt || null,
       });
     }
@@ -2758,7 +3526,7 @@ app.put("/api/settings", (request, response, next) => {
 
 app.post("/api/prices/historical/backfill", async (_request, response, next) => {
   try {
-    response.json(await runHistoricalPriceBackfill({ force: true }));
+    response.json(await runHistoricalPriceBackfill({ force: true, trigger: "manuell" }));
   } catch (error) {
     next(error);
   }
@@ -2796,6 +3564,9 @@ function createBackup() {
 function resetLocalData() {
   // Backups deliberately remain untouched: a reset must be reversible by a
   // conscious restore, even though the active local database starts empty.
+  // Close local live sockets first so no previously authorized feed can write
+  // to an account after its connection has been removed.
+  for (const connectionId of bsdexLiveConnections.keys()) stopBsdexLiveUpdates(connectionId, { persist: false });
   const counts = db.prepare(`
     SELECT
       (SELECT COUNT(*) FROM wallets) AS wallets,
@@ -2809,6 +3580,8 @@ function resetLocalData() {
     DELETE FROM notifications;
     DELETE FROM tax_report_snapshots;
     DELETE FROM app_settings;
+    DELETE FROM historical_price_fetch_events;
+    DELETE FROM historical_price_runs;
     DELETE FROM price_history;
     DELETE FROM transaction_documents;
     DELETE FROM transfer_links;
@@ -2933,6 +3706,17 @@ app.get("/api/system-status", (_request, response, next) => {
   }
 });
 
+app.get("/api/system-status/automations", (_request, response, next) => {
+  try {
+    // This is intentionally an observability endpoint only. It returns local
+    // timer state and safe job metadata, never job payloads, API keys, or
+    // provider request URLs.
+    response.json(automationStatusResponse());
+  } catch (error) {
+    next(error);
+  }
+});
+
 function transactionQualityRows(condition, limit = 100) {
   return db.prepare(`
     SELECT t.id, t.hash, t.timestamp, t.direction, t.asset, t.asset_symbol, t.amount,
@@ -2953,6 +3737,7 @@ function exchangeProviderFromRaw(rawJson) {
     const source = JSON.parse(String(rawJson || "{}"))?.source;
     if (source === "binance-api") return "Binance";
     if (source === "bitvavo-api") return "Bitvavo";
+    if (source === "bsdex-api") return "BSDEX";
   } catch {
     // Old or malformed raw payloads must simply not be presented as an
     // exchange proposal; normal transaction data remains untouched.
@@ -2989,9 +3774,10 @@ function exchangeTransferSuggestions(limit = 80) {
     LEFT JOIN transfer_links linked_out ON linked_out.outgoing_transaction_id = CASE WHEN exchange_row.direction = 'out' THEN exchange_row.id ELSE local_row.id END
     LEFT JOIN transfer_links linked_in ON linked_in.incoming_transaction_id = CASE WHEN exchange_row.direction = 'in' THEN exchange_row.id ELSE local_row.id END
     WHERE exchange_row.purpose = 'Transfer'
-      AND (exchange_row.raw_json LIKE '%"source":"binance-api"%' OR exchange_row.raw_json LIKE '%"source":"bitvavo-api"%')
+      AND (exchange_row.raw_json LIKE '%"source":"binance-api"%' OR exchange_row.raw_json LIKE '%"source":"bitvavo-api"%' OR exchange_row.raw_json LIKE '%"source":"bsdex-api"%')
       AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"binance-api"%'
       AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"bitvavo-api"%'
+      AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"bsdex-api"%'
       AND linked_out.id IS NULL AND linked_in.id IS NULL
     ORDER BY exchange_row.timestamp DESC
     LIMIT ?
@@ -3066,6 +3852,14 @@ app.get("/api/data-quality", (_request, response, next) => {
       FROM transactions WHERE hash <> '' GROUP BY hash, asset, amount HAVING COUNT(*) > 1 ORDER BY occurrences DESC LIMIT 80
     `).all();
     response.json({ counts, missingHistoricPrices, unassignedPurposes, possibleTransfers, possibleDuplicates });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/data-quality/price-fetches", (request, response, next) => {
+  try {
+    response.json(historicalPricePipelineResponse(request.query?.page));
   } catch (error) {
     next(error);
   }
@@ -3455,12 +4249,14 @@ function parseCsvRows(text, profileId) {
 }
 
 function importExternalRows(wallet, rows, { source, profile = null, purposeOrigin = "manual" }) {
-  const insert = db.prepare(`INSERT INTO transactions (wallet_id, external_id, hash, timestamp, direction, asset, asset_symbol, asset_name, asset_decimals, amount, fee, fee_asset, counterparty, price_transaction_eur, price_source, purpose, purpose_origin, raw_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  const insert = db.prepare(`INSERT INTO transactions (wallet_id, external_id, hash, timestamp, direction, asset, asset_symbol, asset_name, asset_decimals, amount, fee, fee_asset, counterparty, price_transaction_eur, price_source, price_provider, price_recorded_at, purpose, purpose_origin, raw_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(wallet_id, external_id) DO UPDATE SET
       timestamp=excluded.timestamp, direction=excluded.direction, amount=excluded.amount, fee=excluded.fee, fee_asset=excluded.fee_asset,
-      counterparty=excluded.counterparty, price_transaction_eur=CASE WHEN transactions.price_source='manual' THEN transactions.price_transaction_eur ELSE excluded.price_transaction_eur END,
+      counterparty=excluded.counterparty, price_transaction_eur=CASE WHEN transactions.price_source='manual' THEN transactions.price_transaction_eur ELSE COALESCE(excluded.price_transaction_eur, transactions.price_transaction_eur) END,
       price_source=CASE WHEN transactions.price_source='manual' THEN 'manual' ELSE excluded.price_source END,
+      price_provider=CASE WHEN transactions.price_source='manual' THEN transactions.price_provider WHEN excluded.price_transaction_eur IS NOT NULL THEN excluded.price_provider ELSE transactions.price_provider END,
+      price_recorded_at=CASE WHEN transactions.price_source='manual' THEN transactions.price_recorded_at WHEN excluded.price_transaction_eur IS NOT NULL THEN excluded.price_recorded_at ELSE transactions.price_recorded_at END,
       purpose=CASE WHEN transactions.purpose_origin='manual' THEN transactions.purpose ELSE excluded.purpose END,
       purpose_origin=CASE WHEN transactions.purpose_origin='manual' THEN 'manual' ELSE excluded.purpose_origin END,
       raw_json=excluded.raw_json, updated_at=datetime('now')`);
@@ -3486,7 +4282,8 @@ function importExternalRows(wallet, rows, { source, profile = null, purposeOrigi
       const priceSource = price === null ? "auto" : "manual";
       insert.run(
         wallet.id, externalId, cleanLabel(row.hash || externalId, 180), timestamp, direction, asset, asset, asset, 8,
-        amount, fee, feeAsset, cleanLabel(row.counterparty, 160) || null, price, priceSource, cleanPurpose(row.purpose), purposeOrigin,
+        amount, fee, feeAsset, cleanLabel(row.counterparty, 160) || null, price, priceSource,
+        price === null ? null : source, price === null ? null : new Date().toISOString(), cleanPurpose(row.purpose), purposeOrigin,
         JSON.stringify({ source, profile, row: raw }),
       );
       imported += 1;
@@ -3623,12 +4420,25 @@ function binanceHistoryView(connection) {
 }
 
 function exchangeBalanceView(connection) {
-  if (connection.provider !== "binance") return null;
+  if (!["binance", "bsdex"].includes(connection.provider)) return null;
   const snapshot = exchangeBalanceSnapshot(connection.id);
   return {
     status: snapshot ? "confirmed" : "pending",
     observedAt: snapshot?.observedAt || null,
     assetCount: snapshot?.balances.size || 0,
+  };
+}
+
+function bsdexLiveView(connection) {
+  if (connection.provider !== "bsdex") return null;
+  return {
+    enabled: Boolean(connection.live_updates_enabled),
+    status: connection.live_updates_enabled ? (connection.live_status || "connecting") : "disabled",
+    connectedAt: connection.live_connected_at || null,
+    lastEventAt: connection.live_last_event_at || null,
+    lastReconciledAt: connection.live_last_reconciled_at || null,
+    lastError: connection.live_last_error || null,
+    reconcileIntervalMinutes: Math.round(BSDEX_RECONCILE_INTERVAL_MS / 60000),
   };
 }
 
@@ -3650,6 +4460,7 @@ function exchangeConnectionView(connection) {
     apiSecretConfigured: Boolean(connection.api_secret),
     history: binanceHistoryView(connection),
     balance: exchangeBalanceView(connection),
+    live: bsdexLiveView(connection),
     tradeRepublic,
   };
 }
@@ -3695,7 +4506,7 @@ async function exchangePortfolioResponse(id) {
   return {
     connection: exchangeConnectionView(connection),
     balance: {
-      source: position.snapshot ? "binance_spot_snapshot" : "journal",
+      source: position.snapshot ? exchangeSnapshotSource(connection.provider) : "journal",
       observedAt: position.snapshot?.observedAt || null,
       reconciliations: position.reconciliations,
     },
@@ -3721,6 +4532,7 @@ async function syncExchangeConnection(connection) {
   let selectedSymbols = [];
   let limited = false;
   let balanceSnapshotUpdated = false;
+  let bsdexSubscription = null;
   if (connection.provider === "bitvavo") {
     rows = await fetchBitvavoHistory({ apiBaseUrl: settings.bitvavoApiBaseUrl, apiKey: connection.api_key, apiSecret: connection.api_secret });
   } else if (connection.provider === "binance") {
@@ -3739,6 +4551,15 @@ async function syncExchangeConnection(connection) {
     rows = result.rows;
     warnings = result.warnings;
     limited = result.limited;
+  } else if (connection.provider === "bsdex") {
+    const result = await fetchBsdexHistory({
+      apiBaseUrl: settings.bsdexApiBaseUrl, apiKey: connection.api_key, apiSecret: connection.api_secret,
+    });
+    rows = result.rows;
+    warnings = result.warnings;
+    limited = result.limited;
+    if (Array.isArray(result.accountBalances)) balanceSnapshotUpdated = replaceExchangeBalanceSnapshot(connection.id, result.accountBalances);
+    bsdexSubscription = { markets: result.markets, balances: result.accountBalances };
   } else if (connection.provider === "trade_republic") {
     if (!isActiveTradeRepublicConnection(connection)) throw makeError("Bitte die Trade-Republic-Webanmeldung in der App bestätigen.");
     let session;
@@ -3762,8 +4583,26 @@ async function syncExchangeConnection(connection) {
     limited = result.limited;
   } else throw makeError("Für diese Börse ist noch kein Read-only-Adapter eingerichtet.");
   const imported = importExternalRows(wallet, rows, { source: `${connection.provider}-api`, purposeOrigin: "auto" });
-  db.prepare("UPDATE exchange_connections SET last_synced_at = datetime('now') WHERE id = ?").run(connection.id);
-  return { imported, provider: connection.provider, limited: limited || rows.length >= 2500, warnings, selectedSymbols, balanceSnapshotUpdated };
+  db.prepare(`UPDATE exchange_connections
+    SET last_synced_at = datetime('now'),
+      live_last_reconciled_at = CASE WHEN provider = 'bsdex' THEN datetime('now') ELSE live_last_reconciled_at END
+    WHERE id = ?`).run(connection.id);
+  if (connection.provider === "bsdex" && connection.live_updates_enabled) {
+    // The private WebSocket is started only after the current journal and
+    // balance snapshot were stored. External events are still deduplicated by
+    // their BSDEX trade ID if a message overlaps with the REST import.
+    await startBsdexLiveUpdates(connection, { subscription: bsdexSubscription });
+  }
+  return {
+    imported,
+    provider: connection.provider,
+    // BSDEX has individually bounded trade and transfer buckets, so their
+    // combined row count is not itself evidence of an incomplete import.
+    limited: limited || (connection.provider !== "bsdex" && rows.length >= 2500),
+    warnings,
+    selectedSymbols,
+    balanceSnapshotUpdated,
+  };
 }
 
 async function syncBinanceHistoryBatch(connection) {
@@ -3840,6 +4679,7 @@ app.post("/api/exchange-connections", async (request, response, next) => {
     let apiKey = String(request.body?.apiKey || "").trim();
     let apiSecret = String(request.body?.apiSecret || "").trim();
     const symbols = parseSymbols(request.body?.symbols).join(",");
+    const liveUpdatesEnabled = provider === "bsdex" && request.body?.liveUpdatesEnabled === true ? 1 : 0;
     if (provider === "trade_republic") {
       if (request.body?.tradeRepublicConsent !== true) {
         throw makeError("Bitte bestätige ausdrücklich die Hinweise zur inoffiziellen Trade-Republic-Geräteanmeldung.");
@@ -3860,8 +4700,10 @@ app.post("/api/exchange-connections", async (request, response, next) => {
     try {
       const accountWalletId = createExchangeAccountWallet(provider, label);
       if (provider === "trade_republic") apiSecret = "";
-      result = db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret, symbols, import_mode) VALUES (?, ?, ?, ?, ?, ?, ?)")
-        .run(provider, accountWalletId, label, apiKey, apiSecret, symbols, definition.importMode);
+      result = db.prepare(`INSERT INTO exchange_connections
+        (provider, wallet_id, label, api_key, api_secret, symbols, import_mode, live_updates_enabled, live_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(provider, accountWalletId, label, apiKey, apiSecret, symbols, definition.importMode, liveUpdatesEnabled, liveUpdatesEnabled ? "connecting" : "disabled");
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -3936,6 +4778,31 @@ app.patch("/api/exchange-connections/:id/binance-markets", (request, response, n
   } catch (error) { next(error); }
 });
 
+app.patch("/api/exchange-connections/:id/live-updates", (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültige Börsenverbindung.");
+    const connection = getExchangeConnection(id);
+    if (connection.provider !== "bsdex" || connection.import_mode !== "api") {
+      throw makeError("Live-Updates stehen nur für eine BSDEX-Read-only-Verbindung zur Verfügung.");
+    }
+    const enabled = request.body?.enabled === true;
+    if (!enabled) {
+      db.prepare("UPDATE exchange_connections SET live_updates_enabled = 0 WHERE id = ?").run(connection.id);
+      stopBsdexLiveUpdates(connection.id);
+      response.json(exchangeConnectionView(getExchangeConnection(connection.id)));
+      return;
+    }
+    db.prepare(`UPDATE exchange_connections
+      SET live_updates_enabled = 1, live_status = 'connecting', live_last_error = NULL
+      WHERE id = ?`).run(connection.id);
+    const updated = getExchangeConnection(connection.id);
+    // A new REST reconciliation establishes an authoritative snapshot before
+    // the WebSocket is opened and provides a recovery point for missed data.
+    response.status(202).json({ ...exchangeConnectionView(updated), job: queueBsdexReconciliation(connection.id) });
+  } catch (error) { next(error); }
+});
+
 app.post("/api/exchange-connections/:id/sync", (request, response, next) => {
   try {
     const id = asPositiveId(request.params.id);
@@ -3953,6 +4820,8 @@ app.delete("/api/exchange-connections/:id", (request, response, next) => {
   try {
     const id = asPositiveId(request.params.id);
     if (!id) throw makeError("Ungültige Börsenverbindung.");
+    const connection = getExchangeConnection(id);
+    if (connection.provider === "bsdex") stopBsdexLiveUpdates(connection.id, { persist: false });
     const deleted = db.prepare("DELETE FROM exchange_connections WHERE id = ?").run(id);
     if (!deleted.changes) throw makeError("Börsenverbindung nicht gefunden.", 404);
     response.status(204).end();
@@ -4050,26 +4919,26 @@ app.patch("/api/transactions/:id/historical-price", (request, response, next) =>
     if (rawPrice === null || rawPrice === undefined || rawPrice === "") {
       const result = db.prepare(`
         UPDATE transactions
-        SET price_transaction_eur = NULL, price_source = 'auto', updated_at = datetime('now')
+        SET price_transaction_eur = NULL, price_source = 'auto', price_provider = NULL, price_recorded_at = NULL, updated_at = datetime('now')
         WHERE id = ?
       `).run(id);
       if (!result.changes) throw makeError("Transaktion nicht gefunden.", 404);
       db.prepare("DELETE FROM historical_price_retries WHERE transaction_id = ?").run(id);
       db.prepare("INSERT INTO transaction_price_audit (transaction_id, price_eur, source, note) VALUES (?, ?, ?, ?)").run(id, null, "auto", note || "Automatische Preisermittlung wieder aktiviert");
-      response.json({ id, price_transaction_eur: null, price_source: "auto" });
+      response.json(db.prepare("SELECT id, price_transaction_eur, price_source, price_provider, price_recorded_at FROM transactions WHERE id = ?").get(id));
       return;
     }
     const price = positiveNumber(rawPrice);
     if (!price || price > 1000000000000) throw makeError("Der historische Preis muss eine positive EUR-Zahl sein.");
     const result = db.prepare(`
       UPDATE transactions
-      SET price_transaction_eur = ?, price_source = 'manual', updated_at = datetime('now')
+      SET price_transaction_eur = ?, price_source = 'manual', price_provider = 'manual', price_recorded_at = datetime('now'), updated_at = datetime('now')
       WHERE id = ?
     `).run(price, id);
     if (!result.changes) throw makeError("Transaktion nicht gefunden.", 404);
     db.prepare("DELETE FROM historical_price_retries WHERE transaction_id = ?").run(id);
     db.prepare("INSERT INTO transaction_price_audit (transaction_id, price_eur, source, note) VALUES (?, ?, ?, ?)").run(id, price, "manual", note);
-    response.json({ id, price_transaction_eur: price, price_source: "manual" });
+    response.json(db.prepare("SELECT id, price_transaction_eur, price_source, price_provider, price_recorded_at FROM transactions WHERE id = ?").get(id));
   } catch (error) {
     next(error);
   }
@@ -4079,7 +4948,7 @@ app.get("/api/transactions/:id/price-history", (request, response, next) => {
   try {
     const id = asPositiveId(request.params.id);
     if (!id) throw makeError("Ungültige Transaktions-ID.");
-    const transaction = db.prepare("SELECT id, price_transaction_eur, price_source, updated_at FROM transactions WHERE id = ?").get(id);
+    const transaction = db.prepare("SELECT id, price_transaction_eur, price_source, price_provider, price_recorded_at, updated_at FROM transactions WHERE id = ?").get(id);
     if (!transaction) throw makeError("Transaktion nicht gefunden.", 404);
     const changes = db.prepare(`
       SELECT price_eur, source, note, changed_at
@@ -4162,7 +5031,7 @@ app.use((error, _request, response, _next) => {
 // requests are serialized above, so a provider is never hit in parallel.
 const historicalPriceScheduler = setInterval(scheduleHistoricalPriceBackfill, 60000);
 historicalPriceScheduler.unref();
-const initialHistoricalPriceRetry = setTimeout(scheduleHistoricalPriceBackfill, 15000);
+const initialHistoricalPriceRetry = setTimeout(scheduleHistoricalPriceBackfill, Math.max(0, historicalPriceInitialCheckAt - Date.now()));
 initialHistoricalPriceRetry.unref();
 
 if (require.main === module) {
@@ -4173,12 +5042,15 @@ if (require.main === module) {
 
 module.exports = {
   app,
+  automationStatusResponse,
   backfillHistoricalPrices,
   db,
+  historicalPricePipelineResponse,
   resetLocalData,
   runtimeSettings,
   settingsResponse,
   updateSettings,
   exchangePosition,
+  exchangeTransferSuggestions,
   replaceExchangeBalanceSnapshot,
 };

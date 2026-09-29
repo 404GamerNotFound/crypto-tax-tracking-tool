@@ -1,10 +1,10 @@
 const params = new URLSearchParams(window.location.search);
 const year = params.get("year") || new Date().getFullYear();
+const { api, cell } = window.CryptoBuchUI;
 const money = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
 const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" });
-const cell = (value) => { const node = document.createElement("td"); node.textContent = value; return node; };
 const amount = (value, asset) => `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 8 }).format(Number(value || 0))} ${asset}`;
-fetch(`/api/tax-report?year=${encodeURIComponent(year)}`).then((response) => response.json()).then((report) => {
+api(`/api/tax-report?year=${encodeURIComponent(year)}`).then((report) => {
   const { summary, profile } = report;
   document.title = `CryptoBuch Steuerreport ${report.year}`;
   document.getElementById("subtitle").textContent = `Lokale FIFO-Organisationshilfe für ${report.year}. Keine steuerliche Beratung.`;

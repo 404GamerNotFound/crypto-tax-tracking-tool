@@ -4,20 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CryptoBuch · Betrieb</title>
-    <link rel="stylesheet" href="/styles.css?v=20260928-2" />
+    <link rel="stylesheet" href="/styles.css?v=20260929-5" />
   </head>
   <body>
     <div class="shell report-shell">
       <header class="topbar">
         <a class="brand" href="/"><span class="brand-mark">₿</span><span>CryptoBuch</span></a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation">
-          <a class="topbar-link" href="/">Dashboard</a>
-          <a class="topbar-link" href="/wallets.html">Crypto-Bestände</a>
-          <a class="topbar-link" href="/quality.html">Datenqualität</a>
-          <a class="topbar-link" href="/tax.html">Steuerreport</a>
-          <a class="topbar-link is-active" href="/maintenance.html">Betrieb</a>
-          <a class="topbar-link" href="/settings.html">Einstellungen</a>
-        </nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
       </header>
       <main class="report-main">
         <section class="page-hero compact-hero">
@@ -26,12 +19,22 @@
             <h1>Status und <em>Backups.</em></h1>
             <p>Überwache Wallet-Synchronisationen und sichere die lokale Datenbank im persistenten Docker-Volume.</p>
           </div>
-          <div class="hero-actions"><button class="button button-primary" id="create-backup">Backup erstellen</button><button class="button button-secondary" id="reload-status">Neu laden</button></div>
+          <div class="hero-actions"><a class="button button-secondary" href="#automatische-laeufe">Automatische Läufe</a><button class="button button-primary" id="create-backup">Backup erstellen</button><button class="button button-secondary" id="reload-status">Neu laden</button></div>
         </section>
-        <section class="summary-grid">
+        <nav class="section-subnav" aria-label="Betriebsbereiche" data-section-navigation="maintenance"></nav>
+        <section class="summary-grid" id="betriebsstatus">
           <article class="summary-card"><span class="card-label">Offene historische Kurse</span><strong id="pending-prices">—</strong><span class="muted" id="retry-status"></span></article>
           <article class="summary-card"><span class="card-label">Wallets mit Fehler</span><strong id="sync-errors">—</strong><span class="muted">letzter Synchronisationsversuch</span></article>
           <article class="summary-card"><span class="card-label">Backups</span><strong id="backup-count">—</strong><span class="muted">im Docker-Daten-Volume</span></article>
+          <article class="summary-card"><span class="card-label">Automatische Läufe</span><strong id="automation-active-count">—</strong><span class="muted" id="automation-queue-status">lokale Warteschlange</span></article>
+        </section>
+        <section class="transactions-panel report-panel automation-panel" id="automatische-laeufe" aria-labelledby="automation-title">
+          <div class="section-heading transactions-title"><div><p class="eyebrow">LOKALE ZEITSTEUERUNGEN</p><h2 id="automation-title">Automatische Läufe</h2></div><button class="button button-secondary button-small" id="reload-automations" type="button">Läufe aktualisieren</button></div>
+          <p class="data-note">Diese Übersicht zeigt lokale Zeitsteuerungen im CryptoBuch-Server – keine systemweiten Cronjobs. Abrufe bleiben seriell; Zugangsdaten, Job-Payloads und Anfrage-URLs werden nicht angezeigt.</p>
+          <div class="automation-schedule-grid" id="automation-schedule-list" aria-live="polite"><p class="muted">Automatische Läufe werden geladen …</p></div>
+          <div class="automation-queue-heading"><div><p class="eyebrow">HINTERGRUNDWARTESCHLANGE</p><h3>Letzte und laufende Jobs</h3></div><span class="muted" id="automation-queue-meta">—</span></div>
+          <div class="table-wrap"><table><thead><tr><th>Job</th><th>Status</th><th>Eingeplant</th><th>Gestartet</th><th>Abgeschlossen / Hinweis</th></tr></thead><tbody id="automation-job-list"></tbody></table></div>
+          <p class="data-note" id="automation-job-empty" hidden>Es liegen noch keine Hintergrundjobs vor.</p>
         </section>
         <section class="transactions-panel report-panel">
           <div class="section-heading transactions-title"><div><p class="eyebrow">SYNCHRONISATION</p><h2>Wallet-Status</h2></div></div>
@@ -42,7 +45,7 @@
           <div class="table-wrap"><table><thead><tr><th>Datei</th><th>Erstellt</th><th>Größe</th><th>Aktion</th></tr></thead><tbody id="backup-list"></tbody></table></div>
           <p class="data-note">Eine Wiederherstellung ersetzt die aktuelle Datenbank, beendet den Container und startet ihn über Docker neu.</p>
         </section>
-        <section class="transactions-panel report-panel danger-panel">
+        <section class="transactions-panel report-panel danger-panel" id="daten-reset">
           <div class="section-heading transactions-title">
             <div><p class="eyebrow">GEFAHRENBEREICH</p><h2>Alle lokalen Daten zurücksetzen</h2></div>
             <button class="button button-danger" id="open-data-reset" type="button">Alle Daten zurücksetzen</button>
@@ -61,6 +64,8 @@
       </form>
     </dialog>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/maintenance.js?v=20260928-2" defer></script>
+    <script src="/ui.js?v=20260929-1" defer></script>
+    <script src="/navigation.js?v=20260929-2" defer></script>
+    <script src="/maintenance.js?v=20260929-1" defer></script>
   </body>
 </html>

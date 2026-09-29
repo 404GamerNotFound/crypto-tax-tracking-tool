@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Coin-Auswertung und Transaktionen in CryptoBuch" />
     <title>CryptoBuch · Coin</title>
-    <link rel="stylesheet" href="/styles.css?v=20260922-14" />
+    <link rel="stylesheet" href="/styles.css?v=20260929-5" />
     <link rel="stylesheet" href="/vendor/uplot.css" />
   </head>
   <body>
@@ -15,14 +15,7 @@
           <span class="brand-mark" aria-hidden="true">₿</span>
           <span>CryptoBuch</span>
         </a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation">
-          <a class="topbar-link" href="/">Dashboard</a>
-          <a class="topbar-link" href="/wallets.html">Crypto-Bestände</a>
-          <a class="topbar-link" href="/quality.html">Datenqualität</a>
-          <a class="topbar-link" href="/tax.html">Steuerreport</a>
-          <a class="topbar-link" href="/maintenance.html">Betrieb</a>
-          <a class="topbar-link" href="/settings.html">Einstellungen</a>
-        </nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
         <div class="topbar-status" id="price-status" aria-live="polite">Daten werden geladen …</div>
       </header>
 
@@ -116,7 +109,7 @@
           <details class="history-help">
             <summary>Historische Daten &amp; Preise</summary>
             <div>
-              <p><strong>Transaktionszeit:</strong> Sie stammt aus dem jeweiligen bestätigten Blockchain-Block. Historische EUR-Kurse werden bei Tezos über TzKT, sonst über CoinGecko und für native Coins bei Bedarf über EUR-Tageskerzen ergänzt und lokal zwischengespeichert.</p>
+              <p><strong>Kursherkunft:</strong> Jede Buchung zeigt Quelle, Kursdatum, Abruf- bzw. Erfassungszeitpunkt und Datenqualitätsstatus. Tezos-Kurse stammen direkt aus TzKT; sonst werden EUR-Tageskurse über CoinGecko und bei Bedarf über weitere Quellen ergänzt und lokal zwischengespeichert. Direkt aus Börsen- oder CSV-Importen gelieferte EUR-Kurse bleiben als geschützte Quelle erkennbar.</p>
               <p>Steht hier <em>k. A.</em>, wähle im Dashboard <em>Historische Kurse ergänzen</em>. Für nicht verfügbare Märkte sowie ältere ERC-20-Transaktionen kann ein CoinGecko-Pro-API-Key unter Einstellungen → Preisdaten nötig sein.</p>
             </div>
           </details>
@@ -157,8 +150,10 @@
       <ul id="transaction-document-list" class="tax-snapshot-list"><li class="muted">Nachweise werden geladen …</li></ul><p class="data-note">Anhänge verbleiben im lokalen Datenverzeichnis und werden nicht an externe Anbieter übertragen.</p>
     </dialog>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/ui.js?v=20260929-1" defer></script>
+    <script src="/navigation.js?v=20260929-2" defer></script>
     <script src="/notifications.js?v=20260925-1" defer></script>
     <script src="/vendor/uplot.js" defer></script>
-    <script src="/asset.js?v=20260927-1" defer></script>
+    <script src="/asset.js?v=20260929-2" defer></script>
   </body>
 </html>

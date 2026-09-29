@@ -5,20 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Börsenbestände und Buchungsjournal in CryptoBuch" />
     <title>CryptoBuch · Börse</title>
-    <link rel="stylesheet" href="/styles.css?v=20260929-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260929-5" />
   </head>
   <body>
     <div class="shell asset-page-shell">
       <header class="topbar">
         <a class="brand" href="/" aria-label="CryptoBuch Dashboard"><span class="brand-mark" aria-hidden="true">₿</span><span>CryptoBuch</span></a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation">
-          <a class="topbar-link" href="/">Dashboard</a>
-          <a class="topbar-link is-active" href="/wallets.html">Crypto-Bestände</a>
-          <a class="topbar-link" href="/quality.html">Datenqualität</a>
-          <a class="topbar-link" href="/tax.html">Steuerreport</a>
-          <a class="topbar-link" href="/maintenance.html">Betrieb</a>
-          <a class="topbar-link" href="/settings.html">Einstellungen</a>
-        </nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
         <div class="topbar-status" id="exchange-status" aria-live="polite">Börse wird geladen …</div>
       </header>
 
@@ -56,7 +49,9 @@
       </main>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/ui.js?v=20260929-1" defer></script>
+    <script src="/navigation.js?v=20260929-2" defer></script>
     <script src="/notifications.js?v=20260925-1" defer></script>
-    <script src="/exchange.js?v=20260929-1" defer></script>
+    <script src="/exchange.js?v=20260929-2" defer></script>
   </body>
 </html>

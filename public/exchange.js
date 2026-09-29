@@ -1,19 +1,10 @@
 const params = new URLSearchParams(window.location.search);
 const exchangeId = Number(params.get("id"));
 const state = { data: null, filters: { search: "", direction: "" } };
-const el = (id) => document.getElementById(id);
-const currency = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
+const { api, el, exchangeProviderLabel: providerLabel, formatCurrency, hasNumber, purposeInfo, toast } = window.CryptoBuchUI;
 const price = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 6 });
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
 let historyRefreshTimer = null;
-
-function hasNumber(value) {
-  return value !== null && value !== "" && value !== undefined && Number.isFinite(Number(value));
-}
-
-function formatCurrency(value) {
-  return hasNumber(value) ? currency.format(Number(value)) : "k. A.";
-}
 
 function formatPrice(value) {
   return hasNumber(value) && Number(value) > 0 ? price.format(Number(value)) : "k. A.";
@@ -38,33 +29,8 @@ function shorten(value, start = 12, end = 8) {
   return text.length > start + end + 2 ? `${text.slice(0, start)}…${text.slice(-end)}` : text || "—";
 }
 
-function providerLabel(provider) {
-  return ({ binance: "Binance Spot", bitvavo: "Bitvavo", etoro: "eToro", trade_republic: "Trade Republic" })[provider] || "Börse";
-}
-
-function purposeInfo(transaction) {
-  const defaults = {
-    "Staking Rewards": ["✦", "staking", "Staking-Ertrag"], Kauf: ["↗", "purchase", "Kauf"], Verkauf: ["↘", "sale", "Verkauf"],
-    "Mining Reward": ["⛏", "mining", "Mining-Ertrag"], Airdrop: ["◇", "gift", "Airdrop"], "Lending-Ertrag": ["✦", "staking", "Lending-Ertrag"], "DeFi-Ertrag": ["✦", "staking", "DeFi-Ertrag"], "DeFi Swap": ["⇄", "transfer", "DeFi-Swap"], "Liquidity Pool": ["◒", "staking", "Liquiditätspool"], Bridge: ["⇆", "transfer", "Bridge"], NFT: ["▣", "gift", "NFT"], Spam: ["!", "other", "Spam / ignorieren"], Transfer: ["↔", "transfer", "Transfer"], Geschenk: ["◇", "gift", "Geschenk"], Gebühr: ["−", "fee", "Gebühr"], Sonstiges: ["•", "other", "Sonstiges"],
-  };
-  const [icon, tone, label] = defaults[transaction.purpose] || (transaction.purpose ? ["•", "custom", transaction.purpose] : ["?", "unassigned", "Noch nicht zugeordnet"]);
-  return { icon, tone, label, origin: transaction.purpose_origin === "auto" ? "automatisch erkannt" : transaction.purpose_origin === "manual" ? "manuell zugeordnet" : "Herkunft prüfen" };
-}
-
-function toast(message, kind = "success") {
-  const container = el("toast");
-  container.textContent = message;
-  container.className = `toast ${kind}`;
-  container.hidden = false;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { container.hidden = true; }, 4200);
-}
-
-async function api(url, options = {}) {
-  const response = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || "Der Vorgang ist fehlgeschlagen.");
-  return payload;
+function hasAuthenticatedSnapshot(source) {
+  return /_snapshot$/.test(String(source || ""));
 }
 
 function metric(label, value, help = "", tone = "") {
@@ -103,13 +69,20 @@ function renderMetrics() {
     metric("Buchungen gespeichert", data.transactionCount.toLocaleString("de-DE"), "Alle lokal importierten Ein- und Ausgänge"),
     metric("Letzter Import", data.connection.lastSyncedAt ? dateTime.format(new Date(`${data.connection.lastSyncedAt}Z`)) : "Noch keiner", data.connection.importMode === "csv" ? "Lokaler CSV-/Beleg-Import" : "Read-only-API · keine Handelsrechte"),
   ];
-  if (data.balance?.source === "binance_spot_snapshot") {
-    entries.splice(2, 0, metric("Kontostand", "Bestätigt", data.balance.observedAt ? `Binance Spot · ${dateTime.format(new Date(`${data.balance.observedAt}Z`))}` : "Binance Spot Read-only", "success"));
+  if (hasAuthenticatedSnapshot(data.balance?.source)) {
+    entries.splice(2, 0, metric("Kontostand", "Bestätigt", data.balance.observedAt ? `${providerLabel(data.connection.provider)} · ${dateTime.format(new Date(`${data.balance.observedAt}Z`))}` : `${providerLabel(data.connection.provider)} Read-only`, "success"));
   } else {
     entries.splice(2, 0, metric("Kontostand", "Journal", "Kein aktueller API-Snapshot verfügbar", "warning"));
   }
   const history = historyStatus(data.connection.history);
   if (history) entries.push(metric("Binance-Historie", history.value, history.help, history.tone));
+  if (data.connection.live?.enabled) {
+    const live = data.connection.live;
+    const copy = live.status === "connected" ? `Verbunden · REST-Abgleich alle ${live.reconcileIntervalMinutes} Min.`
+      : live.status === "reconnecting" ? "Verbindung wird wiederhergestellt"
+        : live.status === "error" ? (live.lastError || "Verbindung prüfen") : "Wird verbunden";
+    entries.push(metric("Live-Updates", live.status === "connected" ? "Aktiv" : "Prüfen", copy, live.status === "connected" ? "success" : "warning"));
+  }
   metrics.replaceChildren(...entries);
 }
 
@@ -118,23 +91,23 @@ function renderBalanceNotice() {
   const balance = state.data?.balance || {};
   const differences = balance.reconciliations || [];
   notice.replaceChildren();
-  if (balance.source !== "binance_spot_snapshot" && !differences.length) {
+  if (!hasAuthenticatedSnapshot(balance.source) && !differences.length) {
     el("exchange-holdings-copy").textContent = "Aus dem lokal gespeicherten Buchungsjournal berechnet.";
     notice.hidden = true;
     return;
   }
-  el("exchange-holdings-copy").textContent = balance.source === "binance_spot_snapshot"
-    ? "Aus dem aktuellen, read-only abgefragten Binance-Spot-Saldo."
+  el("exchange-holdings-copy").textContent = hasAuthenticatedSnapshot(balance.source)
+    ? `Aus dem aktuellen, read-only abgefragten ${providerLabel(state.data.connection.provider)}-Kontostand.`
     : "Aus dem lokal gespeicherten Buchungsjournal berechnet.";
   const title = document.createElement("strong");
   const copy = document.createElement("p");
   if (!differences.length) {
     title.textContent = "Kontostand mit Journal abgeglichen";
-    copy.textContent = "Der aktuelle Binance-Spot-Saldo stimmt mit den importierten Buchungen überein. Der Kontostand wird nur lesend abgefragt.";
+    copy.textContent = `Der aktuelle ${providerLabel(state.data.connection.provider)}-Kontostand stimmt mit den importierten Buchungen überein. Der Kontostand wird nur lesend abgefragt.`;
   } else {
     const assets = differences.map((item) => item.asset).join(", ");
     title.textContent = "Historisches Journal weicht vom bestätigten Kontostand ab";
-    copy.textContent = `Betroffen: ${assets}. Es werden ausschließlich die aktuellen Binance-Spot-Bestände angezeigt. Die Differenz wird nicht als Kauf, Verkauf oder FIFO-Charge erzeugt; ergänze fehlende Märkte oder den Binance-CSV-Export.`;
+    copy.textContent = `Betroffen: ${assets}. Es werden ausschließlich die aktuellen ${providerLabel(state.data.connection.provider)}-Bestände angezeigt. Die Differenz wird nicht als Kauf, Verkauf oder FIFO-Charge erzeugt; ergänze fehlende Buchungen oder einen vollständigen Börsenexport.`;
   }
   notice.append(title, copy);
   notice.hidden = false;
@@ -209,13 +182,16 @@ function renderTransactions() {
   for (const transaction of transactions) {
     const row = document.createElement("tr");
     const operation = document.createElement("td");
+    operation.className = "operation-cell";
+    const operationLayout = document.createElement("div");
+    operationLayout.className = "operation-layout";
     const direction = document.createElement("span");
     direction.className = `direction ${transaction.direction}`;
     direction.textContent = transaction.direction === "in" ? "↓" : transaction.direction === "out" ? "↑" : "↔";
     const copy = document.createElement("div");
     const hash = document.createElement("strong"); hash.textContent = shorten(transaction.hash);
     const timestamp = document.createElement("small"); timestamp.textContent = transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : "Zeitpunkt unbekannt";
-    copy.append(hash, timestamp); operation.append(direction, copy);
+    copy.append(hash, timestamp); operationLayout.append(direction, copy); operation.append(operationLayout);
     const asset = document.createElement("td");
     const assetTitle = document.createElement("strong"); assetTitle.textContent = assetInfo(transaction.asset).name || transaction.asset;
     const assetSymbol = document.createElement("small"); assetSymbol.textContent = assetInfo(transaction.asset).symbol || transaction.asset;
@@ -237,10 +213,11 @@ function render() {
   const data = state.data;
   document.title = `CryptoBuch · ${data.connection.label || providerLabel(data.connection.provider)}`;
   el("exchange-title").textContent = data.connection.label || providerLabel(data.connection.provider);
-  el("exchange-icon").textContent = data.connection.provider === "binance" ? "B" : data.connection.provider === "bitvavo" ? "V" : data.connection.provider === "etoro" ? "eT" : "TR";
+  el("exchange-icon").textContent = data.connection.provider === "binance" ? "B" : data.connection.provider === "bitvavo" ? "V" : data.connection.provider === "etoro" ? "eT" : data.connection.provider === "bsdex" ? "BS" : "TR";
   el("exchange-icon").className = `asset-hero-icon exchange ${data.connection.provider}`;
   const csv = data.connection.importMode === "csv";
   const tradeRepublic = data.connection.tradeRepublic;
+  const live = data.connection.live;
   el("exchange-subtitle").textContent = `${providerLabel(data.connection.provider)} · ${csv ? "lokaler Beleg-/CSV-Import" : "Read-only-Bestände"} und alle ${data.transactionCount.toLocaleString("de-DE")} lokal gespeicherten Börsenbuchungen.`;
   const history = historyStatus(data.connection.history);
   el("exchange-status").textContent = tradeRepublic?.status === "approval_pending"
@@ -251,6 +228,10 @@ function render() {
         ? "Trade-Republic-Webanmeldung erforderlich"
     : history && data.connection.history.status !== "complete"
     ? `Historienimport: ${history.help}`
+    : live?.enabled && live.status === "connected"
+      ? `BSDEX-Live-Updates aktiv · REST-Abgleich alle ${live.reconcileIntervalMinutes} Min.`
+      : live?.enabled && live.status === "reconnecting"
+        ? "BSDEX-Live-Verbindung wird wiederhergestellt"
     : data.connection.lastSyncedAt ? `Letzter Import ${dateTime.format(new Date(`${data.connection.lastSyncedAt}Z`))}` : csv ? "Noch kein CSV-Import" : "Noch nicht synchronisiert";
   const refresh = el("refresh-exchange");
   refresh.hidden = csv || data.connection.syncAvailable === false;
@@ -259,8 +240,8 @@ function render() {
   renderHoldings();
   renderTransactions();
   clearTimeout(historyRefreshTimer);
-  if (data.connection.history && data.connection.history.status !== "complete" && !data.connection.history.lastError) {
-    historyRefreshTimer = setTimeout(() => load({ quiet: true }), 6000);
+  if ((data.connection.history && data.connection.history.status !== "complete" && !data.connection.history.lastError) || data.connection.live?.enabled) {
+    historyRefreshTimer = setTimeout(() => load({ quiet: true }), data.connection.live?.enabled ? 10000 : 6000);
   }
 }
 
