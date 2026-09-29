@@ -563,7 +563,7 @@ a.market-availability:hover { text-decoration: underline; }
 .allocation-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--green), #7eba91); }
 .portfolio-history-chart { min-height: 180px; display: grid; align-items: center; color: var(--muted); font-size: 12px; }
 .portfolio-history-chart svg { width: 100%; height: 190px; overflow: visible; }
-.history-line { fill: none; stroke: var(--green); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.portfolio-history-chart .chart-empty { min-height: 180px; }
 .notifications-panel { margin: 0 0 42px; padding: 20px 22px; border: 1px solid var(--line); border-radius: 9px; background: var(--cream); }
 .notification-list { display: grid; gap: 8px; }
 .notification-item { padding: 11px 13px; border-left: 3px solid var(--green); border-radius: 4px; background: #f4f8f3; }

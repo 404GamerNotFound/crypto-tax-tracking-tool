@@ -126,11 +126,39 @@ function renderInsights(insights) {
     row.append(name, bar, value); allocation.append(row);
   }
   const chart = el("portfolio-history-chart"); chart.replaceChildren();
-  const points = insights.valueHistory || [];
-  if (points.length < 2) { chart.textContent = "Noch zu wenige historische Werte für eine Entwicklung."; return; }
-  const values = points.map((point) => Number(point.valueEur || 0)); const min = Math.min(...values); const max = Math.max(...values); const span = max - min || 1;
-  const ns = "http://www.w3.org/2000/svg"; const svg = document.createElementNS(ns, "svg"); svg.setAttribute("viewBox", "0 0 720 220"); svg.setAttribute("role", "img"); svg.setAttribute("aria-label", "Historische Buchwertentwicklung");
-  const polyline = document.createElementNS(ns, "polyline"); polyline.setAttribute("class", "history-line"); polyline.setAttribute("points", points.map((point, index) => `${(index / (points.length - 1)) * 700 + 10},${200 - ((Number(point.valueEur || 0) - min) / span) * 170}`).join(" ")); svg.append(polyline);
+  const points = (Array.isArray(insights.valueHistory) ? insights.valueHistory : [])
+    .map((point) => ({ day: String(point?.day || ""), valueEur: Number(point?.valueEur) }))
+    .filter((point) => /^\d{4}-\d{2}-\d{2}$/.test(point.day) && Number.isFinite(point.valueEur));
+  if (points.length < 2) {
+    const empty = document.createElement("p");
+    empty.className = "chart-empty";
+    empty.textContent = "Für einen Verlauf werden mindestens zwei bewertete Tage benötigt.";
+    chart.append(empty);
+    return;
+  }
+  const values = points.map((point) => point.valueEur);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || Math.max(Math.abs(max) * 0.1, 1);
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 720 220");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Historische Buchwertentwicklung");
+  const x = (index) => 20 + (index / (points.length - 1)) * 680;
+  const y = (value) => 190 - ((value - min) / span) * 150;
+  const polyline = document.createElementNS(ns, "polyline");
+  // Keep these paint attributes on the SVG itself. The chart remains visible
+  // even when an older stylesheet is still cached by a local reverse proxy.
+  polyline.setAttribute("fill", "none");
+  polyline.setAttribute("stroke", "#0b704a");
+  polyline.setAttribute("stroke-width", "4");
+  polyline.setAttribute("stroke-linecap", "round");
+  polyline.setAttribute("stroke-linejoin", "round");
+  polyline.setAttribute("points", points.map((point, index) => `${x(index).toFixed(2)},${y(point.valueEur).toFixed(2)}`).join(" "));
+  const first = document.createElementNS(ns, "title");
+  first.textContent = `${points[0].day}: ${formatCurrency(points[0].valueEur)}. Letzter Wert ${points.at(-1).day}: ${formatCurrency(points.at(-1).valueEur)}.`;
+  svg.append(first, polyline);
   chart.append(svg);
 }
 
