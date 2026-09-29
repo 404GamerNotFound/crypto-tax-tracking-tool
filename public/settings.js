@@ -53,6 +53,7 @@ function render(settings) {
   el("stellar-horizon").value = settings.stellarHorizonBaseUrl;
   el("nearblocks-api").value = settings.nearBlocksApiBaseUrl;
   el("tonapi-api").value = settings.tonApiBaseUrl;
+  el("bitcoin-cash-api").value = settings.bitcoinCashApiBaseUrl;
   el("blockchair-api").value = settings.blockchairApiBaseUrl;
   el("blockcypher-api").value = settings.blockCypherApiBaseUrl;
   el("coingecko-api").value = settings.coinGeckoBaseUrl;
@@ -76,7 +77,7 @@ function render(settings) {
   el("solscan-key-status").textContent = settings.solscanApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. Solana-Wallets können noch nicht synchronisiert werden.";
   el("nearblocks-key-status").textContent = settings.nearBlocksApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. NEAR-Wallets können noch nicht synchronisiert werden.";
   el("tonapi-key-status").textContent = settings.tonApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche TonAPI-Rate kann begrenzt sein.";
-  el("blockchair-key-status").textContent = settings.blockchairApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche Blockchair-Rate kann begrenzt sein.";
+  el("blockchair-key-status").textContent = settings.blockchairApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche Blockchair-Rate für Zcash kann begrenzt sein.";
   el("blockcypher-token-status").textContent = settings.blockCypherApiTokenConfigured ? "Ein Token ist gespeichert." : "Kein Token gespeichert; die öffentliche BlockCypher-Rate kann begrenzt sein.";
   el("coingecko-key-status").textContent = settings.coinGeckoApiKeyConfigured
     ? "Ein API-Key ist gespeichert. Bei pro-api.coingecko.com wird er als Pro-Key verwendet."
@@ -143,6 +144,7 @@ el("settings-form").addEventListener("submit", async (event) => {
         stellarHorizonBaseUrl: form.get("stellarHorizonBaseUrl"),
         nearBlocksApiBaseUrl: form.get("nearBlocksApiBaseUrl"),
         tonApiBaseUrl: form.get("tonApiBaseUrl"),
+        bitcoinCashApiBaseUrl: form.get("bitcoinCashApiBaseUrl"),
         blockchairApiBaseUrl: form.get("blockchairApiBaseUrl"),
         blockCypherApiBaseUrl: form.get("blockCypherApiBaseUrl"),
         coinGeckoBaseUrl: form.get("coinGeckoBaseUrl"),

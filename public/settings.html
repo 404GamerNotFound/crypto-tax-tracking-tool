@@ -337,12 +337,17 @@
                 <small id="blockcypher-token-status">Key-Status wird geladen …</small>
               </label>
               <label>
-                <span>Blockchair-API-Basisadresse</span>
-                <input id="blockchair-api" name="blockchairApiBaseUrl" type="url" inputmode="url" required />
-                <small>Bitcoin Cash und transparente Zcash-Adressen werden über eigene Adapter abgefragt.</small>
+                <span>Bitcoin-Cash-Indexer-Basisadresse</span>
+                <input id="bitcoin-cash-api" name="bitcoinCashApiBaseUrl" type="url" inputmode="url" required />
+                <small>Bitcoin Cash wird über einen separaten, ausschließlich lesenden Fulcrum-Indexer importiert. Es werden weder Zahlungen noch Signaturen ausgelöst.</small>
               </label>
               <label>
-                <span>Blockchair-API-Key <small>optional</small></span>
+                <span>Blockchair-API-Basisadresse</span>
+                <input id="blockchair-api" name="blockchairApiBaseUrl" type="url" inputmode="url" required />
+                <small>Transparente Zcash-Adressen werden über einen eigenen Adapter abgefragt.</small>
+              </label>
+              <label>
+                <span>Blockchair-API-Key für Zcash <small>optional</small></span>
                 <input id="blockchair-key" name="blockchairApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
                 <small id="blockchair-key-status">Key-Status wird geladen …</small>
               </label>

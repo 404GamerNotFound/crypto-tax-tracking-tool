@@ -8,6 +8,7 @@ const {
   normalizeStellarPayment,
   normalizeBlockchairUtxoTransaction,
 } = require("../lib/additional-chains");
+const { toBitcoinCashUtxoPayload } = require("../lib/bitcoin-cash");
 
 test("validiert die zusätzlichen Wallet-Adressformate", () => {
   assert.equal(isValidAddress("BNB", "0x52908400098527886E0F7030069857D2E4169EE7"), true);
@@ -60,4 +61,25 @@ test("berechnet die Nettobewegung einer UTXO-Transaktion", () => {
   }, "DWallet", CHAIN_CONFIG.DOGE);
   assert.equal(transaction.direction, "in");
   assert.equal(transaction.amount, 1.5);
+});
+
+test("löst BCH-Voreingänge auf und vergleicht CashAddr mit und ohne Präfix", () => {
+  const wallet = "qwallet";
+  const parentHash = "a".repeat(64);
+  const payload = toBitcoinCashUtxoPayload({ details: {
+    txid: "b".repeat(64), blocktime: 1700000000,
+    vin: [{ txid: parentHash, vout: 1 }],
+    vout: [
+      { n: 0, value: 0.25, scriptPubKey: { addresses: ["bitcoincash:qrecipient"] } },
+      { n: 1, value: 0.74999, scriptPubKey: { addresses: [`bitcoincash:${wallet}`] } },
+    ],
+  } }, new Map([[parentHash, { details: {
+    txid: parentHash,
+    vout: [{ n: 0, value: 0.1, scriptPubKey: { addresses: ["bitcoincash:qother"] } }, { n: 1, value: 1, scriptPubKey: { addresses: [`bitcoincash:${wallet}`] } }],
+  } }]]));
+  const transaction = normalizeBlockchairUtxoTransaction(payload, wallet, CHAIN_CONFIG.BCH);
+  assert.equal(transaction.direction, "out");
+  assert.equal(transaction.amount, 0.25001);
+  assert.equal(transaction.fee, 0.00001);
+  assert.equal(transaction.counterparty, "bitcoincash:qrecipient");
 });

@@ -64,6 +64,7 @@ const {
   normalizeTonMessage,
   normalizeBlockchairUtxoTransaction,
 } = require("./lib/additional-chains");
+const { toBitcoinCashUtxoPayload } = require("./lib/bitcoin-cash");
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const number = Number(value);
@@ -97,6 +98,7 @@ const SETTINGS_DEFAULTS = Object.freeze({
   stellarHorizonBaseUrl: (process.env.STELLAR_HORIZON_BASE_URL || "https://horizon.stellar.org").replace(/\/$/, ""),
   nearBlocksApiBaseUrl: (process.env.NEARBLOCKS_API_BASE_URL || "https://api.nearblocks.io/v1").replace(/\/$/, ""),
   tonApiBaseUrl: (process.env.TONAPI_BASE_URL || "https://tonapi.io/v2").replace(/\/$/, ""),
+  bitcoinCashApiBaseUrl: (process.env.BITCOIN_CASH_API_BASE_URL || "https://bch.fullstack.cash/v6").replace(/\/$/, ""),
   blockchairApiBaseUrl: (process.env.BLOCKCHAIR_API_BASE_URL || "https://api.blockchair.com").replace(/\/$/, ""),
   blockCypherApiBaseUrl: (process.env.BLOCKCYPHER_API_BASE_URL || "https://api.blockcypher.com/v1").replace(/\/$/, ""),
   coinGeckoBaseUrl: (process.env.COINGECKO_API_BASE_URL || "https://api.coingecko.com/api/v3").replace(/\/$/, ""),
@@ -728,6 +730,7 @@ function runtimeSettings() {
     stellarHorizonBaseUrl: values.stellarHorizonBaseUrl || SETTINGS_DEFAULTS.stellarHorizonBaseUrl,
     nearBlocksApiBaseUrl: values.nearBlocksApiBaseUrl || SETTINGS_DEFAULTS.nearBlocksApiBaseUrl,
     tonApiBaseUrl: values.tonApiBaseUrl || SETTINGS_DEFAULTS.tonApiBaseUrl,
+    bitcoinCashApiBaseUrl: values.bitcoinCashApiBaseUrl || SETTINGS_DEFAULTS.bitcoinCashApiBaseUrl,
     blockchairApiBaseUrl: values.blockchairApiBaseUrl || SETTINGS_DEFAULTS.blockchairApiBaseUrl,
     blockCypherApiBaseUrl: values.blockCypherApiBaseUrl || SETTINGS_DEFAULTS.blockCypherApiBaseUrl,
     coinGeckoBaseUrl: values.coinGeckoBaseUrl || SETTINGS_DEFAULTS.coinGeckoBaseUrl,
@@ -774,6 +777,7 @@ function settingsResponse() {
     stellarHorizonBaseUrl: settings.stellarHorizonBaseUrl,
     nearBlocksApiBaseUrl: settings.nearBlocksApiBaseUrl,
     tonApiBaseUrl: settings.tonApiBaseUrl,
+    bitcoinCashApiBaseUrl: settings.bitcoinCashApiBaseUrl,
     blockchairApiBaseUrl: settings.blockchairApiBaseUrl,
     blockCypherApiBaseUrl: settings.blockCypherApiBaseUrl,
     coinGeckoBaseUrl: settings.coinGeckoBaseUrl,
@@ -850,6 +854,7 @@ function updateSettings(input) {
     stellarHorizonBaseUrl: cleanServiceUrl(input.stellarHorizonBaseUrl, "Die Stellar-Horizon-URL"),
     nearBlocksApiBaseUrl: cleanServiceUrl(input.nearBlocksApiBaseUrl, "Die NearBlocks-URL"),
     tonApiBaseUrl: cleanServiceUrl(input.tonApiBaseUrl, "Die TonAPI-URL"),
+    bitcoinCashApiBaseUrl: cleanServiceUrl(input.bitcoinCashApiBaseUrl, "Die Bitcoin-Cash-Indexer-URL"),
     blockchairApiBaseUrl: cleanServiceUrl(input.blockchairApiBaseUrl, "Die Blockchair-URL"),
     blockCypherApiBaseUrl: cleanServiceUrl(input.blockCypherApiBaseUrl, "Die BlockCypher-URL"),
     coinGeckoBaseUrl: cleanServiceUrl(input.coinGeckoBaseUrl, "Die CoinGecko-URL"),
@@ -927,10 +932,12 @@ function positiveNumber(value) {
   return Number.isFinite(number) && number > 0 ? number : null;
 }
 
-async function fetchJson(url, additionalHeaders = {}) {
+async function fetchJsonRequest(url, { method = "GET", body, additionalHeaders = {} } = {}) {
   let response;
   try {
     response = await fetch(url, {
+      method,
+      body,
       headers: { Accept: "application/json", "User-Agent": "CryptoBuch/1.0", ...additionalHeaders },
       signal: AbortSignal.timeout(25000),
     });
@@ -942,6 +949,12 @@ async function fetchJson(url, additionalHeaders = {}) {
     if (response.status === 429) {
       throw makeError("Die Blockchain-Datenquelle begrenzt Anfragen. Bitte kurz warten und die Synchronisierung erneut starten.", 429);
     }
+    if (response.status === 430) {
+      throw makeError("Die Blockchain-Datenquelle hat die Server-IP wegen zu hoher API-Nutzung vorübergehend gesperrt. Die Wallet-Adresse ist nicht fehlerhaft; bitte später erneut synchronisieren oder eine eigene API-Basisadresse verwenden.", 502);
+    }
+    if (response.status === 402) {
+      throw makeError("Die Blockchain-Datenquelle verlangt für diese Abfrage eine Zahlung. CryptoBuch löst niemals automatische Zahlungen aus; bitte eine andere Read-only-API-Basisadresse verwenden.", 502);
+    }
     if (response.status === 401 || response.status === 403) {
       throw makeError("Die Blockchain-Datenquelle hat den Zugriff abgelehnt. Bitte API-Key beziehungsweise Project-ID in den Einstellungen prüfen.", 502);
     }
@@ -951,6 +964,18 @@ async function fetchJson(url, additionalHeaders = {}) {
   const parsed = z.union([z.array(z.unknown()), z.record(z.string(), z.unknown())]).safeParse(payload);
   if (!parsed.success) throw makeError("Die externe Datenquelle lieferte kein gültiges JSON-Objekt oder JSON-Array.", 502);
   return parsed.data;
+}
+
+function fetchJson(url, additionalHeaders = {}) {
+  return fetchJsonRequest(url, { additionalHeaders });
+}
+
+function postJson(url, payload, additionalHeaders = {}) {
+  return fetchJsonRequest(url, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    additionalHeaders: { "Content-Type": "application/json", ...additionalHeaders },
+  });
 }
 
 function fetchHistoricalJson(url, additionalHeaders = {}) {
@@ -1712,6 +1737,52 @@ async function fetchBlockchairTransactions(address, chain, settings) {
   return rows;
 }
 
+function inChunks(values, size) {
+  const chunks = [];
+  for (let index = 0; index < values.length; index += size) chunks.push(values.slice(index, index + size));
+  return chunks;
+}
+
+function bitcoinCashAddress(address) {
+  return `bitcoincash:${String(address || "").trim().replace(/^bitcoincash:/i, "").toLowerCase()}`;
+}
+
+async function fetchBitcoinCashTransactionDetails(hashes, settings) {
+  const rows = [];
+  for (const hashesChunk of inChunks(hashes, 20)) {
+    const payload = await postJson(`${settings.bitcoinCashApiBaseUrl}/fulcrum/tx/data`, { txids: hashesChunk, verbose: true });
+    if (payload.success !== true || !Array.isArray(payload.transactions)) {
+      throw makeError("Der Bitcoin-Cash-Indexer lieferte keine vollständigen Transaktionsdetails.", 502);
+    }
+    rows.push(...payload.transactions);
+  }
+  return rows;
+}
+
+async function fetchBitcoinCashTransactions(address, settings) {
+  const historyUrl = new URL(`${settings.bitcoinCashApiBaseUrl}/fulcrum/transactions/${encodeURIComponent(bitcoinCashAddress(address))}`);
+  historyUrl.searchParams.set("allTxs", "true");
+  const history = await fetchJson(historyUrl.toString());
+  if (history.success !== true || !Array.isArray(history.transactions)) {
+    throw makeError("Der Bitcoin-Cash-Indexer lieferte keine gültige Transaktionshistorie.", 502);
+  }
+
+  const hashes = [...new Set(history.transactions.map((item) => item?.tx_hash).filter((hash) => /^[a-f0-9]{64}$/i.test(hash)))];
+  const limited = settings.maxTransactionsPerSync ? hashes.slice(0, settings.maxTransactionsPerSync) : hashes;
+  if (!limited.length) return [];
+
+  const transactions = await fetchBitcoinCashTransactionDetails(limited, settings);
+  const detailsByHash = new Map(transactions.map((entry) => [entry?.details?.txid || entry?.txid, entry]).filter(([hash]) => Boolean(hash)));
+  const referencedHashes = [...new Set(transactions.flatMap((entry) => (entry?.details?.vin || []).map((input) => input?.txid).filter((hash) => /^[a-f0-9]{64}$/i.test(hash))))]
+    .filter((hash) => !detailsByHash.has(hash));
+  const referencedTransactions = await fetchBitcoinCashTransactionDetails(referencedHashes, settings);
+  for (const entry of referencedTransactions) {
+    const hash = entry?.details?.txid || entry?.txid;
+    if (hash) detailsByHash.set(hash, entry);
+  }
+  return transactions.map((entry) => toBitcoinCashUtxoPayload(entry, detailsByHash));
+}
+
 async function fetchEthereumTransactions(address, settings) {
   const [native, erc20, nfts] = await Promise.all([
     fetchEtherscanRecords(address, "txlist", settings),
@@ -1906,7 +1977,7 @@ const CHAIN_ADAPTERS = {
   },
   BCH: {
     async load(wallet, settings) {
-      return { rawTransactions: await fetchBlockchairTransactions(wallet.address, "bitcoin-cash", settings), context: wallet.address, xpubCapped: false };
+      return { rawTransactions: await fetchBitcoinCashTransactions(wallet.address, settings), context: wallet.address, xpubCapped: false };
     },
     normalize(transaction, address) { return normalizeBlockchairUtxoTransaction(transaction, address, CHAIN_CONFIG.BCH); },
   },

@@ -25,7 +25,7 @@ docker compose down
 - Separate Wallet-Verwaltung sowie dynamische Coin-Detailseiten für Bitcoin, Tezos, TRON, Cardano, Ethereum und erkannte ERC-20-Token mit dem jeweiligen Buchungsjournal
 - Öffentliche Wallet-Adressen für Bitcoin, Tezos, TRON, Cardano, Ethereum, BNB Chain, Solana, XRP Ledger, Dogecoin, Stellar, Bitcoin Cash, NEAR, Litecoin, Avalanche C-Chain, TON und transparente Zcash-Adressen mit frei wählbarem Namen speichern
 - Bitcoin-xPubs importieren und daraus abgeleitete Empfangs- sowie Wechselgeldadressen mit BIP44-Gap-Limit erkennen
-- Historien mit dedizierten Netzwerkadaptern synchronisieren: Blockstream Esplora (BTC), TzKT (XTZ), TronGrid (TRX), Blockfrost (ADA), Etherscan (ETH/ERC-20), BscScan (BNB), Solscan (SOL), XRPL JSON-RPC (XRP), Stellar Horizon (XLM), BlockCypher (DOGE/LTC), Blockchair (BCH/ZEC), NearBlocks (NEAR), Snowtrace (AVAX) und TonAPI (TON)
+- Historien mit dedizierten Netzwerkadaptern synchronisieren: Blockstream Esplora (BTC), TzKT (XTZ), TronGrid (TRX), Blockfrost (ADA), Etherscan (ETH/ERC-20), BscScan (BNB), Solscan (SOL), XRPL JSON-RPC (XRP), Stellar Horizon (XLM), BlockCypher (DOGE/LTC), Fulcrum (BCH), Blockchair (ZEC), NearBlocks (NEAR), Snowtrace (AVAX) und TonAPI (TON)
 - Ein- und Ausgänge, eigene Transfers, Gebühren und Gegenadressen in einer Tabelle darstellen
 - Datenqualität getrennt prüfen: fehlende historische Kurse, Transaktionen ohne Zweck und manuell fixierte Kurse
 - Historische EUR-Kurse je Transaktion manuell hinterlegen, mit Quelle, Begründung und vollständiger Änderungs-Historie; manuelle Werte werden bei späteren Synchronisierungen nicht überschrieben
@@ -211,7 +211,8 @@ Die Wallet-Auswahl enthält alle derzeit über öffentliche Quellen synchronisie
 | XRP Ledger | XRPL JSON-RPC | RPC-Adresse, standardmäßig öffentlich |
 | Stellar | Horizon | Basisadresse, standardmäßig öffentlich |
 | Dogecoin, Litecoin | BlockCypher | Token optional |
-| Bitcoin Cash, transparente Zcash-Adressen | Blockchair | API-Key optional |
+| Bitcoin Cash | Fulcrum-Indexer | kein Key; nur Historie und Transaktionsdetails |
+| Transparente Zcash-Adressen | Blockchair | API-Key optional |
 | NEAR | NearBlocks | API-Key |
 | Avalanche C-Chain | Snowtrace | API-Key |
 | TON | TonAPI | API-Key optional |
