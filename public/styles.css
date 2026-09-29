@@ -501,6 +501,9 @@ a.market-availability:hover { text-decoration: underline; }
 .asset-hero-icon.exchange.trade_republic { color: #fff; background: #171717; }
 .exchange-holdings-panel { margin: 0 0 20px; padding: 21px 23px 23px; border: 1px solid var(--line); border-radius: 10px; background: var(--cream); }
 .exchange-holdings-heading { align-items: flex-end; margin-bottom: 16px; }
+.exchange-balance-notice { margin: 0 0 16px; padding: 12px 13px; border: 1px solid #d7c082; border-radius: 7px; background: #fff8e4; color: #695321; font-size: 11px; line-height: 1.45; }
+.exchange-balance-notice strong { display: block; color: #624810; font-size: 12px; }
+.exchange-balance-notice p { margin: 4px 0 0; }
 .exchange-holdings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
 .exchange-holding-card { display: grid; gap: 13px; min-height: 166px; padding: 15px; border: 1px solid var(--line); border-radius: 8px; background: #fffefa; }
 .exchange-holding-head { display: flex; align-items: center; gap: 10px; min-width: 0; }

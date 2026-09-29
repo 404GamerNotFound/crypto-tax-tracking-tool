@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Börsenbestände und Buchungsjournal in CryptoBuch" />
     <title>CryptoBuch · Börse</title>
-    <link rel="stylesheet" href="/styles.css?v=20260928-1" />
+    <link rel="stylesheet" href="/styles.css?v=20260929-1" />
   </head>
   <body>
     <div class="shell asset-page-shell">
@@ -41,9 +41,10 @@
         <section id="exchange-metrics" class="asset-metrics" aria-label="Börsenübersicht"></section>
 
         <section class="exchange-holdings-panel" aria-labelledby="exchange-holdings-title">
-          <div class="section-heading exchange-holdings-heading"><div><p class="eyebrow">BESTÄNDE AUF DER BÖRSE</p><h2 id="exchange-holdings-title">Aktuelle Assets</h2></div><p class="section-copy">Berechnet aus allen gespeicherten Ein- und Ausgängen dieses Börsenkontos.</p></div>
+          <div class="section-heading exchange-holdings-heading"><div><p class="eyebrow">BESTÄNDE AUF DER BÖRSE</p><h2 id="exchange-holdings-title">Aktuelle Assets</h2></div><p class="section-copy" id="exchange-holdings-copy">Kontostand wird geladen …</p></div>
+          <div class="exchange-balance-notice" id="exchange-balance-notice" hidden></div>
           <div class="exchange-holdings-grid" id="exchange-holdings"></div>
-          <div class="transactions-empty" id="exchange-holdings-empty" hidden><span class="empty-icon">◇</span><strong>Keine Bestände erkannt</strong><p>Alle bisher importierten Bewegungen ergeben aktuell keinen positiven Bestand.</p></div>
+          <div class="transactions-empty" id="exchange-holdings-empty" hidden><span class="empty-icon">◇</span><strong>Keine Bestände erkannt</strong><p>Der bestätigte Kontostand enthält derzeit keine positiven Assets.</p></div>
         </section>
 
         <section class="transactions-panel asset-transactions-panel" aria-labelledby="exchange-transactions-title">
@@ -56,6 +57,6 @@
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script src="/notifications.js?v=20260925-1" defer></script>
-    <script src="/exchange.js?v=20260928-1" defer></script>
+    <script src="/exchange.js?v=20260929-1" defer></script>
   </body>
 </html>

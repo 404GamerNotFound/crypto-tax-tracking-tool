@@ -607,6 +607,26 @@ function migrateExchangeConnectionsToDedicatedAccounts() {
 
 migrateExchangeConnectionsToDedicatedAccounts();
 
+// Exchange history is an accounting journal, while the authenticated
+// read-only balance is the authoritative statement of what is currently on
+// an exchange.  Keep the latter separately: it must never be fabricated as
+// a purchase, sale or tax lot when the history has a gap.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS exchange_balance_snapshot_meta (
+    connection_id INTEGER PRIMARY KEY REFERENCES exchange_connections(id) ON DELETE CASCADE,
+    observed_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS exchange_balance_snapshots (
+    connection_id INTEGER NOT NULL REFERENCES exchange_connections(id) ON DELETE CASCADE,
+    asset TEXT NOT NULL,
+    free_amount REAL NOT NULL,
+    locked_amount REAL NOT NULL,
+    PRIMARY KEY (connection_id, asset)
+  );
+  CREATE INDEX IF NOT EXISTS idx_exchange_balance_snapshots_connection
+    ON exchange_balance_snapshots(connection_id, asset);
+`);
+
 const transactionColumnNames = new Set(db.prepare("PRAGMA table_info(transactions)").all().map((column) => column.name));
 if (!transactionColumnNames.has("purpose_origin")) {
   db.exec("ALTER TABLE transactions ADD COLUMN purpose_origin TEXT NOT NULL DEFAULT 'unspecified'");
@@ -1973,8 +1993,12 @@ function scheduleJobWorker() {
       } else if (job.type === "exchange_history_sync") {
         const connection = getExchangeConnection(payload.connectionId);
         result = await syncBinanceHistoryBatch(connection);
-        if (result.complete) {
-          createNotification("success", "Binance-Historie vollständig", `${connection.label || "Binance"}: Die automatisch abrufbare Kontohistorie wurde vollständig verarbeitet.`);
+        if (result.settled) {
+          if (result.complete) {
+            createNotification("success", "Binance-Historie vollständig", `${connection.label || "Binance"}: Die automatisch abrufbare Kontohistorie wurde vollständig verarbeitet.`);
+          } else {
+            createNotification("warning", "Binance-Historie unvollständig", `${connection.label || "Binance"}: Mindestens ein historischer Markt ist nur über einen Binance-CSV-Export ergänzbar.`);
+          }
           if (result.warnings?.length) createNotification("warning", "Binance-Historie prüfen", result.warnings[0]);
           // Run dependent work only once after the complete history exists;
           // queuing it after every page would delay the serial importer.
@@ -2027,9 +2051,21 @@ function resumeBinanceHistoryImports() {
   for (const connection of connections) queueBinanceHistoryIfNeeded(connection);
 }
 
+function resumeMissingBinanceBalanceSnapshots() {
+  const connections = db.prepare("SELECT * FROM exchange_connections WHERE provider = 'binance' AND import_mode = 'api'").all();
+  for (const connection of connections) {
+    if (exchangeBalanceSnapshot(connection.id)) continue;
+    const active = db.prepare("SELECT id FROM background_jobs WHERE type = 'exchange_sync' AND status IN ('queued', 'running') AND payload_json LIKE ? LIMIT 1")
+      .get(`%\"connectionId\":${connection.id}%`);
+    if (!active) enqueueJob("exchange_sync", { connectionId: connection.id });
+  }
+}
+
 // Existing Binance connections receive the same background import as newly
-// created ones. The queue is serial, so even several accounts remain gentle
-// on the provider's account API.
+// created ones. A missing snapshot runs first so an old, incomplete journal
+// cannot be shown as a live negative position while the serial history import
+// continues in the background.
+resumeMissingBinanceBalanceSnapshots();
 resumeBinanceHistoryImports();
 
 async function syncWallet(wallet) {
@@ -2382,6 +2418,115 @@ function assetDescriptorFromTransaction(transaction) {
   };
 }
 
+function assetDescriptorFromExchangeBalance(assetId) {
+  const normalizedAsset = String(assetId || "").trim().toUpperCase();
+  const native = nativeAssetDescriptors()[normalizedAsset];
+  if (native) return native;
+  const exchangeAsset = EXCHANGE_ASSET_CONFIG[normalizedAsset];
+  if (exchangeAsset) return {
+    id: normalizedAsset,
+    chain: "EXCHANGE",
+    name: exchangeAsset.name,
+    symbol: exchangeAsset.symbol,
+    decimals: exchangeAsset.decimals,
+    icon: exchangeAsset.icon,
+    kind: "exchange",
+  };
+  return {
+    id: normalizedAsset,
+    chain: "EXCHANGE",
+    name: normalizedAsset,
+    symbol: normalizedAsset,
+    decimals: 8,
+    icon: "◇",
+    kind: "exchange",
+  };
+}
+
+const HOLDING_EPSILON = 0.000000000001;
+
+function transactionBalanceDelta(transaction) {
+  const amount = Number(transaction?.amount || 0);
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return transaction.direction === "in" ? amount : transaction.direction === "out" ? -amount : 0;
+}
+
+function addHolding(holdings, assetId, amount) {
+  if (!assetId || !Number.isFinite(amount) || Math.abs(amount) <= HOLDING_EPSILON) return;
+  holdings.set(assetId, Number(holdings.get(assetId) || 0) + amount);
+}
+
+function exchangeBalanceSnapshot(connectionId) {
+  if (!connectionId) return null;
+  const meta = db.prepare("SELECT observed_at FROM exchange_balance_snapshot_meta WHERE connection_id = ?").get(connectionId);
+  if (!meta) return null;
+  const balances = new Map(db.prepare(`
+    SELECT asset, free_amount, locked_amount
+    FROM exchange_balance_snapshots WHERE connection_id = ?
+  `).all(connectionId).map((row) => [row.asset, Number(row.free_amount || 0) + Number(row.locked_amount || 0)]));
+  return { observedAt: meta.observed_at, balances };
+}
+
+function replaceExchangeBalanceSnapshot(connectionId, balances) {
+  if (!Array.isArray(balances)) return false;
+  const insert = db.prepare(`
+    INSERT INTO exchange_balance_snapshots (connection_id, asset, free_amount, locked_amount)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(connection_id, asset) DO UPDATE SET
+      free_amount = excluded.free_amount, locked_amount = excluded.locked_amount
+  `);
+  db.exec("BEGIN");
+  try {
+    db.prepare("DELETE FROM exchange_balance_snapshots WHERE connection_id = ?").run(connectionId);
+    for (const entry of balances) {
+      const asset = cleanLabel(entry?.asset, 48).toUpperCase();
+      const free = Number(entry?.free || 0);
+      const locked = Number(entry?.locked || 0);
+      if (!asset || !Number.isFinite(free) || !Number.isFinite(locked) || free + locked <= HOLDING_EPSILON) continue;
+      insert.run(connectionId, asset, free, locked);
+    }
+    db.prepare(`INSERT INTO exchange_balance_snapshot_meta (connection_id, observed_at)
+      VALUES (?, datetime('now'))
+      ON CONFLICT(connection_id) DO UPDATE SET observed_at = excluded.observed_at`).run(connectionId);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  return true;
+}
+
+function exchangePosition(wallet, connection, journalHoldings) {
+  const snapshot = connection?.provider === "binance" ? exchangeBalanceSnapshot(connection.id) : null;
+  const assets = new Set([...journalHoldings.keys(), ...(snapshot?.balances.keys() || [])]);
+  const positions = new Map();
+  const reconciliations = [];
+  for (const assetId of assets) {
+    const journalAmount = Number(journalHoldings.get(assetId) || 0);
+    // A Binance snapshot is an authenticated account fact.  Without one,
+    // the journal can only contribute non-negative amounts; a missing input
+    // is a data-quality issue, never a negative crypto holding.
+    const balanceAmount = snapshot ? Number(snapshot.balances.get(assetId) || 0) : Math.max(0, journalAmount);
+    if (balanceAmount > HOLDING_EPSILON) positions.set(assetId, balanceAmount);
+    const difference = balanceAmount - journalAmount;
+    if (Math.abs(difference) > HOLDING_EPSILON) {
+      reconciliations.push({
+        connectionId: connection?.id || null,
+        walletId: wallet.id,
+        provider: connection?.provider || null,
+        label: connection?.label || wallet.label || "Börsenkonto",
+        asset: assetId,
+        journalAmount,
+        balanceAmount,
+        difference,
+        source: snapshot ? "binance_spot_snapshot" : "journal_clamped",
+        observedAt: snapshot?.observedAt || null,
+      });
+    }
+  }
+  return { positions, reconciliations, snapshot };
+}
+
 async function portfolioResponse() {
   const wallets = db.prepare(`SELECT w.*, COALESCE(m.group_name, '') AS group_name, COALESCE(m.tags, '[]') AS tags
     FROM wallets w LEFT JOIN wallet_metadata m ON m.wallet_id = w.id
@@ -2395,10 +2540,33 @@ async function portfolioResponse() {
   `).all();
   const holdings = Object.fromEntries(Object.values(CHAIN_CONFIG).map((chain) => [chain.asset, 0]));
   const assets = nativeAssetDescriptors();
+  const exchangeJournalByWallet = new Map();
   for (const transaction of transactions) {
     assets[transaction.asset] = assets[transaction.asset] || assetDescriptorFromTransaction(transaction);
-    const sign = transaction.direction === "in" ? 1 : transaction.direction === "out" ? -1 : 0;
-    holdings[transaction.asset] = Number(holdings[transaction.asset] || 0) + sign * Number(transaction.amount);
+    const delta = transactionBalanceDelta(transaction);
+    if (transaction.source_type === "exchange") {
+      if (!exchangeJournalByWallet.has(transaction.wallet_id)) exchangeJournalByWallet.set(transaction.wallet_id, new Map());
+      addHolding(exchangeJournalByWallet.get(transaction.wallet_id), transaction.asset, delta);
+    } else {
+      holdings[transaction.asset] = Number(holdings[transaction.asset] || 0) + delta;
+    }
+  }
+  const exchangeWallets = db.prepare(`
+    SELECT w.id, w.label, c.id AS connection_id, c.provider, c.label AS connection_label
+    FROM wallets w
+    LEFT JOIN exchange_connections c ON c.wallet_id = w.id
+    WHERE w.source_type = 'exchange'
+  `).all();
+  const balanceReconciliations = [];
+  for (const wallet of exchangeWallets) {
+    const journal = exchangeJournalByWallet.get(wallet.id) || new Map();
+    const connection = wallet.connection_id ? { id: wallet.connection_id, provider: wallet.provider, label: wallet.connection_label } : null;
+    const position = exchangePosition(wallet, connection, journal);
+    for (const [assetId, amount] of position.positions) {
+      assets[assetId] = assets[assetId] || assetDescriptorFromExchangeBalance(assetId);
+      holdings[assetId] = Number(holdings[assetId] || 0) + amount;
+    }
+    balanceReconciliations.push(...position.reconciliations);
   }
   const currentPrices = await getCurrentPrices();
   const tokenPrices = await getErc20CurrentPrices(
@@ -2454,6 +2622,7 @@ async function portfolioResponse() {
     wallets,
     transactions: enriched,
     holdings,
+    balanceReconciliations,
     assetAnalytics,
     assets,
     assetPrices: pricesByAsset,
@@ -2577,6 +2746,8 @@ function resetLocalData() {
     DELETE FROM sync_events;
     DELETE FROM wallet_addresses;
     DELETE FROM wallet_metadata;
+    DELETE FROM exchange_balance_snapshots;
+    DELETE FROM exchange_balance_snapshot_meta;
     DELETE FROM exchange_connections;
     DELETE FROM transactions;
     DELETE FROM wallets;
@@ -3348,26 +3519,45 @@ async function pollStoredTradeRepublicWebLogin(connectionId) {
   return { connection: getExchangeConnection(connection.id), completed: false };
 }
 
-function binanceHistoryIsComplete(connection) {
+function binanceHistoryIsSettled(connection) {
   if (connection.provider !== "binance") return true;
   return Boolean(connection.history_completed_at) || normalizeBinanceHistoryState(connection.history_state).phase === "complete";
+}
+
+function binanceHistoryIsComplete(connection) {
+  if (connection.provider !== "binance") return true;
+  const state = normalizeBinanceHistoryState(connection.history_state);
+  return binanceHistoryIsSettled(connection) && state.unresolvedSymbols.length === 0;
 }
 
 function binanceHistoryView(connection) {
   if (connection.provider !== "binance") return null;
   const state = normalizeBinanceHistoryState(connection.history_state);
   const complete = binanceHistoryIsComplete(connection);
-  const progress = complete ? { current: 400, total: 400, phase: "complete" } : historyProgress(state);
+  const settled = binanceHistoryIsSettled(connection);
+  const progress = settled ? { current: 400, total: 400, phase: "complete" } : historyProgress(state);
   return {
-    status: complete ? "complete" : connection.history_started_at ? "running" : "pending",
-    phase: complete ? "complete" : progress.phase,
-    phaseLabel: historyPhaseLabel(complete ? "complete" : progress.phase),
+    status: complete ? "complete" : settled ? "attention" : connection.history_started_at ? "running" : "pending",
+    phase: settled ? "complete" : progress.phase,
+    phaseLabel: historyPhaseLabel(settled ? "complete" : progress.phase),
     progressCurrent: progress.current,
     progressTotal: progress.total,
     startedAt: connection.history_started_at || null,
     completedAt: connection.history_completed_at || null,
     lastError: connection.history_last_error || null,
     markets: state.symbols || [],
+    unresolvedMarkets: state.unresolvedSymbols || [],
+    warnings: state.warnings || [],
+  };
+}
+
+function exchangeBalanceView(connection) {
+  if (connection.provider !== "binance") return null;
+  const snapshot = exchangeBalanceSnapshot(connection.id);
+  return {
+    status: snapshot ? "confirmed" : "pending",
+    observedAt: snapshot?.observedAt || null,
+    assetCount: snapshot?.balances.size || 0,
   };
 }
 
@@ -3388,6 +3578,7 @@ function exchangeConnectionView(connection) {
     apiKeyConfigured: Boolean(connection.api_key),
     apiSecretConfigured: Boolean(connection.api_secret),
     history: binanceHistoryView(connection),
+    balance: exchangeBalanceView(connection),
     tradeRepublic,
   };
 }
@@ -3400,7 +3591,7 @@ function activeBinanceHistoryJob(connectionId) {
 }
 
 function queueBinanceHistoryIfNeeded(connection, { ignoreJobId = null } = {}) {
-  if (connection.provider !== "binance" || binanceHistoryIsComplete(connection)) return null;
+  if (connection.provider !== "binance" || binanceHistoryIsSettled(connection)) return null;
   const active = activeBinanceHistoryJob(connection.id);
   if (active && Number(active.id) !== Number(ignoreJobId)) return active;
   return enqueueJob("exchange_history_sync", { connectionId: connection.id });
@@ -3410,13 +3601,14 @@ async function exchangePortfolioResponse(id) {
   const connection = getExchangeConnection(id);
   const portfolio = await portfolioResponse();
   const transactions = portfolio.transactions.filter((transaction) => Number(transaction.wallet_id) === Number(connection.wallet_id));
-  const holdings = new Map();
+  const journalHoldings = new Map();
   for (const transaction of transactions) {
-    const sign = transaction.direction === "in" ? 1 : transaction.direction === "out" ? -1 : 0;
-    holdings.set(transaction.asset, Number(holdings.get(transaction.asset) || 0) + sign * Number(transaction.amount || 0));
+    addHolding(journalHoldings, transaction.asset, transactionBalanceDelta(transaction));
   }
-  const assets = [...holdings.entries()]
-    .filter(([, amount]) => Math.abs(amount) > 0.000000000001)
+  const wallet = { id: connection.wallet_id, label: connection.account_label || connection.label };
+  const position = exchangePosition(wallet, connection, journalHoldings);
+  const assets = [...position.positions.entries()]
+    .filter(([, amount]) => amount > HOLDING_EPSILON)
     .map(([assetId, amount]) => {
       const asset = portfolio.assets[assetId] || { id: assetId, name: assetId, symbol: assetId, decimals: 8, icon: "◇", kind: "unknown" };
       const priceEur = positiveNumber(portfolio.assetPrices[assetId]);
@@ -3431,6 +3623,11 @@ async function exchangePortfolioResponse(id) {
   const totalValueEur = assets.reduce((sum, asset) => sum + Number(asset.currentValueEur || 0), 0);
   return {
     connection: exchangeConnectionView(connection),
+    balance: {
+      source: position.snapshot ? "binance_spot_snapshot" : "journal",
+      observedAt: position.snapshot?.observedAt || null,
+      reconciliations: position.reconciliations,
+    },
     assets,
     transactions,
     transactionCount: transactions.length,
@@ -3452,6 +3649,7 @@ async function syncExchangeConnection(connection) {
   let warnings = [];
   let selectedSymbols = [];
   let limited = false;
+  let balanceSnapshotUpdated = false;
   if (connection.provider === "bitvavo") {
     rows = await fetchBitvavoHistory({ apiBaseUrl: settings.bitvavoApiBaseUrl, apiKey: connection.api_key, apiSecret: connection.api_secret });
   } else if (connection.provider === "binance") {
@@ -3462,6 +3660,7 @@ async function syncExchangeConnection(connection) {
     warnings = result.warnings;
     selectedSymbols = result.selectedSymbols;
     limited = result.rows.length >= 2500;
+    if (Array.isArray(result.accountBalances)) balanceSnapshotUpdated = replaceExchangeBalanceSnapshot(connection.id, result.accountBalances);
   } else if (connection.provider === "etoro") {
     const result = await fetchEtoroHistory({
       apiBaseUrl: settings.etoroApiBaseUrl, apiKey: connection.api_key, userKey: connection.api_secret,
@@ -3493,15 +3692,15 @@ async function syncExchangeConnection(connection) {
   } else throw makeError("Für diese Börse ist noch kein Read-only-Adapter eingerichtet.");
   const imported = importExternalRows(wallet, rows, { source: `${connection.provider}-api`, purposeOrigin: "auto" });
   db.prepare("UPDATE exchange_connections SET last_synced_at = datetime('now') WHERE id = ?").run(connection.id);
-  return { imported, provider: connection.provider, limited: limited || rows.length >= 2500, warnings, selectedSymbols };
+  return { imported, provider: connection.provider, limited: limited || rows.length >= 2500, warnings, selectedSymbols, balanceSnapshotUpdated };
 }
 
 async function syncBinanceHistoryBatch(connection) {
   if (connection.provider !== "binance") throw makeError("Ein historischer Hintergrundimport ist nur für Binance verfügbar.");
   if (connection.import_mode === "csv") throw makeError("Für diese Quelle gibt es keine direkte Read-only-API.");
-  if (binanceHistoryIsComplete(connection)) {
+  if (binanceHistoryIsSettled(connection)) {
     const history = binanceHistoryView(connection);
-    return { imported: 0, provider: connection.provider, complete: true, history, progress: { current: 400, total: 400, phase: "complete" }, warnings: [] };
+    return { imported: 0, provider: connection.provider, complete: history.status === "complete", settled: true, history, progress: { current: 400, total: 400, phase: "complete" }, warnings: history.warnings || [] };
   }
   const wallet = getWallet(connection.wallet_id);
   const settings = runtimeSettings();
@@ -3518,6 +3717,7 @@ async function syncBinanceHistoryBatch(connection) {
     state: connection.history_state,
   });
   const imported = importExternalRows(wallet, result.rows, { source: "binance-api", purposeOrigin: "auto" });
+  if (Array.isArray(result.accountBalances)) replaceExchangeBalanceSnapshot(connection.id, result.accountBalances);
   const serializedState = JSON.stringify(result.nextState);
   db.prepare(`UPDATE exchange_connections
     SET history_state = ?,
@@ -3525,11 +3725,12 @@ async function syncBinanceHistoryBatch(connection) {
       history_completed_at = CASE WHEN ? THEN datetime('now') ELSE NULL END,
       history_last_error = NULL,
       last_synced_at = datetime('now')
-    WHERE id = ?`).run(serializedState, result.complete ? 1 : 0, connection.id);
+    WHERE id = ?`).run(serializedState, result.settled ? 1 : 0, connection.id);
   return {
     imported,
     provider: connection.provider,
     complete: result.complete,
+    settled: result.settled,
     warnings: result.warnings,
     selectedSymbols: result.selectedSymbols,
     progress: result.progress,
@@ -3626,6 +3827,41 @@ app.post("/api/exchange-connections/:id/trade-republic/web-login/poll", async (r
     if (!id) throw makeError("Ungültige Börsenverbindung.");
     const result = await pollStoredTradeRepublicWebLogin(id);
     response.status(202).json({ ...exchangeConnectionView(result.connection), ...(result.completed ? { job: enqueueJob("exchange_sync", { connectionId: result.connection.id }) } : {}) });
+  } catch (error) { next(error); }
+});
+
+app.patch("/api/exchange-connections/:id/binance-markets", (request, response, next) => {
+  try {
+    const id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültige Börsenverbindung.");
+    const connection = getExchangeConnection(id);
+    if (connection.provider !== "binance" || connection.import_mode !== "api") {
+      throw makeError("Historische Märkte können nur für eine Binance-Read-only-Verbindung geändert werden.");
+    }
+    const symbols = parseSymbols(request.body?.symbols);
+    const priorState = normalizeBinanceHistoryState(connection.history_state);
+    // Re-run only the trade phase.  Deposits, withdrawals and dividends are
+    // already independently deduplicated; repeating them would delay a
+    // targeted recovery without improving its result.
+    const nextState = {
+      ...priorState,
+      phase: "trades",
+      endAt: Date.now(),
+      cursorAt: priorState.startAt,
+      offset: 0,
+      symbols: [],
+      markets: [],
+      symbolIndex: 0,
+      fromId: 0,
+      warnings: [],
+      unresolvedSymbols: [],
+    };
+    db.prepare(`UPDATE exchange_connections
+      SET symbols = ?, history_state = ?, history_started_at = datetime('now'),
+        history_completed_at = NULL, history_last_error = NULL
+      WHERE id = ?`).run(symbols.join(","), JSON.stringify(nextState), connection.id);
+    const updated = getExchangeConnection(connection.id);
+    response.status(202).json({ ...exchangeConnectionView(updated), job: queueBinanceHistoryIfNeeded(updated) });
   } catch (error) { next(error); }
 });
 
@@ -3864,4 +4100,14 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, backfillHistoricalPrices, db, resetLocalData, runtimeSettings, settingsResponse, updateSettings };
+module.exports = {
+  app,
+  backfillHistoricalPrices,
+  db,
+  resetLocalData,
+  runtimeSettings,
+  settingsResponse,
+  updateSettings,
+  exchangePosition,
+  replaceExchangeBalanceSnapshot,
+};

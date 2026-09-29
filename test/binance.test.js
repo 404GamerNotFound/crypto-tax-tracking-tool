@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   signedQuery, signedUrl, normalizeSpotTrade, normalizeDeposit, normalizeWithdrawal,
-  normalizeDividend, parseSymbols, candidateSymbols, normalizeBinanceHistoryState,
+  normalizeDividend, normalizeAccountBalances, parseSymbols, candidateSymbols, inferredMarketInfo, normalizeBinanceHistoryState,
   historyProgress, fetchBinanceHistory, fetchBinanceHistoryBatch,
 } = require("../lib/binance");
 
@@ -47,6 +47,20 @@ test("ermittelt Spot-Märkte aus Beständen oder expliziter Eingabe", () => {
   assert.deepEqual(candidateSymbols({ balances: [] }, { symbols: [
     { symbol: "ETHEUR", status: "TRADING", isSpotTradingAllowed: true, baseAsset: "ETH", quoteAsset: "EUR" },
   ] }, ["ETH"]), ["ETHEUR"]);
+  assert.deepEqual(candidateSymbols({ balances: [] }, { symbols: [
+    { symbol: "OLDUSDT", status: "BREAK", isSpotTradingAllowed: true, baseAsset: "OLD", quoteAsset: "USDT" },
+  ] }, ["OLD"]), ["OLDUSDT"]);
+});
+
+test("normalisiert bestätigte Spot-Bestände und kann einen nicht mehr gelisteten Markt ableiten", () => {
+  assert.deepEqual(normalizeAccountBalances({ balances: [
+    { asset: "BTC", free: "0.001", locked: "0.002" }, { asset: "ETH", free: "0", locked: "0" }, { asset: "XBT", free: "0.1", locked: "0" },
+  ] }), [
+    { asset: "BTC", free: 0.101, locked: 0.002, total: 0.10300000000000001 },
+  ]);
+  assert.deepEqual(inferredMarketInfo("OLDUSDT", ["OLD"]), {
+    symbol: "OLDUSDT", baseAsset: "OLD", quoteAsset: "USDT", isSpotTradingAllowed: true, inferred: true,
+  });
 });
 
 test("normalisiert den fortsetzbaren Binance-Historienfortschritt", () => {
@@ -111,6 +125,41 @@ test("verwendet für folgende Trade-Seiten gespeicherte Marktmetadaten", async (
   });
   assert.equal(result.complete, true);
   assert.deepEqual(calls, ["/api/v3/myTrades"]);
+});
+
+test("markiert nicht mehr abrufbare historische Märkte statt die Historie fälschlich als vollständig auszugeben", async () => {
+  const fetchImpl = async () => ({ ok: false, status: 400, json: async () => ({ msg: "Invalid symbol." }) });
+  const result = await fetchBinanceHistoryBatch({
+    apiBaseUrl: "https://api.binance.com", apiKey: "public-key", apiSecret: "secret", fetchImpl, requestGapMs: 0,
+    state: {
+      phase: "trades", startAt: Date.UTC(2020, 0, 1), endAt: Date.UTC(2020, 0, 2), symbols: ["OLDUSDT"],
+      markets: [{ symbol: "OLDUSDT", baseAsset: "OLD", quoteAsset: "USDT" }], symbolIndex: 0,
+    },
+  });
+  assert.equal(result.settled, true);
+  assert.equal(result.complete, false);
+  assert.deepEqual(result.nextState.unresolvedSymbols, ["OLDUSDT"]);
+  assert.match(result.warnings[0], /CSV-Export/);
+});
+
+test("fragt einen explizit angegebenen früheren Markt auch ohne heutige Exchange-Info ab", async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    const requestUrl = new URL(url);
+    calls.push(requestUrl.pathname);
+    if (requestUrl.pathname === "/api/v3/account") return { ok: true, json: async () => ({ balances: [{ asset: "BTC", free: "0.01", locked: "0" }] }) };
+    if (requestUrl.pathname === "/api/v3/exchangeInfo") return { ok: true, json: async () => ({ symbols: [] }) };
+    if (requestUrl.pathname === "/api/v3/myTrades") return { ok: true, json: async () => [] };
+    throw new Error(`Unexpected ${requestUrl.pathname}`);
+  };
+  const result = await fetchBinanceHistoryBatch({
+    apiBaseUrl: "https://api.binance.com", apiKey: "public-key", apiSecret: "secret", fetchImpl, requestGapMs: 0,
+    symbols: "OLDUSDT", knownAssets: ["BTC"],
+    state: { phase: "trades", startAt: Date.UTC(2020, 0, 1), endAt: Date.UTC(2020, 0, 2) },
+  });
+  assert.equal(result.complete, true);
+  assert.deepEqual(result.selectedSymbols, ["OLDUSDT"]);
+  assert.deepEqual(calls, ["/api/v3/account", "/api/v3/exchangeInfo", "/api/v3/myTrades"]);
 });
 
 test("holt Binance-Daten seriell und hält öffentliche Metadaten von signierten Aufrufen getrennt", async () => {

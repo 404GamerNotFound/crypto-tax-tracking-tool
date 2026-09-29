@@ -26,7 +26,9 @@ test("setzt alle aktiven lokalen Daten zurück und behält Backups", () => {
   db.prepare("INSERT INTO historical_price_retries (transaction_id, attempt_count, last_attempt_at, next_attempt_at) VALUES (?, 1, '2026-01-01', '2026-01-02')").run(transactionId);
   db.prepare("INSERT INTO transaction_price_audit (transaction_id, price_eur, source) VALUES (?, 1, 'manual')").run(transactionId);
   db.prepare("INSERT INTO transfer_links (outgoing_transaction_id, incoming_transaction_id) VALUES (?, ?)").run(transactionId, secondTransactionId);
-  db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret) VALUES ('bitvavo', ?, 'Reset-Börse', 'key', 'secret')").run(walletId);
+  const connectionId = Number(db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret) VALUES ('bitvavo', ?, 'Reset-Börse', 'key', 'secret')").run(walletId).lastInsertRowid);
+  db.prepare("INSERT INTO exchange_balance_snapshot_meta (connection_id) VALUES (?)").run(connectionId);
+  db.prepare("INSERT INTO exchange_balance_snapshots (connection_id, asset, free_amount, locked_amount) VALUES (?, 'BTC', 1, 0)").run(connectionId);
   db.prepare("INSERT INTO app_settings (setting_key, setting_value) VALUES ('reset-test', 'value')").run();
   db.prepare("INSERT INTO price_history (coin_id, price_date, price_eur) VALUES ('bitcoin', '2026-01-01', 42)").run();
   db.prepare("INSERT INTO background_jobs (type, payload_json) VALUES ('wallet_sync', '{}')").run();
@@ -40,7 +42,7 @@ test("setzt alle aktiven lokalen Daten zurück und behält Backups", () => {
   const deleted = resetLocalData();
 
   assert.deepEqual(deleted, { wallets: 1, transactions: 2, documents: 1 });
-  for (const table of ["wallets", "wallet_metadata", "wallet_addresses", "transactions", "historical_price_retries", "transaction_price_audit", "sync_events", "transfer_links", "exchange_connections", "app_settings", "price_history", "background_jobs", "notifications", "tax_report_snapshots", "transaction_documents"]) {
+  for (const table of ["wallets", "wallet_metadata", "wallet_addresses", "transactions", "historical_price_retries", "transaction_price_audit", "sync_events", "transfer_links", "exchange_connections", "exchange_balance_snapshot_meta", "exchange_balance_snapshots", "app_settings", "price_history", "background_jobs", "notifications", "tax_report_snapshots", "transaction_documents"]) {
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count, 0, `${table} wurde nicht geleert`);
   }
   assert.equal(fs.existsSync(path.join(dataDir, "documents", "reset-document")), false);

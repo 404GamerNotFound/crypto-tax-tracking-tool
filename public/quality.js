@@ -266,6 +266,10 @@ function providerMark(provider) {
 function historyCopy(history) {
   if (!history) return null;
   if (history.status === "complete") return "Vollständig automatisch importiert";
+  if (history.status === "attention") {
+    const markets = (history.unresolvedMarkets || []).join(", ");
+    return `Unvollständig${markets ? ` · CSV für ${markets} ergänzen` : " · historische Märkte ergänzen"}`;
+  }
   if (history.lastError) return `Angehalten: ${history.lastError}`;
   if (history.status === "running") {
     const percent = history.progressTotal ? Math.min(100, Math.round((history.progressCurrent / history.progressTotal) * 100)) : 0;
@@ -285,7 +289,7 @@ function connectionCard(connection) {
   const activationPending = tradeRepublic?.status === "approval_pending";
   const activationNeeded = tradeRepublic && tradeRepublic.status !== "connected";
   name.append(node("strong", "", connection.label || provider.defaultLabel || connection.provider), node("span", "", `${provider.label || connection.provider} · ${csv ? "lokaler CSV-Import" : "Read-only"}`));
-  const historyStatus = activationPending ? "App-Freigabe offen" : tradeRepublic?.status === "login_error" ? "Anmeldung prüfen" : connection.history?.lastError ? "Historie prüfen" : connection.history?.status === "running" ? "Historie läuft" : connection.history?.status === "pending" ? "Historie bereit" : connection.lastSyncedAt ? (csv ? "Importiert" : "Synchronisiert") : "Bereit";
+  const historyStatus = activationPending ? "App-Freigabe offen" : tradeRepublic?.status === "login_error" ? "Anmeldung prüfen" : connection.history?.lastError || connection.history?.status === "attention" ? "Historie prüfen" : connection.history?.status === "running" ? "Historie läuft" : connection.history?.status === "pending" ? "Historie bereit" : connection.lastSyncedAt ? (csv ? "Importiert" : "Synchronisiert") : "Bereit";
   const status = node("span", "sync-status" + (connection.lastSyncedAt ? " is-synced" : ""), historyStatus);
   head.append(mark, name, status);
   const details = node("dl", "exchange-connection-details");
@@ -299,10 +303,18 @@ function connectionCard(connection) {
     history.append(node("dt", "", "Historienimport"), node("dd", connection.history.lastError ? "history-error" : "", historyCopy(connection.history)));
     details.append(history);
   }
-  if (connection.provider === "binance" && connection.symbols) {
+  if (connection.provider === "binance" && (connection.symbols || connection.history?.markets?.length)) {
     const markets = node("div");
-    markets.append(node("dt", "", "Märkte"), node("dd", "", connection.symbols));
+    markets.append(node("dt", "", "Märkte"), node("dd", "", connection.symbols || connection.history.markets.join(", ")));
     details.append(markets);
+  }
+  if (connection.balance) {
+    const balance = node("div");
+    const copy = connection.balance.status === "confirmed"
+      ? `Spot-Saldo bestätigt${connection.balance.observedAt ? ` · ${readableDateTime(connection.balance.observedAt)}` : ""}`
+      : "Spot-Saldo wird beim nächsten Binance-Sync bestätigt";
+    balance.append(node("dt", "", "Kontostand"), node("dd", connection.balance.status === "pending" ? "history-error" : "", copy));
+    details.append(balance);
   }
   if (tradeRepublic) {
     const activation = node("div");
@@ -313,7 +325,7 @@ function connectionCard(connection) {
     details.append(activation);
   }
   const footer = node("div", "exchange-connection-card-footer");
-  footer.append(node("p", "", csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : activationNeeded ? "Vor dem ersten Import muss die inoffizielle Trade-Republic-Webanmeldung in der App bestätigt werden. Der Import ruft ausschließlich Timeline und Details ab." : connection.history && connection.history.status !== "complete" ? "Die Binance-Historie wird automatisch in kleinen, seriellen Schritten nachgeladen. Der Transfer-Abgleich folgt nach Abschluss." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
+  footer.append(node("p", "", csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : activationNeeded ? "Vor dem ersten Import muss die inoffizielle Trade-Republic-Webanmeldung in der App bestätigt werden. Der Import ruft ausschließlich Timeline und Details ab." : connection.history?.status === "attention" ? "Die API kann nicht alle historischen Märkte liefern. Ergänze die genannten Märkte oder den vollständigen Binance-CSV-Export; fehlende Buchungen werden nie als Kauf oder Verkauf erfunden." : connection.history && connection.history.status !== "complete" ? "Die Binance-Historie wird automatisch in kleinen, seriellen Schritten nachgeladen. Der Transfer-Abgleich folgt nach Abschluss." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
   const actions = node("div", "exchange-connection-actions");
   const sync = node("button", "button button-secondary button-small", csv ? "CSV importieren" : activationPending ? "App-Bestätigung öffnen" : activationNeeded ? "Web-Anmeldung starten" : "Jetzt synchronisieren");
   sync.type = "button";
@@ -335,6 +347,25 @@ function connectionCard(connection) {
       toast(error.message, "error");
     }
   });
+  if (connection.provider === "binance" && !csv) {
+    const markets = node("button", "text-button", "Historische Märkte ergänzen");
+    markets.type = "button";
+    markets.addEventListener("click", async () => {
+      const value = prompt("Historische Binance-Spot-Märkte (durch Komma getrennt). Leer lassen, um nur automatisch erkannte Märkte erneut zu prüfen.", connection.symbols || "");
+      if (value === null) return;
+      markets.disabled = true;
+      try {
+        const result = await api("/api/exchange-connections/" + connection.id + "/binance-markets", { method: "PATCH", body: JSON.stringify({ symbols: value }) });
+        toast(result.job ? "Historische Spot-Märkte werden erneut geprüft." : "Märkte gespeichert.");
+        await load();
+      } catch (error) {
+        toast(error.message, "error");
+      } finally {
+        markets.disabled = false;
+      }
+    });
+    actions.append(markets);
+  }
   const remove = node("button", "text-button exchange-remove", "Verbindung entfernen");
   remove.type = "button";
   remove.addEventListener("click", async () => {

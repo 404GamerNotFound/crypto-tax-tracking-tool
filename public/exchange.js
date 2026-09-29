@@ -83,6 +83,10 @@ function metric(label, value, help = "", tone = "") {
 function historyStatus(history) {
   if (!history) return null;
   if (history.status === "complete") return { value: "Vollständig", help: "Automatisch abrufbare Binance-Historie verarbeitet", tone: "success" };
+  if (history.status === "attention") {
+    const markets = (history.unresolvedMarkets || []).join(", ");
+    return { value: "Unvollständig", help: markets ? `CSV-Export für ${markets} ergänzen` : "Historische Märkte oder CSV-Export ergänzen", tone: "warning" };
+  }
   if (history.lastError) return { value: "Prüfen", help: history.lastError, tone: "warning" };
   const percent = history.progressTotal ? Math.min(100, Math.round((history.progressCurrent / history.progressTotal) * 100)) : 0;
   return { value: `${percent} %`, help: `${history.phaseLabel} werden automatisch und gedrosselt nachgeladen`, tone: "highlight" };
@@ -99,9 +103,41 @@ function renderMetrics() {
     metric("Buchungen gespeichert", data.transactionCount.toLocaleString("de-DE"), "Alle lokal importierten Ein- und Ausgänge"),
     metric("Letzter Import", data.connection.lastSyncedAt ? dateTime.format(new Date(`${data.connection.lastSyncedAt}Z`)) : "Noch keiner", data.connection.importMode === "csv" ? "Lokaler CSV-/Beleg-Import" : "Read-only-API · keine Handelsrechte"),
   ];
+  if (data.balance?.source === "binance_spot_snapshot") {
+    entries.splice(2, 0, metric("Kontostand", "Bestätigt", data.balance.observedAt ? `Binance Spot · ${dateTime.format(new Date(`${data.balance.observedAt}Z`))}` : "Binance Spot Read-only", "success"));
+  } else {
+    entries.splice(2, 0, metric("Kontostand", "Journal", "Kein aktueller API-Snapshot verfügbar", "warning"));
+  }
   const history = historyStatus(data.connection.history);
   if (history) entries.push(metric("Binance-Historie", history.value, history.help, history.tone));
   metrics.replaceChildren(...entries);
+}
+
+function renderBalanceNotice() {
+  const notice = el("exchange-balance-notice");
+  const balance = state.data?.balance || {};
+  const differences = balance.reconciliations || [];
+  notice.replaceChildren();
+  if (balance.source !== "binance_spot_snapshot" && !differences.length) {
+    el("exchange-holdings-copy").textContent = "Aus dem lokal gespeicherten Buchungsjournal berechnet.";
+    notice.hidden = true;
+    return;
+  }
+  el("exchange-holdings-copy").textContent = balance.source === "binance_spot_snapshot"
+    ? "Aus dem aktuellen, read-only abgefragten Binance-Spot-Saldo."
+    : "Aus dem lokal gespeicherten Buchungsjournal berechnet.";
+  const title = document.createElement("strong");
+  const copy = document.createElement("p");
+  if (!differences.length) {
+    title.textContent = "Kontostand mit Journal abgeglichen";
+    copy.textContent = "Der aktuelle Binance-Spot-Saldo stimmt mit den importierten Buchungen überein. Der Kontostand wird nur lesend abgefragt.";
+  } else {
+    const assets = differences.map((item) => item.asset).join(", ");
+    title.textContent = "Historisches Journal weicht vom bestätigten Kontostand ab";
+    copy.textContent = `Betroffen: ${assets}. Es werden ausschließlich die aktuellen Binance-Spot-Bestände angezeigt. Die Differenz wird nicht als Kauf, Verkauf oder FIFO-Charge erzeugt; ergänze fehlende Märkte oder den Binance-CSV-Export.`;
+  }
+  notice.append(title, copy);
+  notice.hidden = false;
 }
 
 function renderHoldings() {
@@ -219,6 +255,7 @@ function render() {
   const refresh = el("refresh-exchange");
   refresh.hidden = csv || data.connection.syncAvailable === false;
   renderMetrics();
+  renderBalanceNotice();
   renderHoldings();
   renderTransactions();
   clearTimeout(historyRefreshTimer);

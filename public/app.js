@@ -107,7 +107,8 @@ function render() {
   const knownProfits = reports.map((report) => report?.purchases?.profitEur).filter((value) => hasNumber(value));
   const partialProfits = reports.filter((report) => report?.purchases?.profitIsPartial).length;
   const earningsValue = reports.reduce((sum, report) => sum + Number(report?.staking?.currentValueEur || 0), 0);
-  const dataIssues = (portfolio.transactions || []).filter((transaction) => !transaction.purpose || !hasNumber(transaction.price_transaction_eur)).length;
+  const dataIssues = (portfolio.transactions || []).filter((transaction) => !transaction.purpose || !hasNumber(transaction.price_transaction_eur)).length
+    + (portfolio.balanceReconciliations || []).length;
   el("purchase-profit").textContent = knownProfits.length ? formatCurrency(knownProfits.reduce((sum, value) => sum + Number(value), 0)) : "k. A.";
   el("purchase-profit-help").textContent = partialProfits ? `${partialProfits} Coin${partialProfits === 1 ? "" : "s"} teilweise bewertet` : "Vollständig bewertete FIFO-Chargen";
   el("earnings-value").textContent = formatCurrency(earningsValue);
@@ -126,10 +127,10 @@ function render() {
   const walletChains = new Set((portfolio.wallets || []).map((wallet) => wallet.chain));
   for (const chain of Object.values(portfolio.chains || {})) {
     const asset = assetInfo(chain.asset);
-    if (walletChains.has(chain.asset) || Math.abs(Number(portfolio.holdings?.[chain.asset] || 0)) > 0) dashboard.append(renderAssetCard(chain.asset, asset));
+    if (walletChains.has(chain.asset) || Number(portfolio.holdings?.[chain.asset] || 0) > 0) dashboard.append(renderAssetCard(chain.asset, asset));
   }
   for (const [assetId, asset] of Object.entries(portfolio.assets || {})) {
-    if (["erc20", "exchange"].includes(asset.kind) && Math.abs(Number(portfolio.holdings?.[assetId] || 0)) > 0) dashboard.append(renderAssetCard(assetId, asset));
+    if (["erc20", "exchange"].includes(asset.kind) && Number(portfolio.holdings?.[assetId] || 0) > 0) dashboard.append(renderAssetCard(assetId, asset));
   }
   const hasDataSources = (portfolio.wallets || []).length > 0 || (portfolio.transactions || []).some((transaction) => transaction.source_type === "exchange");
   dashboard.hidden = !hasDataSources;
