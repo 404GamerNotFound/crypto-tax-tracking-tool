@@ -556,14 +556,22 @@ a.market-availability:hover { text-decoration: underline; }
 .insight-panel { min-height: 250px; padding: 20px 22px; border: 1px solid var(--line); border-radius: 9px; background: var(--cream); }
 .insight-panel .section-heading { margin-bottom: 17px; }
 .insight-panel h2 { font-size: 25px; }
+.history-chart-heading { align-items: flex-end; }
+.history-range-control { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.history-range-button { min-height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--green-dark); background: #fffefa; font: 600 9px "DM Mono", monospace; cursor: pointer; }
+.history-range-button:hover { border-color: var(--green); background: var(--mint); }
+.history-range-button.is-active { border-color: var(--green); color: #fff; background: var(--green); }
+.history-range-button:focus-visible { outline: 2px solid #7bb590; outline-offset: 2px; }
+.history-range-summary { min-height: 17px; margin: -7px 0 8px; color: var(--muted); font: 10px "DM Mono", monospace; }
 .allocation-chart { display: grid; gap: 11px; }
 .allocation-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 50px; align-items: center; gap: 9px; font: 10px "DM Mono", monospace; }
 .allocation-row strong { text-align: right; color: var(--green-dark); }
 .allocation-bar { height: 8px; overflow: hidden; border-radius: 999px; background: #e2e9e1; }
 .allocation-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--green), #7eba91); }
-.portfolio-history-chart { min-height: 180px; display: grid; align-items: center; color: var(--muted); font-size: 12px; }
-.portfolio-history-chart svg { width: 100%; height: 190px; overflow: visible; }
+.portfolio-history-chart { min-height: 200px; display: grid; align-items: center; color: var(--muted); font-size: 12px; }
+.portfolio-history-chart svg { width: 100%; height: 210px; overflow: visible; }
 .portfolio-history-chart .chart-empty { min-height: 180px; }
+.history-chart-marker { fill: var(--cream); stroke: var(--green); stroke-width: 3; }
 .notifications-panel { margin: 0 0 42px; padding: 20px 22px; border: 1px solid var(--line); border-radius: 9px; background: var(--cream); }
 .notification-list { display: grid; gap: 8px; }
 .notification-item { padding: 11px 13px; border-left: 3px solid var(--green); border-radius: 4px; background: #f4f8f3; }
@@ -662,6 +670,10 @@ a.market-availability:hover { text-decoration: underline; }
   .asset-chart-panel { padding: 17px 14px 12px; }
   .exchange-holdings-panel { padding: 17px; }
   .insight-grid { grid-template-columns: 1fr; }
+  .history-chart-heading { align-items: flex-start; flex-direction: column; }
+  .history-range-control { justify-content: flex-start; }
+  .portfolio-history-chart { min-height: 185px; overflow-x: auto; }
+  .portfolio-history-chart svg { min-width: 520px; height: 195px; }
   .asset-chart { min-height: 205px; overflow-x: auto; }
   .asset-chart svg { min-width: 620px; height: 205px; }
   .report-main { padding-top: 35px; }

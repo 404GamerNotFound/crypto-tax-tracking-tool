@@ -1,6 +1,15 @@
-const state = { portfolio: null, market: null };
+const state = { portfolio: null, market: null, historyRange: "max" };
 const { api, el, formatCurrency, hasNumber, toast } = window.CryptoBuchUI;
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
+const chartDate = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "short", year: "numeric" });
+const chartValue = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", notation: "compact", maximumFractionDigits: 1 });
+const HISTORY_RANGES = Object.freeze({
+  day: { label: "1 Tag", days: 1 },
+  month: { label: "1 Monat", days: 31 },
+  year: { label: "1 Jahr", days: 365 },
+  fiveYears: { label: "5 Jahre", days: 365 * 5 },
+  max: { label: "Max", days: null },
+});
 
 function assetInfo(assetId) {
   return state.portfolio?.assets?.[assetId] || state.portfolio?.chains?.[assetId] || { symbol: assetId, decimals: 6, chain: assetId };
@@ -112,54 +121,140 @@ function render() {
   renderInsights(portfolio.insights || {});
 }
 
-function renderInsights(insights) {
-  const allocation = el("allocation-chart");
-  allocation.replaceChildren();
-  const entries = (insights.allocation || []).slice(0, 7);
-  if (!entries.length) { allocation.textContent = "Noch keine bewertbaren Bestände."; return; }
-  for (const entry of entries) {
-    const row = document.createElement("div"); row.className = "allocation-row";
-    const name = document.createElement("span"); name.textContent = assetInfo(entry.asset).symbol || entry.asset;
-    const bar = document.createElement("span"); bar.className = "allocation-bar";
-    const fill = document.createElement("i"); fill.style.width = `${Math.max(2, entry.share * 100)}%`; bar.append(fill);
-    const value = document.createElement("strong"); value.textContent = `${(entry.share * 100).toLocaleString("de-DE", { maximumFractionDigits: 1 })} %`;
-    row.append(name, bar, value); allocation.append(row);
+function historyPoints(valueHistory) {
+  const byDay = new Map();
+  for (const raw of Array.isArray(valueHistory) ? valueHistory : []) {
+    const day = String(raw?.day || "");
+    const valueEur = Number(raw?.valueEur);
+    const timestamp = Date.parse(`${day}T00:00:00.000Z`);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(valueEur) && Number.isFinite(timestamp)) {
+      byDay.set(day, { day, valueEur, timestamp });
+    }
   }
-  const chart = el("portfolio-history-chart"); chart.replaceChildren();
-  const points = (Array.isArray(insights.valueHistory) ? insights.valueHistory : [])
-    .map((point) => ({ day: String(point?.day || ""), valueEur: Number(point?.valueEur) }))
-    .filter((point) => /^\d{4}-\d{2}-\d{2}$/.test(point.day) && Number.isFinite(point.valueEur));
+  return [...byDay.values()].sort((left, right) => left.timestamp - right.timestamp);
+}
+
+function selectedHistoryPoints(points) {
+  const range = HISTORY_RANGES[state.historyRange] || HISTORY_RANGES.max;
+  if (!range.days || points.length < 2) return points;
+  const cutoff = points.at(-1).timestamp - range.days * 24 * 60 * 60 * 1000;
+  const firstInRange = points.findIndex((point) => point.timestamp >= cutoff);
+  if (firstInRange <= 0) return points;
+  // Keep the last known book value just before the selected window so the
+  // line starts at a meaningful balance instead of fabricating a zero value.
+  return [points[firstInRange - 1], ...points.slice(firstInRange)];
+}
+
+function updateHistoryRangeButtons() {
+  for (const button of document.querySelectorAll("[data-history-range]")) {
+    const active = button.dataset.historyRange === state.historyRange;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+}
+
+function historyDate(day) {
+  return chartDate.format(new Date(`${day}T00:00:00.000Z`));
+}
+
+function renderHistoryChart(valueHistory) {
+  const chart = el("portfolio-history-chart");
+  const summary = el("portfolio-history-summary");
+  chart.replaceChildren();
+  const points = selectedHistoryPoints(historyPoints(valueHistory));
+  const range = HISTORY_RANGES[state.historyRange] || HISTORY_RANGES.max;
+  updateHistoryRangeButtons();
   if (points.length < 2) {
     const empty = document.createElement("p");
     empty.className = "chart-empty";
-    empty.textContent = "Für einen Verlauf werden mindestens zwei bewertete Tage benötigt.";
+    empty.textContent = range.days ? `Für ${range.label} liegen nicht mindestens zwei bewertete Tage vor.` : "Für einen Verlauf werden mindestens zwei bewertete Tage benötigt.";
+    summary.textContent = "";
     chart.append(empty);
     return;
   }
   const values = points.map((point) => point.valueEur);
   const min = Math.min(...values);
   const max = Math.max(...values);
+  const hasValueRange = max > min;
   const span = max - min || Math.max(Math.abs(max) * 0.1, 1);
+  const width = 720;
+  const height = 220;
+  const inset = { top: 20, right: 18, bottom: 30, left: 62 };
+  const plotWidth = width - inset.left - inset.right;
+  const plotHeight = height - inset.top - inset.bottom;
+  const firstTimestamp = points[0].timestamp;
+  const lastTimestamp = points.at(-1).timestamp;
+  const timeSpan = Math.max(lastTimestamp - firstTimestamp, 1);
+  const x = (point) => inset.left + ((point.timestamp - firstTimestamp) / timeSpan) * plotWidth;
+  const y = (value) => hasValueRange ? inset.top + (1 - ((value - min) / span)) * plotHeight : inset.top + plotHeight / 2;
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 720 220");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", "Historische Buchwertentwicklung");
-  const x = (index) => 20 + (index / (points.length - 1)) * 680;
-  const y = (value) => 190 - ((value - min) / span) * 150;
+  svg.setAttribute("aria-label", `${range.label}: historische Buchwertentwicklung von ${historyDate(points[0].day)} bis ${historyDate(points.at(-1).day)}`);
+  const axisValues = hasValueRange ? [[max, chartValue.format(max)], [min, chartValue.format(min)]] : [[max, chartValue.format(max)]];
+  for (const [value, label] of axisValues) {
+    const line = document.createElementNS(ns, "line");
+    line.setAttribute("class", "chart-grid-line");
+    line.setAttribute("x1", String(inset.left));
+    line.setAttribute("x2", String(width - inset.right));
+    line.setAttribute("y1", y(value).toFixed(2));
+    line.setAttribute("y2", y(value).toFixed(2));
+    const text = document.createElementNS(ns, "text");
+    text.setAttribute("class", "chart-axis-label");
+    text.setAttribute("x", "0");
+    text.setAttribute("y", (y(value) + 3).toFixed(2));
+    text.textContent = label;
+    svg.append(line, text);
+  }
   const polyline = document.createElementNS(ns, "polyline");
-  // Keep these paint attributes on the SVG itself. The chart remains visible
-  // even when an older stylesheet is still cached by a local reverse proxy.
+  // Keep paint attributes on the SVG itself so the line remains visible when
+  // a local reverse proxy still serves an older stylesheet from its cache.
   polyline.setAttribute("fill", "none");
   polyline.setAttribute("stroke", "#0b704a");
   polyline.setAttribute("stroke-width", "4");
   polyline.setAttribute("stroke-linecap", "round");
   polyline.setAttribute("stroke-linejoin", "round");
-  polyline.setAttribute("points", points.map((point, index) => `${x(index).toFixed(2)},${y(point.valueEur).toFixed(2)}`).join(" "));
-  const first = document.createElementNS(ns, "title");
-  first.textContent = `${points[0].day}: ${formatCurrency(points[0].valueEur)}. Letzter Wert ${points.at(-1).day}: ${formatCurrency(points.at(-1).valueEur)}.`;
-  svg.append(first, polyline);
+  polyline.setAttribute("points", points.map((point) => `${x(point).toFixed(2)},${y(point.valueEur).toFixed(2)}`).join(" "));
+  const marker = document.createElementNS(ns, "circle");
+  marker.setAttribute("class", "history-chart-marker");
+  marker.setAttribute("cx", x(points.at(-1)).toFixed(2));
+  marker.setAttribute("cy", y(points.at(-1).valueEur).toFixed(2));
+  marker.setAttribute("r", "4");
+  const startLabel = document.createElementNS(ns, "text");
+  startLabel.setAttribute("class", "chart-axis-label");
+  startLabel.setAttribute("x", String(inset.left));
+  startLabel.setAttribute("y", String(height - 6));
+  startLabel.textContent = historyDate(points[0].day);
+  const endLabel = document.createElementNS(ns, "text");
+  endLabel.setAttribute("class", "chart-axis-label");
+  endLabel.setAttribute("text-anchor", "end");
+  endLabel.setAttribute("x", String(width - inset.right));
+  endLabel.setAttribute("y", String(height - 6));
+  endLabel.textContent = historyDate(points.at(-1).day);
+  const title = document.createElementNS(ns, "title");
+  title.textContent = `${historyDate(points[0].day)}: ${formatCurrency(points[0].valueEur)}. Letzter Wert ${historyDate(points.at(-1).day)}: ${formatCurrency(points.at(-1).valueEur)}.`;
+  svg.append(title, polyline, marker, startLabel, endLabel);
+  summary.textContent = `${range.label} · ${historyDate(points[0].day)} bis ${historyDate(points.at(-1).day)} · ${formatCurrency(points[0].valueEur)} → ${formatCurrency(points.at(-1).valueEur)}`;
   chart.append(svg);
+}
+
+function renderInsights(insights) {
+  const allocation = el("allocation-chart");
+  allocation.replaceChildren();
+  const entries = (insights.allocation || []).slice(0, 7);
+  if (!entries.length) allocation.textContent = "Noch keine bewertbaren Bestände.";
+  else {
+    for (const entry of entries) {
+      const row = document.createElement("div"); row.className = "allocation-row";
+      const name = document.createElement("span"); name.textContent = assetInfo(entry.asset).symbol || entry.asset;
+      const bar = document.createElement("span"); bar.className = "allocation-bar";
+      const fill = document.createElement("i"); fill.style.width = `${Math.max(2, entry.share * 100)}%`; bar.append(fill);
+      const value = document.createElement("strong"); value.textContent = `${(entry.share * 100).toLocaleString("de-DE", { maximumFractionDigits: 1 })} %`;
+      row.append(name, bar, value); allocation.append(row);
+    }
+  }
+  renderHistoryChart(insights.valueHistory);
 }
 
 function renderMarketCatalog() {
@@ -294,5 +389,13 @@ async function backfillHistoricalPrices() {
 
 el("refresh-all").addEventListener("click", syncAll);
 el("backfill-historical-prices").addEventListener("click", backfillHistoricalPrices);
+for (const button of document.querySelectorAll("[data-history-range]")) {
+  button.addEventListener("click", () => {
+    const range = button.dataset.historyRange;
+    if (!HISTORY_RANGES[range] || range === state.historyRange) return;
+    state.historyRange = range;
+    renderHistoryChart(state.portfolio?.insights?.valueHistory);
+  });
+}
 loadPortfolio();
 loadMarketCatalog();

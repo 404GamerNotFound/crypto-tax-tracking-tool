@@ -35,7 +35,21 @@
 
         <section class="insight-grid" aria-label="Portfolio-Analyse">
           <article class="insight-panel"><div class="section-heading"><div><p class="eyebrow">ALLOKATION</p><h2>Aktuelle Verteilung</h2></div></div><div id="allocation-chart" class="allocation-chart"></div></article>
-          <article class="insight-panel"><div class="section-heading"><div><p class="eyebrow">BUCHWERT</p><h2>Historische Entwicklung</h2></div></div><div id="portfolio-history-chart" class="portfolio-history-chart"></div><p class="data-note">Basiert auf den historischen Kursen der importierten Ein- und Ausgänge, nicht auf rückwirkenden Marktwerten.</p></article>
+          <article class="insight-panel">
+            <div class="section-heading history-chart-heading">
+              <div><p class="eyebrow">BUCHWERT</p><h2>Historische Entwicklung</h2></div>
+              <div class="history-range-control" role="group" aria-label="Zeitraum der Buchwertentwicklung">
+                <button type="button" class="history-range-button" data-history-range="day">1 Tag</button>
+                <button type="button" class="history-range-button" data-history-range="month">1 Monat</button>
+                <button type="button" class="history-range-button" data-history-range="year">1 Jahr</button>
+                <button type="button" class="history-range-button" data-history-range="fiveYears">5 Jahre</button>
+                <button type="button" class="history-range-button is-active" data-history-range="max" aria-pressed="true">Max</button>
+              </div>
+            </div>
+            <p class="history-range-summary" id="portfolio-history-summary" aria-live="polite"></p>
+            <div id="portfolio-history-chart" class="portfolio-history-chart"></div>
+            <p class="data-note">Zeigt bewertete Käufe, Verkäufe und Erträge; interne Transfers verändern den Buchwert nicht. Es handelt sich nicht um rückwirkende Marktwerte.</p>
+          </article>
         </section>
 
         <section class="dashboard-overview" aria-label="Portfolio-Gesamtwert">
@@ -117,6 +131,6 @@
     <script src="/ui.js?v=20260929-1" defer></script>
     <script src="/navigation.js?v=20260929-2" defer></script>
     <script src="/notifications.js?v=20260925-1" defer></script>
-    <script src="/app.js?v=20260929-3" defer></script>
+    <script src="/app.js?v=20260930-1" defer></script>
   </body>
 </html>

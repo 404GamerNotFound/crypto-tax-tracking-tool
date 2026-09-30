@@ -23,6 +23,7 @@ const { normalizeCardanoTransaction } = require("./lib/cardano");
 const { normalizeEthereumTransaction, normalizeErc20Transfer, normalizeNftTransfer } = require("./lib/ethereum");
 const { buildTopMarketCatalog } = require("./lib/market-catalog");
 const { calculateAssetAnalytics } = require("./lib/portfolio-analytics");
+const { buildBookValueHistory } = require("./lib/portfolio-history");
 const { calculateTaxReport } = require("./lib/tax-report");
 const { germanyProfile, normalizeTaxProfile } = require("./lib/tax-profile");
 const { buildTaxOptimizer, simulateSale } = require("./lib/tax-optimizer");
@@ -149,8 +150,8 @@ const EXCHANGE_PROVIDERS = Object.freeze({
   }),
   etoro: Object.freeze({
     id: "etoro", label: "eToro · Read-only API", defaultLabel: "eToro", importMode: "api",
-    apiKeyLabel: "eToro Public API-Key", apiSecretLabel: "eToro User-Key",
-    help: "eToro: Public API-Key und User-Key werden nur für lesende Historienabfragen verwendet. CryptoBuch sendet keine Handels-, Auszahlungs- oder Transfer-Anfragen; die API wird seriell und gedrosselt abgefragt.",
+    apiKeyLabel: "eToro Public API-Key", apiSecretLabel: "eToro User-Key", supportsEnvironment: true,
+    help: "eToro: Public API-Key und User-Key werden nur für lesende Historienabfragen verwendet. Wähle Real oder Demo passend zum User-Key; eToro-Keys funktionieren jeweils nur in ihrer Kontoart. CryptoBuch sendet keine Handels-, Auszahlungs- oder Transfer-Anfragen; die API wird seriell und gedrosselt abgefragt.",
   }),
   bsdex: Object.freeze({
     id: "bsdex", label: "BSDEX · Read-only API + Live", defaultLabel: "BSDEX", importMode: "api",
@@ -530,6 +531,7 @@ db.exec(`
     label TEXT NOT NULL DEFAULT '',
     api_key TEXT NOT NULL,
     api_secret TEXT NOT NULL,
+    etoro_environment TEXT NOT NULL DEFAULT 'real' CHECK (etoro_environment IN ('real', 'demo')),
     symbols TEXT NOT NULL DEFAULT '',
     import_mode TEXT NOT NULL DEFAULT 'api' CHECK (import_mode IN ('api', 'csv')),
     history_state TEXT NOT NULL DEFAULT '',
@@ -566,7 +568,8 @@ db.exec(`
 function migrateExchangeConnectionSchema() {
   const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'exchange_connections'").get()?.sql || "";
   const columns = new Set(db.prepare("PRAGMA table_info(exchange_connections)").all().map((column) => column.name));
-  if (sql.includes("binance") && sql.includes("etoro") && sql.includes("bsdex") && sql.includes("trade_republic") && columns.has("symbols") && columns.has("import_mode") && columns.has("history_state") && columns.has("history_started_at") && columns.has("history_completed_at") && columns.has("history_last_error") && columns.has("trade_republic_device_key") && columns.has("trade_republic_activation_id") && columns.has("trade_republic_activation_started_at") && columns.has("trade_republic_activation_error") && columns.has("trade_republic_activated_at") && columns.has("trade_republic_disclaimer_accepted_at") && columns.has("trade_republic_web_session") && columns.has("trade_republic_web_pending_session") && columns.has("trade_republic_web_device_id") && columns.has("trade_republic_web_login_id") && columns.has("trade_republic_web_login_started_at") && columns.has("trade_republic_web_login_error") && columns.has("trade_republic_web_connected_at") && columns.has("live_updates_enabled") && columns.has("live_status") && columns.has("live_connected_at") && columns.has("live_last_event_at") && columns.has("live_last_error") && columns.has("live_last_reconciled_at")) return;
+  if (sql.includes("binance") && sql.includes("etoro") && sql.includes("bsdex") && sql.includes("trade_republic") && columns.has("etoro_environment") && columns.has("symbols") && columns.has("import_mode") && columns.has("history_state") && columns.has("history_started_at") && columns.has("history_completed_at") && columns.has("history_last_error") && columns.has("trade_republic_device_key") && columns.has("trade_republic_activation_id") && columns.has("trade_republic_activation_started_at") && columns.has("trade_republic_activation_error") && columns.has("trade_republic_activated_at") && columns.has("trade_republic_disclaimer_accepted_at") && columns.has("trade_republic_web_session") && columns.has("trade_republic_web_pending_session") && columns.has("trade_republic_web_device_id") && columns.has("trade_republic_web_login_id") && columns.has("trade_republic_web_login_started_at") && columns.has("trade_republic_web_login_error") && columns.has("trade_republic_web_connected_at") && columns.has("live_updates_enabled") && columns.has("live_status") && columns.has("live_connected_at") && columns.has("live_last_event_at") && columns.has("live_last_error") && columns.has("live_last_reconciled_at")) return;
+  const etoroEnvironment = columns.has("etoro_environment") ? "etoro_environment" : "'real'";
   const symbols = columns.has("symbols") ? "symbols" : "''";
   const importMode = columns.has("import_mode") ? "import_mode" : "'api'";
   const historyState = columns.has("history_state") ? "history_state" : "''";
@@ -601,6 +604,7 @@ function migrateExchangeConnectionSchema() {
       label TEXT NOT NULL DEFAULT '',
       api_key TEXT NOT NULL,
       api_secret TEXT NOT NULL,
+      etoro_environment TEXT NOT NULL DEFAULT 'real' CHECK (etoro_environment IN ('real', 'demo')),
       symbols TEXT NOT NULL DEFAULT '',
       import_mode TEXT NOT NULL DEFAULT 'api' CHECK (import_mode IN ('api', 'csv')),
       history_state TEXT NOT NULL DEFAULT '',
@@ -630,8 +634,8 @@ function migrateExchangeConnectionSchema() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(provider, wallet_id, label)
     );
-    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, symbols, import_mode, history_state, history_started_at, history_completed_at, history_last_error, trade_republic_device_key, trade_republic_activation_id, trade_republic_activation_started_at, trade_republic_activation_error, trade_republic_activated_at, trade_republic_disclaimer_accepted_at, trade_republic_web_session, trade_republic_web_pending_session, trade_republic_web_device_id, trade_republic_web_login_id, trade_republic_web_login_started_at, trade_republic_web_login_error, trade_republic_web_connected_at, live_updates_enabled, live_status, live_connected_at, live_last_event_at, live_last_error, live_last_reconciled_at, last_synced_at, created_at)
-      SELECT id, provider, wallet_id, label, api_key, api_secret, ${symbols}, ${importMode}, ${historyState}, ${historyStartedAt}, ${historyCompletedAt}, ${historyLastError}, ${tradeRepublicDeviceKey}, ${tradeRepublicActivationId}, ${tradeRepublicActivationStartedAt}, ${tradeRepublicActivationError}, ${tradeRepublicActivatedAt}, ${tradeRepublicDisclaimerAcceptedAt}, ${tradeRepublicWebSession}, ${tradeRepublicWebPendingSession}, ${tradeRepublicWebDeviceId}, ${tradeRepublicWebLoginId}, ${tradeRepublicWebLoginStartedAt}, ${tradeRepublicWebLoginError}, ${tradeRepublicWebConnectedAt}, ${liveUpdatesEnabled}, ${liveStatus}, ${liveConnectedAt}, ${liveLastEventAt}, ${liveLastError}, ${liveLastReconciledAt}, last_synced_at, created_at FROM exchange_connections;
+    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, etoro_environment, symbols, import_mode, history_state, history_started_at, history_completed_at, history_last_error, trade_republic_device_key, trade_republic_activation_id, trade_republic_activation_started_at, trade_republic_activation_error, trade_republic_activated_at, trade_republic_disclaimer_accepted_at, trade_republic_web_session, trade_republic_web_pending_session, trade_republic_web_device_id, trade_republic_web_login_id, trade_republic_web_login_started_at, trade_republic_web_login_error, trade_republic_web_connected_at, live_updates_enabled, live_status, live_connected_at, live_last_event_at, live_last_error, live_last_reconciled_at, last_synced_at, created_at)
+      SELECT id, provider, wallet_id, label, api_key, api_secret, ${etoroEnvironment}, ${symbols}, ${importMode}, ${historyState}, ${historyStartedAt}, ${historyCompletedAt}, ${historyLastError}, ${tradeRepublicDeviceKey}, ${tradeRepublicActivationId}, ${tradeRepublicActivationStartedAt}, ${tradeRepublicActivationError}, ${tradeRepublicActivatedAt}, ${tradeRepublicDisclaimerAcceptedAt}, ${tradeRepublicWebSession}, ${tradeRepublicWebPendingSession}, ${tradeRepublicWebDeviceId}, ${tradeRepublicWebLoginId}, ${tradeRepublicWebLoginStartedAt}, ${tradeRepublicWebLoginError}, ${tradeRepublicWebConnectedAt}, ${liveUpdatesEnabled}, ${liveStatus}, ${liveConnectedAt}, ${liveLastEventAt}, ${liveLastError}, ${liveLastReconciledAt}, last_synced_at, created_at FROM exchange_connections;
     DROP TABLE exchange_connections;
     ALTER TABLE exchange_connections_migration RENAME TO exchange_connections;
     COMMIT;
@@ -640,6 +644,14 @@ function migrateExchangeConnectionSchema() {
 }
 
 migrateExchangeConnectionSchema();
+
+// eToro trennt Real- und Demo-Historie über unterschiedliche Endpunkte. Eine
+// additive Migration bewahrt alle bestehenden lokalen Zugangsdaten und ordnet
+// vor der Einführung gespeicherte Verbindungen konservativ dem Realkonto zu.
+const exchangeConnectionColumns = new Set(db.prepare("PRAGMA table_info(exchange_connections)").all().map((column) => column.name));
+if (!exchangeConnectionColumns.has("etoro_environment")) {
+  db.exec("ALTER TABLE exchange_connections ADD COLUMN etoro_environment TEXT NOT NULL DEFAULT 'real' CHECK (etoro_environment IN ('real', 'demo'))");
+}
 
 // Existing installations predate automatic purpose assignment. Preserve manual
 // entries, while allowing unclassified legacy rows to be enriched on re-sync.
@@ -3438,16 +3450,7 @@ async function portfolioResponse() {
     .map(([asset, report]) => ({ asset, valueEur: Number(report.holdingValueEur || 0), share: totalValueEur > 0 ? Number(report.holdingValueEur || 0) / totalValueEur : 0 }))
     .filter((entry) => entry.valueEur > 0)
     .sort((a, b) => b.valueEur - a.valueEur);
-  const cumulativeByDay = new Map();
-  let cumulativeValue = 0;
-  for (const transaction of [...enriched].filter((item) => item.timestamp).sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)))) {
-    const price = positiveNumber(transaction.price_transaction_eur);
-    if (!price) continue;
-    const sign = transaction.direction === "in" ? 1 : transaction.direction === "out" ? -1 : 0;
-    cumulativeValue += sign * Number(transaction.amount || 0) * price;
-    cumulativeByDay.set(isoDay(transaction.timestamp), cumulativeValue);
-  }
-  const valueHistory = [...cumulativeByDay.entries()].slice(-180).map(([day, valueEur]) => ({ day, valueEur }));
+  const valueHistory = buildBookValueHistory(enriched);
   const unrealizedProfitEur = Object.values(assetAnalytics).reduce((sum, report) => sum + Number(report.purchases?.profitEur || 0), 0);
   const remainingPurchaseCostEur = Object.values(assetAnalytics).reduce((sum, report) => sum + Number(report.purchases?.remainingCostEur || 0), 0);
   const realizedYear = calculateTaxReport(enriched, new Date().getFullYear(), runtimeSettings()).summary.realizedProfitEur;
@@ -4452,6 +4455,7 @@ function exchangeConnectionView(connection) {
     provider: connection.provider,
     label: connection.label,
     accountLabel: connection.account_label,
+    etoroEnvironment: connection.provider === "etoro" ? (connection.etoro_environment || "real") : null,
     symbols: connection.symbols || "",
     importMode: connection.import_mode || provider?.importMode || "api",
     syncAvailable: (connection.import_mode || provider?.importMode || "api") === "api" && (!tradeRepublic || tradeRepublic.status === "connected"),
@@ -4549,6 +4553,7 @@ async function syncExchangeConnection(connection) {
   } else if (connection.provider === "etoro") {
     const result = await fetchEtoroHistory({
       apiBaseUrl: settings.etoroApiBaseUrl, apiKey: connection.api_key, userKey: connection.api_secret,
+      environment: connection.etoro_environment || "real",
     });
     rows = result.rows;
     warnings = result.warnings;
@@ -4680,8 +4685,12 @@ app.post("/api/exchange-connections", async (request, response, next) => {
     const label = cleanLabel(request.body?.label, 80) || definition.defaultLabel;
     let apiKey = String(request.body?.apiKey || "").trim();
     let apiSecret = String(request.body?.apiSecret || "").trim();
+    const etoroEnvironment = provider === "etoro" ? String(request.body?.etoroEnvironment || "real").trim().toLowerCase() : "real";
     const symbols = parseSymbols(request.body?.symbols).join(",");
     const liveUpdatesEnabled = provider === "bsdex" && request.body?.liveUpdatesEnabled === true ? 1 : 0;
+    if (provider === "etoro" && !["real", "demo"].includes(etoroEnvironment)) {
+      throw makeError("Für eToro bitte Realkonto oder Demokonto auswählen.");
+    }
     if (provider === "trade_republic") {
       if (request.body?.tradeRepublicConsent !== true) {
         throw makeError("Bitte bestätige ausdrücklich die Hinweise zur inoffiziellen Trade-Republic-Geräteanmeldung.");
@@ -4703,9 +4712,9 @@ app.post("/api/exchange-connections", async (request, response, next) => {
       const accountWalletId = createExchangeAccountWallet(provider, label);
       if (provider === "trade_republic") apiSecret = "";
       result = db.prepare(`INSERT INTO exchange_connections
-        (provider, wallet_id, label, api_key, api_secret, symbols, import_mode, live_updates_enabled, live_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(provider, accountWalletId, label, apiKey, apiSecret, symbols, definition.importMode, liveUpdatesEnabled, liveUpdatesEnabled ? "connecting" : "disabled");
+        (provider, wallet_id, label, api_key, api_secret, etoro_environment, symbols, import_mode, live_updates_enabled, live_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(provider, accountWalletId, label, apiKey, apiSecret, etoroEnvironment, symbols, definition.importMode, liveUpdatesEnabled, liveUpdatesEnabled ? "connecting" : "disabled");
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");

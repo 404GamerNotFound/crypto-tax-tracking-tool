@@ -138,8 +138,11 @@ function updateExchangeProviderForm() {
   const api = provider.importMode === "api";
   const tradeRepublic = Boolean(provider.requiresWebLogin);
   const liveUpdates = Boolean(provider.supportsLiveUpdates);
+  const etoro = Boolean(provider.supportsEnvironment);
   el("exchange-symbols-field").hidden = !provider.supportsSymbols;
   el("exchange-live-updates-field").hidden = !liveUpdates;
+  el("exchange-etoro-environment-field").hidden = !etoro;
+  if (!etoro) el("exchange-etoro-environment").value = "real";
   // Live data stays an explicit choice. The user can also enable or pause it
   // later on the connection card without recreating the API connection.
   el("exchange-live-updates").checked = false;
@@ -162,6 +165,8 @@ function updateExchangeProviderForm() {
   el("exchange-security-copy").textContent = api
     ? tradeRepublic
       ? "Inoffiziell & lokal: Die Web-Anmeldung wird in deiner Trade-Republic-App bestätigt. Deine PIN wird nicht gespeichert; nur die lokale Web-Sitzung wird verschlüsselt abgelegt. Es werden keine Handelsfunktionen aufgerufen."
+      : etoro
+        ? "Read-only & lokal: Der User-Key muss zur gewählten eToro-Kontoart (Real oder Demo) gehören und nur Leserechte besitzen. Er wird nach dem Speichern nicht erneut angezeigt."
       : "Read-only & lokal: Die Zugangsdaten dürfen nur Kontostände und Historie lesen. Sie werden nach dem Speichern nicht erneut angezeigt."
     : "Nur lokale Belege: Für diese Quelle werden keine API-, Login- oder Zugangsdaten benötigt oder gespeichert.";
   if (!api) {
@@ -281,6 +286,11 @@ function connectionCard(connection) {
   const synced = node("div");
   synced.append(node("dt", "", "Letzter Import"), node("dd", "", connection.lastSyncedAt ? readableDateTime(connection.lastSyncedAt) : "Noch nicht synchronisiert"));
   details.append(account, synced);
+  if (connection.provider === "etoro") {
+    const environment = node("div");
+    environment.append(node("dt", "", "eToro-Konto"), node("dd", "", connection.etoroEnvironment === "demo" ? "Demokonto" : "Realkonto"));
+    details.append(environment);
+  }
   if (connection.history) {
     const history = node("div");
     history.append(node("dt", "", "Historienimport"), node("dd", connection.history.lastError ? "history-error" : "", historyCopy(connection.history)));
@@ -318,7 +328,7 @@ function connectionCard(connection) {
     details.append(activation);
   }
   const footer = node("div", "exchange-connection-card-footer");
-  footer.append(node("p", "", csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : activationNeeded ? "Vor dem ersten Import muss die inoffizielle Trade-Republic-Webanmeldung in der App bestätigt werden. Der Import ruft ausschließlich Timeline und Details ab." : connection.provider === "bsdex" && connection.live?.enabled ? `BSDEX-Live-Updates laufen nur lesend lokal. Krypto-Ein- und Auszahlungen kommen im seriellen REST-Abgleich alle ${connection.live.reconcileIntervalMinutes} Minuten mit und werden danach als Transfer-Vorschläge mit lokalen Wallets verglichen.` : connection.provider === "bsdex" ? "Abgeschlossene Krypto-Ein- und Auszahlungen werden read-only importiert und danach als Transfer-Vorschläge mit lokalen Wallets verglichen." : connection.history?.status === "attention" ? "Die API kann nicht alle historischen Märkte liefern. Ergänze die genannten Märkte oder den vollständigen Binance-CSV-Export; fehlende Buchungen werden nie als Kauf oder Verkauf erfunden." : connection.history && connection.history.status !== "complete" ? "Die Binance-Historie wird automatisch in kleinen, seriellen Schritten nachgeladen. Der Transfer-Abgleich folgt nach Abschluss." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
+  footer.append(node("p", "", csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : activationNeeded ? "Vor dem ersten Import muss die inoffizielle Trade-Republic-Webanmeldung in der App bestätigt werden. Der Import ruft ausschließlich Timeline und Details ab." : connection.provider === "etoro" ? "eToro-Abfragen bleiben read-only und seriell. Eindeutige, ungehebelte Krypto-Longs werden als Kauf beim Öffnen und Verkauf beim Schließen übernommen; CFD- und Short-Positionen werden nicht als Coin-Bestand geschätzt." : connection.provider === "bsdex" && connection.live?.enabled ? `BSDEX-Live-Updates laufen nur lesend lokal. Krypto-Ein- und Auszahlungen kommen im seriellen REST-Abgleich alle ${connection.live.reconcileIntervalMinutes} Minuten mit und werden danach als Transfer-Vorschläge mit lokalen Wallets verglichen.` : connection.provider === "bsdex" ? "Abgeschlossene Krypto-Ein- und Auszahlungen werden read-only importiert und danach als Transfer-Vorschläge mit lokalen Wallets verglichen." : connection.history?.status === "attention" ? "Die API kann nicht alle historischen Märkte liefern. Ergänze die genannten Märkte oder den vollständigen Binance-CSV-Export; fehlende Buchungen werden nie als Kauf oder Verkauf erfunden." : connection.history && connection.history.status !== "complete" ? "Die Binance-Historie wird automatisch in kleinen, seriellen Schritten nachgeladen. Der Transfer-Abgleich folgt nach Abschluss." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
   const actions = node("div", "exchange-connection-actions");
   const sync = node("button", "button button-secondary button-small", csv ? "CSV importieren" : activationPending ? "App-Bestätigung öffnen" : activationNeeded ? "Web-Anmeldung starten" : "Jetzt synchronisieren");
   sync.type = "button";
@@ -553,6 +563,7 @@ el("exchange-connection-form").addEventListener("submit", async (event) => {
     const result = await api("/api/exchange-connections", { method: "POST", body: JSON.stringify({
       provider: el("exchange-provider").value, label: el("exchange-label").value,
       apiKey: el("exchange-api-key").value, apiSecret: el("exchange-api-secret").value, symbols: el("exchange-symbols").value,
+      etoroEnvironment: el("exchange-etoro-environment").value,
       tradeRepublicConsent: el("exchange-trade-republic-consent").checked,
       liveUpdatesEnabled: el("exchange-live-updates").checked,
     }) });
