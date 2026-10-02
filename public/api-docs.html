@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="CryptoBuch App-API: Endpunkte, Datenmodelle, Parameter und Beziehungen" />
+    <title>CryptoBuch · API-Dokumentation</title>
+    <link rel="stylesheet" href="/styles.css?v=20260929-5" />
+    <link rel="stylesheet" href="/api-docs.css?v=1" />
+  </head>
+  <body>
+    <div class="shell report-shell">
+      <header class="topbar">
+        <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">₿</span><span>CryptoBuch</span></a>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
+      </header>
+      <main class="report-main api-main">
+        <section class="page-hero compact-hero">
+          <div><p class="eyebrow">APP-ENTWICKLUNG · API V1</p><h1>Deine Daten.<br /><em>Deine App.</em></h1><p>Alle öffentlichen Anwendungsdaten abrufen, Beziehungen nachvollziehen und die vorhandenen Aktionen integrieren. Der Vertrag und diese Referenz stammen aus demselben Endpunktkatalog.</p></div>
+          <div class="hero-actions"><a class="button button-primary" href="/api/openapi.json" download="cryptobuch-openapi.json">OpenAPI herunterladen</a><a class="button button-secondary" href="/api/v1">API-Einstieg öffnen</a></div>
+        </section>
+        <nav class="section-subnav" aria-label="API-Bereiche"><a class="section-subnav-link" href="#start">Schnellstart</a><a class="section-subnav-link" href="#relations">Beziehungen</a><a class="section-subnav-link" href="#endpoints">Endpunkte</a><a class="section-subnav-link" href="#models">Datenmodelle</a></nav>
+        <section class="report-panel api-panel" id="start" aria-labelledby="start-title">
+          <p class="eyebrow">IN WENIGEN SCHRITTEN</p><h2 id="start-title">Mit der App verbinden</h2>
+          <ol class="api-steps"><li><code>GET /api/v1</code> liefert Version, Ressourcen, Filter und Beziehungen.</li><li><code>GET /api/v1/metadata</code> liefert Chains, Adressarten, Zwecke, Börsenanbieter und CSV-Profile.</li><li>Listen mit <code>limit</code> und <code>offset</code> laden und <code>links.next</code> bis <code>null</code> folgen. Einzelobjekte stehen unter <code>data</code>, Beziehungen unter <code>data.links</code>.</li><li>Für Änderungen die dokumentierten Aktionsrouten nutzen. Synchronisierungen über <code>POST /api/jobs/sync</code> einreihen und den Jobstatus bis <code>success</code> oder <code>error</code> abfragen.</li></ol>
+          <div class="api-example-grid"><div><h3>Buchungen einer Wallet laden</h3><pre><code>const response = await fetch(
+  '/api/v1/transactions?wallet_id=1&amp;limit=100'
+);
+const result = await response.json();
+if (!response.ok) throw new Error(result.error);
+for (const tx of result.data) {
+  console.log(tx.amount, tx.asset, tx.links.wallet_id);
+}
+// Nächste Seite: result.links.next</code></pre></div><div><h3>Native App / Terminal</h3><pre><code>curl http://localhost:3000/api/v1
+
+curl 'http://localhost:3000/api/v1/wallets?limit=100'
+
+curl 'http://localhost:3000/api/v1/transactions/1'
+
+curl 'http://localhost:3000/api/v1/price-audit?transaction_id=1'</code></pre><p>Auf einem anderen Gerät bezeichnet <code>localhost</code> dieses Gerät. Dort die geschützte Adresse deiner CryptoBuch-Installation als Basis-URL verwenden.</p></div></div>
+          <div class="api-notes"><article><h3>Zugriff &amp; Datenschutz</h3><p>Die lokale API besitzt keine eigene Anmeldung und keine CORS-Freigabe. Browser-Apps benötigen dieselbe Origin oder einen Reverse Proxy. Externen Zugriff über einen authentifizierten HTTPS-Zugang schützen. Adressen und xPubs sind datenschutzsensibel; Provider-Schlüssel und Sitzungen bleiben aus der v1-Lese-API ausgeschlossen. Backup-Downloads können lokale Zugangsdaten enthalten.</p></article><article><h3>Formate &amp; Grenzen</h3><p>JSON, EUR-Werte, Zeitstempel ohne Zeitzone in UTC. Ressourcen verwenden <code>snake_case</code>, bestehende Aktionen teilweise <code>camelCase</code>. Fehlende Werte bleiben <code>null</code>. Listen: 100 Einträge, maximal 500 pro Seite. Aufsteigend nach Primärschlüssel; mehrere Seiten sind kein unveränderlicher Snapshot. JSON-Body maximal 64 KiB, CSV maximal 2.500 Zeilen, Belege maximal 5 MiB.</p></article><article><h3>Ergebnisse &amp; Fehler</h3><p><code>200</code> erfolgreich, <code>201</code> erstellt, <code>202</code> eingereiht, <code>204</code> ohne Inhalt. Fehler: <code>{"error":"…"}</code> mit <code>400</code> (Eingabe), <code>404</code> (unbekannt), <code>409</code> (Konflikt), <code>413</code> (zu groß) oder <code>500</code>. Jobs bei 202 weiterverfolgen. Unbekannte v1-Filter werden abgelehnt.</p></article><article><h3>Datenqualität &amp; Geräte</h3><p>Historische Werte, FIFO-Reports und Steuerplanungen sind unverbindliche Schätzungen und keine Steuerberatung. Manuelle Kurse und Zwecke bleiben geschützt. Die v1-Datenabrufe verwenden nur lokale Daten; Markt- und Portfolio-Routen können externe Kursanbieter benötigen. Ledger kommuniziert ausschließlich im Browser mit dem Gerät; nur bestätigte öffentliche Adressen speichern.</p></article></div>
+        </section>
+        <section class="report-panel api-panel" id="relations" aria-labelledby="relations-title"><p class="eyebrow">ABHÄNGIGKEITEN</p><h2 id="relations-title">So hängen die Daten zusammen</h2><p>Jede Buchung gehört zu einer Wallet. Auch Börsenkonten sind Wallet-Quellen; ihre Zugangsdaten sind getrennt. Ein Transfer verbindet zwei Buchungen, Belege und Kurs-Audits beziehen sich jeweils auf eine Buchung. Direkte und rückwärtige Links ermöglichen die Navigation ohne Datenbankzugriff.</p><div class="table-wrap"><table><thead><tr><th>Ressource</th><th>Fremdschlüssel</th><th>Ziel</th></tr></thead><tbody id="api-relations"></tbody></table></div></section>
+        <section class="report-panel api-panel" id="endpoints" aria-labelledby="endpoints-title"><p class="eyebrow">REFERENZ</p><h2 id="endpoints-title">Alle API-Endpunkte</h2><div class="api-filters"><label><span>Endpunkt suchen</span><input id="api-search" type="search" placeholder="z. B. Wallet, Transfer oder /api/jobs" /></label><label><span>Methode</span><select id="api-method"><option value="">Alle Methoden</option><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select></label></div><p id="api-status" role="status" aria-live="polite">API-Vertrag wird geladen …</p><button class="button button-secondary" id="api-retry" type="button" hidden>Erneut laden</button><div id="api-endpoints"></div></section>
+        <section class="report-panel api-panel" id="models" aria-labelledby="models-title"><p class="eyebrow">DATENVERTRAG</p><h2 id="models-title">Antwort- und Eingabemodelle</h2><p>Hier stehen die Feldtypen des OpenAPI-Vertrags. <code>$ref</code> verweist auf ein benanntes Modell. Freie Objekte kennzeichnen bestehende Auswertungen mit variabler Struktur.</p><div id="api-models"></div></section>
+        <noscript><p>Für die durchsuchbare Referenz bitte JavaScript aktivieren. Der vollständige Vertrag ist als <a href="/api/openapi.json">OpenAPI-JSON</a> direkt abrufbar.</p></noscript>
+      </main>
+    </div>
+    <script src="/navigation.js?v=20260929-2" defer></script>
+    <script src="/api-docs.js?v=1" defer></script>
+  </body>
+</html>

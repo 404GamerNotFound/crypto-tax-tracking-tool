@@ -1,0 +1,33 @@
+.api-main { padding-bottom: 64px; }
+.api-panel { padding: clamp(20px, 3vw, 36px); margin: 24px 0; }
+.api-panel h2 { margin: 0 0 20px; }
+.api-panel h3 { margin: 20px 0 10px; }
+.api-panel p, .api-steps { line-height: 1.7; }
+.api-steps { padding-left: 24px; }
+.api-steps li + li { margin-top: 10px; }
+.api-example-grid, .api-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.api-example-grid > *, .api-notes > * { min-width: 0; }
+.api-main code { font-size: .9em; overflow-wrap: anywhere; }
+.api-main pre { background: #132a24; color: #e8f5ed; border-radius: 12px; padding: 20px; overflow-x: auto; line-height: 1.65; max-width: 100%; }
+.api-main pre code { overflow-wrap: normal; }
+.api-filters { display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 18px; }
+.api-filters label { display: grid; gap: 8px; }
+.api-endpoint, .api-model { border: 1px solid #dce4dd; border-radius: 12px; margin: 12px 0; background: #fffefa; }
+.api-endpoint summary, .api-model summary { padding: 18px; cursor: pointer; overflow-wrap: anywhere; }
+.api-endpoint summary code { margin: 0 12px; }
+.api-endpoint-body, .api-model pre { margin: 0 18px 18px; }
+.api-endpoint-body { overflow: hidden; }
+.api-method { display: inline-block; min-width: 62px; font: 700 12px monospace; color: #21644b; }
+.api-method-write { color: #97601b; }
+.api-endpoint-title { display: inline-block; color: #52645b; font-size: 14px; }
+.api-endpoint-body h3 { font-size: 16px; }
+.api-endpoint table { font-size: 14px; }
+.api-main td { vertical-align: top; }
+.api-legacy { color: #97601b; font-size: 13px; }
+.api-dependencies { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .api-example-grid, .api-notes, .api-filters { grid-template-columns: 1fr; }
+  .api-panel { padding: 18px; }
+  .api-endpoint-title { display: block; margin: 10px 0 0 16px; }
+  .api-endpoint summary code { margin: 0; }
+}

@@ -12,6 +12,7 @@
     { href: "/tax.html", label: "Steuerzentrum" },
     { href: "/maintenance.html", label: "Betrieb" },
     { href: "/settings.html", label: "Einstellungen" },
+    { href: "/api-docs.html", label: "API" },
   ]);
 
   const parentPage = Object.freeze({

@@ -76,6 +76,8 @@ const {
   normalizeBlockchairUtxoTransaction,
 } = require("./lib/additional-chains");
 const { toBitcoinCashUtxoPayload } = require("./lib/bitcoin-cash");
+const { registerAppApi } = require("./lib/app-api");
+const { buildOpenApi } = require("./lib/api-documentation");
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const number = Number(value);
@@ -749,6 +751,10 @@ if (!priceHistoryColumnNames.has("source")) db.exec("ALTER TABLE price_history A
 
 const app = express();
 app.disable("x-powered-by");
+app.use("/api", (_request, response, next) => {
+  response.set("Cache-Control", "no-store");
+  next();
+});
 app.use(express.json({ limit: "64kb" }));
 
 let currentPriceCache = { expiresAt: 0, data: {} };
@@ -5019,6 +5025,14 @@ app.get("/api/explorer/:chain/address/:address", (request, response, next) => {
     next(error);
   }
 });
+
+registerAppApi(app, {
+  db, settingsResponse, chains: CHAIN_CONFIG, purposePresets: PURPOSE_PRESETS,
+  exchangeProviders: EXCHANGE_PROVIDERS, csvProfiles: EXCHANGE_CSV_PROFILES, safeMessage: safeAutomationMessage,
+});
+app.get("/api/openapi.json", (_request, response) => response.json(buildOpenApi(settingsResponse(), { exchangeProviders: EXCHANGE_PROVIDERS })));
+// Unknown API URLs must never return the HTML dashboard fallback.
+app.use("/api", (_request, response) => response.status(404).json({ error: "API-Endpunkt nicht gefunden." }));
 
 app.get("/vendor/uplot.js", (_request, response) => response.sendFile(path.join(__dirname, "node_modules", "uplot", "dist", "uPlot.iife.min.js")));
 app.get("/vendor/uplot.css", (_request, response) => response.sendFile(path.join(__dirname, "node_modules", "uplot", "dist", "uPlot.min.css")));

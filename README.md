@@ -20,6 +20,8 @@ docker compose down
 
 ## Funktionen
 
+- App-API unter `/api/v1` mit paginierten Datenressourcen, Einzelabrufen, Referenzdaten und navigierbaren Beziehungen; vollständige API-Referenz unter `/api-docs.html` und OpenAPI-Vertrag unter `/api/openapi.json`
+
 - Eigenes Dashboard mit aktuellen Beständen, als Kauf zugeordneten Mengen, Gewinn gegenüber verbleibenden FIFO-Kaufkursen und aktuellem Staking-Ertrag je Coin
 - Dynamischer Top-30-Marktüberblick nach Marktkapitalisierung mit EUR-Preis, 24-Stunden-Entwicklung und eindeutiger Kennzeichnung der bereits synchronisierbaren Wallet-Netze beziehungsweise ERC-20-Token
 - Separate Wallet-Verwaltung sowie dynamische Coin-Detailseiten für Bitcoin, Tezos, TRON, Cardano, Ethereum und erkannte ERC-20-Token mit dem jeweiligen Buchungsjournal
@@ -116,6 +118,26 @@ Wallet-Synchronisierungen und die Nachbearbeitung historischer Kurse laufen als 
 Unter **Datenqualität** schlägt CryptoBuch gegenläufige, zeitlich und mengenmäßig ähnliche Bewegungen zwischen eigenen Wallets als mögliche Transfers vor. Nach jeder erfolgreichen Börsen-Synchronisierung werden zudem Börsen-Ein- und Auszahlungen gegen alle lokalen Wallets geprüft; bei Auszahlungen berücksichtigt der Abgleich auch eine mögliche Netzgebühr. Das Ergebnis bleibt immer ein manueller Vorschlag – erst „Transfer verknüpfen“ setzt beide Zwecke und beeinflusst damit die Auswertung. CSV-Nachträge können dort einer bestehenden Wallet zugeordnet werden. Das CSV-Format benötigt die Spalten `timestamp`, `direction`, `asset` und `amount`; optional sind `fee`, `purpose`, `price_eur`, `hash` und `counterparty`. Manuell importierte Preise und Zwecke werden nicht von einer Blockchain-Synchronisierung überschrieben. Eine CSV-Übernahme ist auf 2.500 Zeilen begrenzt.
 
 Wallets lassen sich beim Anlegen mit einer Gruppe und bis zu zwölf Tags strukturieren. Das Dashboard ergänzt die Bestandskarten um eine Allokationsansicht und eine filterbare historische Buchwertentwicklung auf Basis bewerteter Käufe, Verkäufe und Erträge. Interne Transfers bleiben darin neutral; die Darstellung ist keine rückwirkende Marktwertkurve.
+
+### API für eigene Apps
+
+Die Seite **API** erklärt alle Lese-, Schreib-, Import- und Verwaltungsendpunkte mit Parametern, Eingabeformaten, Antworten und Abhängigkeiten. Der maschinenlesbare Vertrag unter `GET /api/openapi.json` verwendet OpenAPI 3.1. Die Dokumentation wird aus demselben Katalog erzeugt; ein Test gleicht ihn mit den tatsächlich registrierten Express-Routen ab.
+
+Mit `GET /api/v1` erhält eine App den Einstieg einschließlich Ressourcen und Datenbeziehungen. `GET /api/v1/metadata` liefert Chains, öffentliche Adressarten, Explorer-Vorlagen, Zwecke, Börsenanbieter, CSV-Profile und Limits. `GET /api/v1/settings` liefert die öffentliche Konfiguration inklusive Steuerprofil; Provider-Schlüssel erscheinen ausschließlich als Konfigurationsstatus.
+
+Die v1-Ressourcen umfassen `wallets` (auch interne Börsenkonten), `transactions`, `wallet-addresses`, `exchange-connections`, `exchange-balances`, `transfers`, `documents`, `price-history`, `price-audit`, `price-retries`, `price-runs`, `price-fetch-events`, `sync-events`, `jobs`, `notifications` und `tax-snapshots`. Diese Lesezugriffe verwenden ausschließlich lokale Daten. Bestehende Auswertungen wie `/api/portfolio`, Steuerberichte, Marktübersicht und Datenqualitätsvorschläge sind im Einstieg verlinkt; Portfolio und Marktübersicht können externe Preisabfragen benötigen.
+
+```bash
+curl http://localhost:3000/api/v1
+curl 'http://localhost:3000/api/v1/transactions?wallet_id=1&limit=100&offset=0'
+curl http://localhost:3000/api/v1/transactions/1
+```
+
+Listen liefern `{ data: [...], pagination: { limit, offset, total, hasMore }, links: { self, next } }`, Einzelabrufe `{ data: {...} }`. `links.next` bis `null` verfolgen. Standard sind 100, maximal 500 Datensätze je Seite, aufsteigend nach Primärschlüssel. Unbekannte oder mehrfach angegebene Filter werden mit HTTP 400 abgelehnt. Während paralleler Änderungen sind mehrere Seiten kein unveränderlicher Snapshot. Ressourcenfelder verwenden `snake_case`; bestehende Aktionen teilweise `camelCase`. Zeitstempel ohne explizite Zeitzone sind UTC. Fehlende Kurse bleiben `null`, manuelle Kurse und Zwecke unverändert.
+
+Jedes Objekt enthält `links` zu seiner Einzelansicht und abhängigen Daten: z. B. Buchung → Wallet, Belege, Kurs-Audit und bestätigte Transfers. Belegdateien und archivierte Reports werden über separate Links abgerufen. Für zusammengesetzte Schlüssel gelten `/api/v1/price-history/{coin_id}/{price_date}` und `/api/v1/exchange-balances/{connection_id}/{asset}`. Segmente URL-kodieren. Private Provider-Rohdaten, Job-Payloads, Sitzungen und Zugangsschlüssel gehören nicht zum v1-Datenvertrag. Synchronisierung und Preisnachbearbeitung über `/api/jobs/sync` bzw. `/api/jobs/price-backfill` einreihen; HTTP 202 bedeutet angenommen, der Abschluss wird am Jobstatus geprüft.
+
+Die lokale Anwendung besitzt keine eingebaute API-Authentifizierung und keine CORS-Freigabe. Browser-Apps benötigen dieselbe Origin oder einen Reverse Proxy; für Zugriff außerhalb des vertrauenswürdigen Netzes ist ein authentifizierter HTTPS-Zugang erforderlich. Native Apps verwenden die Adresse der CryptoBuch-Installation. Öffentliche Wallet-Adressen und xPubs sind datenschutzsensibel. Backup-Downloads können lokale Provider-Zugangsdaten enthalten und sind kein normaler App-Datenexport. Die API öffnet keine Geräteverbindung und bietet keine neuen Signier- oder Sendefunktionen. Historische Werte und Steuerwerte bleiben unverbindliche Schätzungen.
 
 ### Binance Spot · Read-only
 

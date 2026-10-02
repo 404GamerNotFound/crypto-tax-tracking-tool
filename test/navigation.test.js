@@ -6,7 +6,7 @@ const test = require("node:test");
 const publicDir = path.join(__dirname, "..", "public");
 const pages = [
   "index.html", "wallets.html", "asset.html", "exchange.html", "quality.html",
-  "price-fetches.html", "tax.html", "tax-print.html", "maintenance.html", "settings.html",
+  "price-fetches.html", "tax.html", "tax-print.html", "maintenance.html", "settings.html", "api-docs.html",
 ];
 
 test("bindet die zentrale Hauptnavigation auf jeder Oberfläche ein", () => {
