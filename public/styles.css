@@ -335,6 +335,7 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
 .exchange-connection-card-head { justify-content: flex-start; }
 .exchange-provider-mark { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 9px; color: white; background: #52677f; font: 600 10px "DM Mono", monospace; }
 .exchange-provider-mark.binance { color: #5b4708; background: #f0c54a; }
+.exchange-provider-mark.coinbase { background: #1652f0; }
 .exchange-provider-mark.bitvavo { background: #2374ac; }
 .exchange-provider-mark.etoro { background: #356bd7; }
 .exchange-provider-mark.bsdex { color: #102637; background: #44c5d4; }
@@ -520,6 +521,7 @@ a.market-availability:hover { text-decoration: underline; }
 .exchange-page-item { border-color: #c7dfcf; background: #fcfefb; }
 .exchange-source-icon { width: 36px; height: 36px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 10px; color: #fff; background: #52677f; font: 600 13px "DM Mono", monospace; }
 .exchange-source-icon.binance { color: #5b4708; background: #f0c54a; }
+.exchange-source-icon.coinbase { background: #1652f0; }
 .exchange-source-icon.bitvavo { background: #2374ac; }
 .exchange-source-icon.etoro { background: #356bd7; }
 .exchange-source-icon.bsdex { color: #102637; background: #44c5d4; }
@@ -591,6 +593,7 @@ a.market-availability:hover { text-decoration: underline; }
 .exchange-main { max-width: 1450px; }
 .asset-hero-icon.exchange { color: #fff; background: #52677f; font: 600 30px "DM Mono", monospace; }
 .asset-hero-icon.exchange.binance { color: #5b4708; background: #f0c54a; }
+.asset-hero-icon.exchange.coinbase { background: #1652f0; }
 .asset-hero-icon.exchange.bitvavo { background: #2374ac; }
 .asset-hero-icon.exchange.etoro { background: #356bd7; }
 .asset-hero-icon.exchange.trade_republic { color: #fff; background: #171717; }

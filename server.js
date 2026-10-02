@@ -38,6 +38,13 @@ const {
   historyProgress,
   historyPhaseLabel,
 } = require("./lib/binance");
+const {
+  fetchCoinbaseHistory,
+  fetchCoinbaseHistoryBatch,
+  normalizeCoinbaseHistoryState,
+  coinbaseHistoryProgress,
+  coinbaseHistoryPhaseLabel,
+} = require("./lib/coinbase");
 const { fetchEtoroHistory } = require("./lib/etoro");
 const {
   createBsdexLiveClient,
@@ -149,6 +156,11 @@ const EXCHANGE_PROVIDERS = Object.freeze({
     id: "binance", label: "Binance Spot · Read-only API", defaultLabel: "Binance Spot", importMode: "api",
     apiKeyLabel: "Read-only API-Key", apiSecretLabel: "API-Secret", supportsSymbols: true,
     help: "Binance: Nach dem ersten Sync wird die abrufbare Kontohistorie automatisch und gedrosselt nachgeladen. Märkte werden aus Beständen und bereits gefundenen Assets ergänzt; trage nur vollständig früher verkaufte Spot-Märkte zusätzlich ein.",
+  }),
+  coinbase: Object.freeze({
+    id: "coinbase", label: "Coinbase Exchange · Read-only API", defaultLabel: "Coinbase Exchange", importMode: "api",
+    apiKeyLabel: "Coinbase API-Key", apiSecretLabel: "Coinbase API-Secret", requiresPassphrase: true,
+    help: "Coinbase Exchange: Erstelle den API-Key mit ausschließlich „View“-Recht. CryptoBuch ruft nur Kontostände, Ledgerbewegungen und Fills ab; Trades, Transfers, Auszahlungen und Einstellungen bleiben deaktiviert.",
   }),
   etoro: Object.freeze({
     id: "etoro", label: "eToro · Read-only API", defaultLabel: "eToro", importMode: "api",
@@ -528,11 +540,12 @@ db.exec(`
   );
   CREATE TABLE IF NOT EXISTS exchange_connections (
     id INTEGER PRIMARY KEY,
-    provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance', 'etoro', 'bsdex', 'trade_republic')),
+    provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance', 'coinbase', 'etoro', 'bsdex', 'trade_republic')),
     wallet_id INTEGER NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
     label TEXT NOT NULL DEFAULT '',
     api_key TEXT NOT NULL,
     api_secret TEXT NOT NULL,
+    coinbase_passphrase TEXT NOT NULL DEFAULT '',
     etoro_environment TEXT NOT NULL DEFAULT 'real' CHECK (etoro_environment IN ('real', 'demo')),
     symbols TEXT NOT NULL DEFAULT '',
     import_mode TEXT NOT NULL DEFAULT 'api' CHECK (import_mode IN ('api', 'csv')),
@@ -570,7 +583,8 @@ db.exec(`
 function migrateExchangeConnectionSchema() {
   const sql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'exchange_connections'").get()?.sql || "";
   const columns = new Set(db.prepare("PRAGMA table_info(exchange_connections)").all().map((column) => column.name));
-  if (sql.includes("binance") && sql.includes("etoro") && sql.includes("bsdex") && sql.includes("trade_republic") && columns.has("etoro_environment") && columns.has("symbols") && columns.has("import_mode") && columns.has("history_state") && columns.has("history_started_at") && columns.has("history_completed_at") && columns.has("history_last_error") && columns.has("trade_republic_device_key") && columns.has("trade_republic_activation_id") && columns.has("trade_republic_activation_started_at") && columns.has("trade_republic_activation_error") && columns.has("trade_republic_activated_at") && columns.has("trade_republic_disclaimer_accepted_at") && columns.has("trade_republic_web_session") && columns.has("trade_republic_web_pending_session") && columns.has("trade_republic_web_device_id") && columns.has("trade_republic_web_login_id") && columns.has("trade_republic_web_login_started_at") && columns.has("trade_republic_web_login_error") && columns.has("trade_republic_web_connected_at") && columns.has("live_updates_enabled") && columns.has("live_status") && columns.has("live_connected_at") && columns.has("live_last_event_at") && columns.has("live_last_error") && columns.has("live_last_reconciled_at")) return;
+  if (sql.includes("binance") && sql.includes("coinbase") && sql.includes("etoro") && sql.includes("bsdex") && sql.includes("trade_republic") && columns.has("coinbase_passphrase") && columns.has("etoro_environment") && columns.has("symbols") && columns.has("import_mode") && columns.has("history_state") && columns.has("history_started_at") && columns.has("history_completed_at") && columns.has("history_last_error") && columns.has("trade_republic_device_key") && columns.has("trade_republic_activation_id") && columns.has("trade_republic_activation_started_at") && columns.has("trade_republic_activation_error") && columns.has("trade_republic_activated_at") && columns.has("trade_republic_disclaimer_accepted_at") && columns.has("trade_republic_web_session") && columns.has("trade_republic_web_pending_session") && columns.has("trade_republic_web_device_id") && columns.has("trade_republic_web_login_id") && columns.has("trade_republic_web_login_started_at") && columns.has("trade_republic_web_login_error") && columns.has("trade_republic_web_connected_at") && columns.has("live_updates_enabled") && columns.has("live_status") && columns.has("live_connected_at") && columns.has("live_last_event_at") && columns.has("live_last_error") && columns.has("live_last_reconciled_at")) return;
+  const coinbasePassphrase = columns.has("coinbase_passphrase") ? "coinbase_passphrase" : "''";
   const etoroEnvironment = columns.has("etoro_environment") ? "etoro_environment" : "'real'";
   const symbols = columns.has("symbols") ? "symbols" : "''";
   const importMode = columns.has("import_mode") ? "import_mode" : "'api'";
@@ -601,11 +615,12 @@ function migrateExchangeConnectionSchema() {
     BEGIN;
     CREATE TABLE exchange_connections_migration (
       id INTEGER PRIMARY KEY,
-      provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance', 'etoro', 'bsdex', 'trade_republic')),
+      provider TEXT NOT NULL CHECK (provider IN ('bitvavo', 'binance', 'coinbase', 'etoro', 'bsdex', 'trade_republic')),
       wallet_id INTEGER NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
       label TEXT NOT NULL DEFAULT '',
       api_key TEXT NOT NULL,
       api_secret TEXT NOT NULL,
+      coinbase_passphrase TEXT NOT NULL DEFAULT '',
       etoro_environment TEXT NOT NULL DEFAULT 'real' CHECK (etoro_environment IN ('real', 'demo')),
       symbols TEXT NOT NULL DEFAULT '',
       import_mode TEXT NOT NULL DEFAULT 'api' CHECK (import_mode IN ('api', 'csv')),
@@ -636,8 +651,8 @@ function migrateExchangeConnectionSchema() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(provider, wallet_id, label)
     );
-    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, etoro_environment, symbols, import_mode, history_state, history_started_at, history_completed_at, history_last_error, trade_republic_device_key, trade_republic_activation_id, trade_republic_activation_started_at, trade_republic_activation_error, trade_republic_activated_at, trade_republic_disclaimer_accepted_at, trade_republic_web_session, trade_republic_web_pending_session, trade_republic_web_device_id, trade_republic_web_login_id, trade_republic_web_login_started_at, trade_republic_web_login_error, trade_republic_web_connected_at, live_updates_enabled, live_status, live_connected_at, live_last_event_at, live_last_error, live_last_reconciled_at, last_synced_at, created_at)
-      SELECT id, provider, wallet_id, label, api_key, api_secret, ${etoroEnvironment}, ${symbols}, ${importMode}, ${historyState}, ${historyStartedAt}, ${historyCompletedAt}, ${historyLastError}, ${tradeRepublicDeviceKey}, ${tradeRepublicActivationId}, ${tradeRepublicActivationStartedAt}, ${tradeRepublicActivationError}, ${tradeRepublicActivatedAt}, ${tradeRepublicDisclaimerAcceptedAt}, ${tradeRepublicWebSession}, ${tradeRepublicWebPendingSession}, ${tradeRepublicWebDeviceId}, ${tradeRepublicWebLoginId}, ${tradeRepublicWebLoginStartedAt}, ${tradeRepublicWebLoginError}, ${tradeRepublicWebConnectedAt}, ${liveUpdatesEnabled}, ${liveStatus}, ${liveConnectedAt}, ${liveLastEventAt}, ${liveLastError}, ${liveLastReconciledAt}, last_synced_at, created_at FROM exchange_connections;
+    INSERT INTO exchange_connections_migration (id, provider, wallet_id, label, api_key, api_secret, coinbase_passphrase, etoro_environment, symbols, import_mode, history_state, history_started_at, history_completed_at, history_last_error, trade_republic_device_key, trade_republic_activation_id, trade_republic_activation_started_at, trade_republic_activation_error, trade_republic_activated_at, trade_republic_disclaimer_accepted_at, trade_republic_web_session, trade_republic_web_pending_session, trade_republic_web_device_id, trade_republic_web_login_id, trade_republic_web_login_started_at, trade_republic_web_login_error, trade_republic_web_connected_at, live_updates_enabled, live_status, live_connected_at, live_last_event_at, live_last_error, live_last_reconciled_at, last_synced_at, created_at)
+      SELECT id, provider, wallet_id, label, api_key, api_secret, ${coinbasePassphrase}, ${etoroEnvironment}, ${symbols}, ${importMode}, ${historyState}, ${historyStartedAt}, ${historyCompletedAt}, ${historyLastError}, ${tradeRepublicDeviceKey}, ${tradeRepublicActivationId}, ${tradeRepublicActivationStartedAt}, ${tradeRepublicActivationError}, ${tradeRepublicActivatedAt}, ${tradeRepublicDisclaimerAcceptedAt}, ${tradeRepublicWebSession}, ${tradeRepublicWebPendingSession}, ${tradeRepublicWebDeviceId}, ${tradeRepublicWebLoginId}, ${tradeRepublicWebLoginStartedAt}, ${tradeRepublicWebLoginError}, ${tradeRepublicWebConnectedAt}, ${liveUpdatesEnabled}, ${liveStatus}, ${liveConnectedAt}, ${liveLastEventAt}, ${liveLastError}, ${liveLastReconciledAt}, last_synced_at, created_at FROM exchange_connections;
     DROP TABLE exchange_connections;
     ALTER TABLE exchange_connections_migration RENAME TO exchange_connections;
     COMMIT;
@@ -2316,11 +2331,11 @@ function scheduleJobWorker() {
         result = await syncExchangeConnection(connection);
         createNotification("success", "Börse synchronisiert", `${connection.label || connection.provider}: ${result.imported.toLocaleString("de-DE")} Buchungen importiert.`);
         if (result.warnings?.length) createNotification("warning", "Börsen-Sync prüfen", result.warnings[0]);
-        const historyJob = queueBinanceHistoryIfNeeded(connection);
+        const historyJob = queueExchangeHistoryIfNeeded(connection);
         if (historyJob) {
           result.historyJobId = historyJob.id;
           result.historyInProgress = true;
-          createNotification("info", "Binance-Historie wird nachgeladen", `${connection.label || "Binance"}: Einzahlungen, Auszahlungen, Erträge und Spot-Trades werden automatisch in gedrosselten Schritten ergänzt.`);
+          createNotification("info", "Börsenhistorie wird nachgeladen", `${connection.label || connection.provider}: Einzahlungen, Auszahlungen, Erträge und Trades werden automatisch in gedrosselten Schritten ergänzt.`);
         }
         // The exchange request itself remains read-only and quick. Missing
         // execution prices are completed afterwards by the existing serial,
@@ -2334,12 +2349,14 @@ function scheduleJobWorker() {
         }
       } else if (job.type === "exchange_history_sync") {
         const connection = getExchangeConnection(payload.connectionId);
-        result = await syncBinanceHistoryBatch(connection);
+        result = connection.provider === "binance" ? await syncBinanceHistoryBatch(connection)
+          : connection.provider === "coinbase" ? await syncCoinbaseHistoryBatch(connection)
+            : (() => { throw makeError("Für diese Börse gibt es keinen historischen Hintergrundimport."); })();
         if (result.settled) {
           if (result.complete) {
-            createNotification("success", "Binance-Historie vollständig", `${connection.label || "Binance"}: Die automatisch abrufbare Kontohistorie wurde vollständig verarbeitet.`);
+            createNotification("success", "Börsenhistorie vollständig", `${connection.label || connection.provider}: Die automatisch abrufbare Kontohistorie wurde vollständig verarbeitet.`);
           } else {
-            createNotification("warning", "Binance-Historie unvollständig", `${connection.label || "Binance"}: Mindestens ein historischer Markt ist nur über einen Binance-CSV-Export ergänzbar.`);
+            createNotification("warning", "Börsenhistorie unvollständig", `${connection.label || connection.provider}: Ein Teil der Historie ist nur über einen CSV-Export ergänzbar.`);
           }
           if (result.warnings?.length) createNotification("warning", "Binance-Historie prüfen", result.warnings[0]);
           // Run dependent work only once after the complete history exists;
@@ -2347,7 +2364,7 @@ function scheduleJobWorker() {
           enqueueJob("exchange_transfer_check", { connectionId: connection.id });
           enqueueJob("price_backfill", { force: false });
         } else {
-          const nextJob = queueBinanceHistoryIfNeeded(getExchangeConnection(connection.id), { ignoreJobId: job.id });
+          const nextJob = queueExchangeHistoryIfNeeded(getExchangeConnection(connection.id), { ignoreJobId: job.id });
           result.nextJobId = nextJob?.id || null;
         }
       } else if (job.type === "exchange_transfer_check") {
@@ -2388,13 +2405,13 @@ function enqueueJob(type, payload) {
   return job;
 }
 
-function resumeBinanceHistoryImports() {
-  const connections = db.prepare("SELECT * FROM exchange_connections WHERE provider = 'binance' AND import_mode = 'api'").all();
-  for (const connection of connections) queueBinanceHistoryIfNeeded(connection);
+function resumeExchangeHistoryImports() {
+  const connections = db.prepare("SELECT * FROM exchange_connections WHERE provider IN ('binance', 'coinbase') AND import_mode = 'api'").all();
+  for (const connection of connections) queueExchangeHistoryIfNeeded(connection);
 }
 
-function resumeMissingBinanceBalanceSnapshots() {
-  const connections = db.prepare("SELECT * FROM exchange_connections WHERE provider = 'binance' AND import_mode = 'api'").all();
+function resumeMissingExchangeBalanceSnapshots() {
+  const connections = db.prepare("SELECT * FROM exchange_connections WHERE provider IN ('binance', 'coinbase') AND import_mode = 'api'").all();
   for (const connection of connections) {
     if (exchangeBalanceSnapshot(connection.id)) continue;
     const active = db.prepare("SELECT id FROM background_jobs WHERE type = 'exchange_sync' AND status IN ('queued', 'running') AND payload_json LIKE ? LIMIT 1")
@@ -2550,12 +2567,12 @@ function queueDueBsdexReconciliations() {
 const bsdexReconciliationTimer = setInterval(queueDueBsdexReconciliations, 60000);
 bsdexReconciliationTimer.unref?.();
 
-// Existing Binance connections receive the same background import as newly
+// Existing exchange connections receive the same background import as newly
 // created ones. A missing snapshot runs first so an old, incomplete journal
 // cannot be shown as a live negative position while the serial history import
 // continues in the background.
-resumeMissingBinanceBalanceSnapshots();
-resumeBinanceHistoryImports();
+resumeMissingExchangeBalanceSnapshots();
+resumeExchangeHistoryImports();
 resumeBsdexLiveUpdates();
 
 async function syncWallet(wallet) {
@@ -3356,7 +3373,7 @@ function exchangeSnapshotSource(provider) {
 }
 
 function exchangePosition(wallet, connection, journalHoldings) {
-  const snapshot = ["binance", "bsdex"].includes(connection?.provider) ? exchangeBalanceSnapshot(connection.id) : null;
+  const snapshot = ["binance", "coinbase", "bsdex"].includes(connection?.provider) ? exchangeBalanceSnapshot(connection.id) : null;
   const assets = new Set([...journalHoldings.keys(), ...(snapshot?.balances.keys() || [])]);
   const positions = new Map();
   const reconciliations = [];
@@ -3747,6 +3764,7 @@ function exchangeProviderFromRaw(rawJson) {
   try {
     const source = JSON.parse(String(rawJson || "{}"))?.source;
     if (source === "binance-api") return "Binance";
+    if (source === "coinbase-api") return "Coinbase Exchange";
     if (source === "bitvavo-api") return "Bitvavo";
     if (source === "bsdex-api") return "BSDEX";
   } catch {
@@ -3785,8 +3803,9 @@ function exchangeTransferSuggestions(limit = 80) {
     LEFT JOIN transfer_links linked_out ON linked_out.outgoing_transaction_id = CASE WHEN exchange_row.direction = 'out' THEN exchange_row.id ELSE local_row.id END
     LEFT JOIN transfer_links linked_in ON linked_in.incoming_transaction_id = CASE WHEN exchange_row.direction = 'in' THEN exchange_row.id ELSE local_row.id END
     WHERE exchange_row.purpose = 'Transfer'
-      AND (exchange_row.raw_json LIKE '%"source":"binance-api"%' OR exchange_row.raw_json LIKE '%"source":"bitvavo-api"%' OR exchange_row.raw_json LIKE '%"source":"bsdex-api"%')
+      AND (exchange_row.raw_json LIKE '%"source":"binance-api"%' OR exchange_row.raw_json LIKE '%"source":"coinbase-api"%' OR exchange_row.raw_json LIKE '%"source":"bitvavo-api"%' OR exchange_row.raw_json LIKE '%"source":"bsdex-api"%')
       AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"binance-api"%'
+      AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"coinbase-api"%'
       AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"bitvavo-api"%'
       AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"bsdex-api"%'
       AND linked_out.id IS NULL AND linked_in.id IS NULL
@@ -4430,8 +4449,38 @@ function binanceHistoryView(connection) {
   };
 }
 
+function coinbaseHistoryIsSettled(connection) {
+  if (connection.provider !== "coinbase") return true;
+  return Boolean(connection.history_completed_at) || normalizeCoinbaseHistoryState(connection.history_state).phase === "complete";
+}
+
+function coinbaseHistoryView(connection) {
+  if (connection.provider !== "coinbase") return null;
+  const state = normalizeCoinbaseHistoryState(connection.history_state);
+  const settled = coinbaseHistoryIsSettled(connection);
+  const progress = settled ? coinbaseHistoryProgress({ ...state, phase: "complete" }) : coinbaseHistoryProgress(state);
+  return {
+    status: settled ? "complete" : connection.history_started_at ? "running" : "pending",
+    phase: settled ? "complete" : progress.phase,
+    phaseLabel: coinbaseHistoryPhaseLabel(settled ? "complete" : progress.phase),
+    progressCurrent: progress.current,
+    progressTotal: progress.total,
+    startedAt: connection.history_started_at || null,
+    completedAt: connection.history_completed_at || null,
+    lastError: connection.history_last_error || null,
+    markets: [],
+    unresolvedMarkets: [],
+    warnings: state.warnings || [],
+  };
+}
+
+function exchangeHistoryView(connection) {
+  return connection.provider === "binance" ? binanceHistoryView(connection)
+    : connection.provider === "coinbase" ? coinbaseHistoryView(connection) : null;
+}
+
 function exchangeBalanceView(connection) {
-  if (!["binance", "bsdex"].includes(connection.provider)) return null;
+  if (!["binance", "coinbase", "bsdex"].includes(connection.provider)) return null;
   const snapshot = exchangeBalanceSnapshot(connection.id);
   return {
     status: snapshot ? "confirmed" : "pending",
@@ -4470,7 +4519,8 @@ function exchangeConnectionView(connection) {
     createdAt: connection.created_at,
     apiKeyConfigured: Boolean(connection.api_key),
     apiSecretConfigured: Boolean(connection.api_secret),
-    history: binanceHistoryView(connection),
+    coinbasePassphraseConfigured: connection.provider === "coinbase" ? Boolean(connection.coinbase_passphrase) : null,
+    history: exchangeHistoryView(connection),
     balance: exchangeBalanceView(connection),
     live: bsdexLiveView(connection),
     tradeRepublic,
@@ -4489,6 +4539,22 @@ function queueBinanceHistoryIfNeeded(connection, { ignoreJobId = null } = {}) {
   const active = activeBinanceHistoryJob(connection.id);
   if (active && Number(active.id) !== Number(ignoreJobId)) return active;
   return enqueueJob("exchange_history_sync", { connectionId: connection.id });
+}
+
+function coinbaseHistoryIsComplete(connection) {
+  return connection.provider !== "coinbase" || coinbaseHistoryIsSettled(connection);
+}
+
+function queueCoinbaseHistoryIfNeeded(connection, { ignoreJobId = null } = {}) {
+  if (connection.provider !== "coinbase" || coinbaseHistoryIsSettled(connection)) return null;
+  const active = activeBinanceHistoryJob(connection.id);
+  if (active && Number(active.id) !== Number(ignoreJobId)) return active;
+  return enqueueJob("exchange_history_sync", { connectionId: connection.id });
+}
+
+function queueExchangeHistoryIfNeeded(connection, options) {
+  return connection.provider === "binance" ? queueBinanceHistoryIfNeeded(connection, options)
+    : connection.provider === "coinbase" ? queueCoinbaseHistoryIfNeeded(connection, options) : null;
 }
 
 async function exchangePortfolioResponse(id) {
@@ -4554,6 +4620,15 @@ async function syncExchangeConnection(connection) {
     rows = result.rows;
     warnings = result.warnings;
     selectedSymbols = result.selectedSymbols;
+    limited = result.rows.length >= 2500;
+    if (Array.isArray(result.accountBalances)) balanceSnapshotUpdated = replaceExchangeBalanceSnapshot(connection.id, result.accountBalances);
+  } else if (connection.provider === "coinbase") {
+    const result = await fetchCoinbaseHistory({
+      apiBaseUrl: settings.coinbaseExchangeApiBaseUrl, apiKey: connection.api_key, apiSecret: connection.api_secret,
+      passphrase: connection.coinbase_passphrase,
+    });
+    rows = result.rows;
+    warnings = result.warnings;
     limited = result.rows.length >= 2500;
     if (Array.isArray(result.accountBalances)) balanceSnapshotUpdated = replaceExchangeBalanceSnapshot(connection.id, result.accountBalances);
   } else if (connection.provider === "etoro") {
@@ -4661,6 +4736,42 @@ async function syncBinanceHistoryBatch(connection) {
   };
 }
 
+async function syncCoinbaseHistoryBatch(connection) {
+  if (connection.provider !== "coinbase") throw makeError("Ein historischer Hintergrundimport ist nur für Coinbase Exchange verfügbar.");
+  if (connection.import_mode === "csv") throw makeError("Für diese Quelle gibt es keine direkte Read-only-API.");
+  if (coinbaseHistoryIsSettled(connection)) {
+    const history = coinbaseHistoryView(connection);
+    return { imported: 0, provider: connection.provider, complete: true, settled: true, history, progress: coinbaseHistoryProgress({ ...normalizeCoinbaseHistoryState(connection.history_state), phase: "complete" }), warnings: history.warnings || [] };
+  }
+  const wallet = getWallet(connection.wallet_id);
+  const settings = runtimeSettings();
+  const result = await fetchCoinbaseHistoryBatch({
+    apiBaseUrl: settings.coinbaseExchangeApiBaseUrl,
+    apiKey: connection.api_key,
+    apiSecret: connection.api_secret,
+    passphrase: connection.coinbase_passphrase,
+    state: connection.history_state,
+  });
+  const imported = importExternalRows(wallet, result.rows, { source: "coinbase-api", purposeOrigin: "auto" });
+  if (Array.isArray(result.accountBalances)) replaceExchangeBalanceSnapshot(connection.id, result.accountBalances);
+  db.prepare(`UPDATE exchange_connections
+    SET history_state = ?,
+      history_started_at = COALESCE(history_started_at, datetime('now')),
+      history_completed_at = CASE WHEN ? THEN datetime('now') ELSE NULL END,
+      history_last_error = NULL,
+      last_synced_at = datetime('now')
+    WHERE id = ?`).run(JSON.stringify(result.nextState), result.settled ? 1 : 0, connection.id);
+  return {
+    imported,
+    provider: connection.provider,
+    complete: result.complete,
+    settled: result.settled,
+    warnings: result.warnings,
+    progress: result.progress,
+    history: coinbaseHistoryView(getExchangeConnection(connection.id)),
+  };
+}
+
 app.get("/api/import/csv-profiles", (_request, response) => {
   response.json({ profiles: Object.values(EXCHANGE_CSV_PROFILES) });
 });
@@ -4691,6 +4802,7 @@ app.post("/api/exchange-connections", async (request, response, next) => {
     const label = cleanLabel(request.body?.label, 80) || definition.defaultLabel;
     let apiKey = String(request.body?.apiKey || "").trim();
     let apiSecret = String(request.body?.apiSecret || "").trim();
+    const coinbasePassphrase = provider === "coinbase" ? String(request.body?.coinbasePassphrase || "").trim() : "";
     const etoroEnvironment = provider === "etoro" ? String(request.body?.etoroEnvironment || "real").trim().toLowerCase() : "real";
     const symbols = parseSymbols(request.body?.symbols).join(",");
     const liveUpdatesEnabled = provider === "bsdex" && request.body?.liveUpdatesEnabled === true ? 1 : 0;
@@ -4703,8 +4815,13 @@ app.post("/api/exchange-connections", async (request, response, next) => {
       }
       apiKey = tradeRepublicPhoneNumber(apiKey);
       apiSecret = tradeRepublicPin(apiSecret);
-    } else if (definition.importMode === "api" && (apiKey.length < 8 || apiKey.length > 512 || apiSecret.length < 8 || apiSecret.length > 512)) {
-      throw makeError("Die Zugangsdaten müssen jeweils zwischen 8 und 512 Zeichen lang sein.");
+    } else {
+      if (definition.importMode === "api" && (apiKey.length < 8 || apiKey.length > 512 || apiSecret.length < 8 || apiSecret.length > 512)) {
+        throw makeError("Die Zugangsdaten müssen jeweils zwischen 8 und 512 Zeichen lang sein.");
+      }
+      if (provider === "coinbase" && (coinbasePassphrase.length < 8 || coinbasePassphrase.length > 100)) {
+        throw makeError("Die Coinbase-Passphrase muss zwischen 8 und 100 Zeichen lang sein.");
+      }
     }
     if (definition.importMode === "api" && (containsForbiddenKeyMaterial(apiKey) || containsForbiddenKeyMaterial(apiSecret))) {
       throw makeError("Private Keys, xPrvs und Seed-Phrases werden niemals akzeptiert. Bitte ausschließlich die Read-only-Zugangsdaten der Börse verwenden.");
@@ -4718,9 +4835,9 @@ app.post("/api/exchange-connections", async (request, response, next) => {
       const accountWalletId = createExchangeAccountWallet(provider, label);
       if (provider === "trade_republic") apiSecret = "";
       result = db.prepare(`INSERT INTO exchange_connections
-        (provider, wallet_id, label, api_key, api_secret, etoro_environment, symbols, import_mode, live_updates_enabled, live_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(provider, accountWalletId, label, apiKey, apiSecret, etoroEnvironment, symbols, definition.importMode, liveUpdatesEnabled, liveUpdatesEnabled ? "connecting" : "disabled");
+        (provider, wallet_id, label, api_key, api_secret, coinbase_passphrase, etoro_environment, symbols, import_mode, live_updates_enabled, live_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(provider, accountWalletId, label, apiKey, apiSecret, coinbasePassphrase, etoroEnvironment, symbols, definition.importMode, liveUpdatesEnabled, liveUpdatesEnabled ? "connecting" : "disabled");
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");

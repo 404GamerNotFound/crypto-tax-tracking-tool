@@ -109,7 +109,7 @@ function renderExchange(connection) {
   identity.className = "wallet-page-identity";
   const icon = document.createElement("span");
   icon.className = `exchange-source-icon ${connection.provider || ""}`;
-  icon.textContent = connection.provider === "binance" ? "B" : connection.provider === "bitvavo" ? "V" : connection.provider === "etoro" ? "eT" : connection.provider === "bsdex" ? "BS" : "TR";
+  icon.textContent = connection.provider === "binance" ? "B" : connection.provider === "coinbase" ? "CB" : connection.provider === "bitvavo" ? "V" : connection.provider === "etoro" ? "eT" : connection.provider === "bsdex" ? "BS" : "TR";
   const copy = document.createElement("div");
   const title = document.createElement("h3");
   title.textContent = exchangeName(connection);
@@ -128,7 +128,7 @@ function renderExchange(connection) {
   sync.append(syncLabel, syncDate);
   if (connection.history) {
     const history = document.createElement("small");
-    if (connection.history.status === "complete") history.textContent = "Binance-Historie vollständig importiert";
+    if (connection.history.status === "complete") history.textContent = "Börsenhistorie vollständig importiert";
     else if (connection.history.lastError) history.textContent = "Historie prüfen";
     else {
       const percent = connection.history.progressTotal ? Math.round((connection.history.progressCurrent / connection.history.progressTotal) * 100) : 0;

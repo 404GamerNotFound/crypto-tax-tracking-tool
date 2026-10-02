@@ -48,7 +48,7 @@ function metric(label, value, help = "", tone = "") {
 
 function historyStatus(history) {
   if (!history) return null;
-  if (history.status === "complete") return { value: "Vollständig", help: "Automatisch abrufbare Binance-Historie verarbeitet", tone: "success" };
+  if (history.status === "complete") return { value: "Vollständig", help: "Automatisch abrufbare Börsenhistorie verarbeitet", tone: "success" };
   if (history.status === "attention") {
     const markets = (history.unresolvedMarkets || []).join(", ");
     return { value: "Unvollständig", help: markets ? `CSV-Export für ${markets} ergänzen` : "Historische Märkte oder CSV-Export ergänzen", tone: "warning" };
@@ -75,7 +75,7 @@ function renderMetrics() {
     entries.splice(2, 0, metric("Kontostand", "Journal", "Kein aktueller API-Snapshot verfügbar", "warning"));
   }
   const history = historyStatus(data.connection.history);
-  if (history) entries.push(metric("Binance-Historie", history.value, history.help, history.tone));
+  if (history) entries.push(metric("Börsenhistorie", history.value, history.help, history.tone));
   if (data.connection.live?.enabled) {
     const live = data.connection.live;
     const copy = live.status === "connected" ? `Verbunden · REST-Abgleich alle ${live.reconcileIntervalMinutes} Min.`
@@ -213,7 +213,7 @@ function render() {
   const data = state.data;
   document.title = `CryptoBuch · ${data.connection.label || providerLabel(data.connection.provider)}`;
   el("exchange-title").textContent = data.connection.label || providerLabel(data.connection.provider);
-  el("exchange-icon").textContent = data.connection.provider === "binance" ? "B" : data.connection.provider === "bitvavo" ? "V" : data.connection.provider === "etoro" ? "eT" : data.connection.provider === "bsdex" ? "BS" : "TR";
+  el("exchange-icon").textContent = data.connection.provider === "binance" ? "B" : data.connection.provider === "coinbase" ? "CB" : data.connection.provider === "bitvavo" ? "V" : data.connection.provider === "etoro" ? "eT" : data.connection.provider === "bsdex" ? "BS" : "TR";
   el("exchange-icon").className = `asset-hero-icon exchange ${data.connection.provider}`;
   const csv = data.connection.importMode === "csv";
   const tradeRepublic = data.connection.tradeRepublic;

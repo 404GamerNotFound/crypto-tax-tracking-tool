@@ -59,6 +59,22 @@ test("verwendet den bestätigten BSDEX-Saldo statt eines unvollständigen Journa
   assert.equal(result.reconciliations[0].difference, 2);
 });
 
+test("verwendet den bestätigten Coinbase-Exchange-Saldo statt eines unvollständigen Journals", () => {
+  const walletId = Number(db.prepare("INSERT INTO wallets (chain, address, label, source_type) VALUES ('EXCHANGE', 'exchange:coinbase:balance-test', 'Coinbase Exchange', 'exchange')").run().lastInsertRowid);
+  const connectionId = Number(db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret, coinbase_passphrase) VALUES ('coinbase', ?, 'Coinbase Exchange', 'key', 'secret', 'passphrase')").run(walletId).lastInsertRowid);
+  replaceExchangeBalanceSnapshot(connectionId, [{ asset: "BTC", free: 0.05, locked: 0 }]);
+
+  const result = exchangePosition(
+    { id: walletId, label: "Coinbase Exchange" },
+    { id: connectionId, provider: "coinbase", label: "Coinbase Exchange" },
+    new Map([["BTC", -0.2]]),
+  );
+
+  assert.deepEqual([...result.positions.entries()], [["BTC", 0.05]]);
+  assert.equal(result.reconciliations[0].source, "coinbase_snapshot");
+  assert.equal(result.reconciliations[0].difference, 0.25);
+});
+
 test("schlägt eine abgeschlossene BSDEX-Auszahlung zur lokalen Wallet als Transfer vor", () => {
   const exchangeWalletId = Number(db.prepare("INSERT INTO wallets (chain, address, label, source_type) VALUES ('EXCHANGE', 'exchange:bsdex:transfer-test', 'BSDEX', 'exchange')").run().lastInsertRowid);
   const localWalletId = Number(db.prepare("INSERT INTO wallets (chain, address, label) VALUES ('BTC', 'bc1-local-transfer-test', 'Hardware-Wallet')").run().lastInsertRowid);
@@ -89,4 +105,26 @@ test("schlägt eine abgeschlossene BSDEX-Auszahlung zur lokalen Wallet als Trans
     origin: "exchange",
     fee_adjusted: false,
   });
+});
+
+test("schlägt eine Coinbase-Auszahlung zur lokalen Wallet als Transfer vor", () => {
+  const exchangeWalletId = Number(db.prepare("INSERT INTO wallets (chain, address, label, source_type) VALUES ('EXCHANGE', 'exchange:coinbase:transfer-test', 'Coinbase Exchange', 'exchange')").run().lastInsertRowid);
+  const localWalletId = Number(db.prepare("INSERT INTO wallets (chain, address, label) VALUES ('ETH', '0xcoinbase-transfer-test', 'Hardware-Wallet 2')").run().lastInsertRowid);
+  const insert = db.prepare(`INSERT INTO transactions (
+    wallet_id, external_id, hash, timestamp, direction, asset, asset_symbol, asset_name, asset_decimals,
+    amount, fee, fee_asset, purpose, purpose_origin, raw_json
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const outgoingId = Number(insert.run(
+    exchangeWalletId, "coinbase:ledger:withdrawal-1:ETH", "coinbase:withdrawal-1", "2024-02-02T12:00:00.000Z",
+    "out", "ETH", "ETH", "ETH", 8, 0.5, 0, "ETH", "Transfer", "auto", JSON.stringify({ source: "coinbase-api" }),
+  ).lastInsertRowid);
+  const incomingId = Number(insert.run(
+    localWalletId, "wallet:coinbase-transfer-1", "wallet:coinbase-transfer-1", "2024-02-02T12:04:00.000Z",
+    "in", "ETH", "ETH", "ETH", 8, 0.5, 0, "ETH", "Transfer", "auto", JSON.stringify({ source: "ethereum" }),
+  ).lastInsertRowid);
+
+  const suggestion = exchangeTransferSuggestions(20).find((item) => item.outgoing_id === outgoingId && item.incoming_id === incomingId);
+  assert.equal(suggestion?.origin, "exchange");
+  assert.equal(suggestion?.outgoing_wallet, "Coinbase Exchange · Börse");
+  assert.equal(suggestion?.incoming_wallet, "Hardware-Wallet 2");
 });

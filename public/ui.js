@@ -9,6 +9,7 @@
 
   const exchangeProviderLabels = Object.freeze({
     binance: "Binance Spot",
+    coinbase: "Coinbase Exchange",
     bitvavo: "Bitvavo",
     etoro: "eToro",
     bsdex: "BSDEX",
@@ -26,6 +27,8 @@
     legacy: "Quelle nicht nachträglich dokumentiert",
     "binance-api": "Binance-API",
     "binance-csv": "Binance-CSV",
+    "coinbase-api": "Coinbase-API",
+    "coinbase-csv": "Coinbase-CSV",
     "bitvavo-api": "Bitvavo-API",
     "bitvavo-csv": "Bitvavo-CSV",
     "etoro-api": "eToro-API",
