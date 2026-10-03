@@ -2638,7 +2638,13 @@ async function syncWallet(wallet) {
       amount, fee, fee_asset, counterparty,
       price_transaction_eur, price_source, price_provider, price_recorded_at,
       purpose, purpose_origin, raw_json, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?, ?, datetime('now')
+    )
     ON CONFLICT(wallet_id, external_id) DO UPDATE SET
       hash = excluded.hash,
       timestamp = excluded.timestamp,
