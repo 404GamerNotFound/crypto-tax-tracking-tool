@@ -1449,7 +1449,7 @@ async function hydrateKrakenHistoricalPrices(asset, dates, settings, priceFetchR
   return result;
 }
 
-async function hydrateHistoricalPrices(chain, timestamps, settings, coinIdOverride = null, assetOverride = null, priceFetchRunId = null) {
+async function hydrateHistoricalPrices(chain, timestamps, settings, coinIdOverride = null, assetOverride = null, priceFetchRunId = null, { refresh = false } = {}) {
   const coinId = coinIdOverride || CHAIN_CONFIG[chain]?.coinGeckoId;
   const dates = [...new Set(timestamps.filter(Boolean).map(isoDay))].sort();
   const asset = assetOverride || CHAIN_CONFIG[chain]?.asset;
@@ -1458,7 +1458,7 @@ async function hydrateHistoricalPrices(chain, timestamps, settings, coinIdOverri
   const result = new Map();
   const missing = [];
   for (const date of dates) {
-    const cached = cachedHistoricalPrice(coinId, date);
+    const cached = refresh ? null : cachedHistoricalPrice(coinId, date);
     if (cached) result.set(date, cached);
     else missing.push(date);
   }
@@ -1511,14 +1511,14 @@ async function hydrateHistoricalPrices(chain, timestamps, settings, coinIdOverri
   return result;
 }
 
-async function hydrateHistoricalTokenPrices(contract, timestamps, settings, priceFetchRunId = null) {
+async function hydrateHistoricalTokenPrices(contract, timestamps, settings, priceFetchRunId = null, { refresh = false } = {}) {
   const normalizedContract = String(contract || "").toLowerCase();
   if (!/^0x[a-f0-9]{40}$/.test(normalizedContract)) return new Map();
   const dates = [...new Set(timestamps.filter(Boolean).map(isoDay))].sort();
   const coinId = `erc20:ethereum:${normalizedContract}`;
   const prices = new Map();
   for (const date of dates) {
-    const cached = cachedHistoricalPrice(coinId, date);
+    const cached = refresh ? null : cachedHistoricalPrice(coinId, date);
     if (cached) {
       prices.set(date, cached);
       continue;
@@ -2304,8 +2304,9 @@ function createNotification(level, title, message) {
 const LOCAL_DATA_RESET_CONFIRMATION = "ALLE DATEN LÖSCHEN";
 let localDataResetting = false;
 let jobWorkerScheduled = false;
+let jobWorkerRunning = false;
 function scheduleJobWorker() {
-  if (jobWorkerScheduled) return;
+  if (jobWorkerScheduled || jobWorkerRunning) return;
   jobWorkerScheduled = true;
   setImmediate(async () => {
     jobWorkerScheduled = false;
@@ -2313,6 +2314,7 @@ function scheduleJobWorker() {
     const job = db.prepare("SELECT * FROM background_jobs WHERE status = 'queued' ORDER BY id ASC LIMIT 1").get();
     if (!job) return;
     db.prepare("UPDATE background_jobs SET status = 'running', started_at = datetime('now') WHERE id = ?").run(job.id);
+    jobWorkerRunning = true;
     let payload = {};
     try {
       payload = JSON.parse(job.payload_json);
@@ -2323,8 +2325,9 @@ function scheduleJobWorker() {
         recordSyncEvent(wallet.id, "success", result.imported);
         createNotification("success", "Wallet synchronisiert", `${wallet.label || wallet.address}: ${result.imported.toLocaleString("de-DE")} Transaktionen verarbeitet.`);
       } else if (job.type === "price_backfill") {
-        result = await runHistoricalPriceBackfill({ force: Boolean(payload.force), trigger: "manuell" });
-        if (result.remaining > 0) createNotification("warning", "Historische Kurse offen", `${result.remaining.toLocaleString("de-DE")} historische Kurse werden weiter automatisch geprüft.`);
+        result = await runHistoricalPriceBackfill({ force: Boolean(payload.force), trigger: "manuell", transactionId: payload.transactionId ?? null });
+        if (payload.transactionId) createNotification(result.updated ? "success" : "warning", `Kursabruf für Buchung #${payload.transactionId}`, result.hint);
+        else if (result.remaining > 0) createNotification("warning", "Historische Kurse offen", `${result.remaining.toLocaleString("de-DE")} historische Kurse werden weiter automatisch geprüft.`);
         else createNotification("success", "Historische Kurse ergänzt", `${result.updated.toLocaleString("de-DE")} Kurse wurden ergänzt.`);
       } else if (job.type === "exchange_sync") {
         const connection = getExchangeConnection(payload.connectionId);
@@ -2393,8 +2396,10 @@ function scheduleJobWorker() {
           .run(String(error.message || error).slice(0, 500), connectionId);
       }
       createNotification("error", "Hintergrundjob fehlgeschlagen", String(error.message || error).slice(0, 400));
+    } finally {
+      jobWorkerRunning = false;
+      scheduleJobWorker();
     }
-    scheduleJobWorker();
   });
 }
 
@@ -2780,10 +2785,12 @@ function historicalPriceCoinId(transaction) {
   return EXCHANGE_ASSET_CONFIG[transaction.asset]?.coinGeckoId || null;
 }
 
-async function backfillHistoricalPrices({ force = false, priceFetchRunId = null } = {}) {
+async function backfillHistoricalPrices({ force = false, priceFetchRunId = null, transactionId = null } = {}) {
+  const targeted = transactionId !== null;
+  if (targeted && (!Number.isSafeInteger(transactionId) || transactionId <= 0)) throw makeError("Ungültige Transaktions-ID.");
   const settings = runtimeSettings();
-  const totalPending = pendingHistoricalPriceCount();
-  const retryFilter = force ? "1 = 1" : "(retry.next_attempt_at IS NULL OR retry.next_attempt_at <= ?)";
+  const totalPending = targeted ? 1 : pendingHistoricalPriceCount();
+  const retryFilter = force || targeted ? "1 = 1" : "(retry.next_attempt_at IS NULL OR retry.next_attempt_at <= ?)";
   const candidates = db.prepare(`
     SELECT t.id, t.timestamp, t.asset, t.asset_contract, t.asset_type, w.chain, retry.attempt_count AS retry_attempt_count
     FROM transactions t
@@ -2792,20 +2799,22 @@ async function backfillHistoricalPrices({ force = false, priceFetchRunId = null 
     WHERE t.timestamp IS NOT NULL
       AND t.asset_type <> 'nft'
       AND t.price_source <> 'manual'
-      AND (t.price_transaction_eur IS NULL OR t.price_transaction_eur <= 0)
+      AND ${targeted ? "t.id = ?" : "(t.price_transaction_eur IS NULL OR t.price_transaction_eur <= 0)"}
       AND ${retryFilter}
     ORDER BY retry.last_attempt_at ASC, t.timestamp ASC
     LIMIT ?
-  `).all(...(force ? [] : [new Date().toISOString()]), settings.historicalPriceBackfillBatchSize);
+  `).all(...(targeted ? [transactionId] : []), ...(force || targeted ? [] : [new Date().toISOString()]), targeted ? 1 : settings.historicalPriceBackfillBatchSize);
   if (candidates.length === 0) {
     return {
-      candidates: totalPending,
+      candidates: targeted ? 0 : totalPending,
       attempted: 0,
       updated: 0,
-      unresolved: totalPending,
-      remaining: totalPending,
+      unresolved: targeted ? 0 : totalPending,
+      remaining: targeted ? pendingHistoricalPriceCount() : totalPending,
       retryIntervalMinutes: settings.historicalPriceRetryIntervalMinutes,
-      hint: totalPending ? "Für die noch fehlenden Kurse läuft bereits eine gedrosselte Wiederholung." : null,
+      ...(targeted ? { transactionId, outcome: "skipped" } : {}),
+      hint: targeted ? "Abruf übersprungen: Die Buchung wurde entfernt, hat keinen Zeitstempel oder ihr Kurs ist inzwischen geschützt."
+        : totalPending ? "Für die noch fehlenden Kurse läuft bereits eine gedrosselte Wiederholung." : null,
     };
   }
   const nativeDates = new Map();
@@ -2829,24 +2838,25 @@ async function backfillHistoricalPrices({ force = false, priceFetchRunId = null 
   }
 
   const nativePrices = new Map();
-  for (const [chain, timestamps] of nativeDates) nativePrices.set(chain, await hydrateHistoricalPrices(chain, timestamps, settings, null, null, priceFetchRunId));
+  for (const [chain, timestamps] of nativeDates) nativePrices.set(chain, await hydrateHistoricalPrices(chain, timestamps, settings, null, null, priceFetchRunId, { refresh: targeted }));
   const tokenPrices = new Map();
-  for (const [contract, timestamps] of tokenDates) tokenPrices.set(contract, await hydrateHistoricalTokenPrices(contract, timestamps, settings, priceFetchRunId));
+  for (const [contract, timestamps] of tokenDates) tokenPrices.set(contract, await hydrateHistoricalTokenPrices(contract, timestamps, settings, priceFetchRunId, { refresh: targeted }));
   const exchangeAssetPrices = new Map();
   for (const [asset, timestamps] of exchangeAssetDates) {
-    exchangeAssetPrices.set(asset, await hydrateHistoricalPrices(null, timestamps, settings, EXCHANGE_ASSET_CONFIG[asset].coinGeckoId, asset, priceFetchRunId));
+    exchangeAssetPrices.set(asset, await hydrateHistoricalPrices(null, timestamps, settings, EXCHANGE_ASSET_CONFIG[asset].coinGeckoId, asset, priceFetchRunId, { refresh: targeted }));
   }
 
   const update = db.prepare(`
     UPDATE transactions
     SET price_transaction_eur = ?, price_provider = ?, price_recorded_at = ?, updated_at = datetime('now')
-    WHERE id = ? AND price_source <> 'manual' AND (price_transaction_eur IS NULL OR price_transaction_eur <= 0)
+    WHERE id = ? AND price_source <> 'manual' ${targeted ? "" : "AND (price_transaction_eur IS NULL OR price_transaction_eur <= 0)"}
   `);
   const recordAutomaticPriceAudit = db.prepare(`
     INSERT INTO transaction_price_audit (transaction_id, price_eur, source, note)
     VALUES (?, ?, 'auto', ?)
   `);
   const removeRetry = db.prepare("DELETE FROM historical_price_retries WHERE transaction_id = ?");
+  const currentPrice = db.prepare("SELECT price_source, price_transaction_eur FROM transactions WHERE id = ?");
   const saveRetry = db.prepare(`
     INSERT INTO historical_price_retries (transaction_id, attempt_count, last_attempt_at, next_attempt_at)
     VALUES (?, ?, ?, ?)
@@ -2860,6 +2870,9 @@ async function backfillHistoricalPrices({ force = false, priceFetchRunId = null 
   db.exec("BEGIN");
   try {
     for (const transaction of candidates) {
+      // A manual correction or deletion during the network request wins.
+      const current = currentPrice.get(transaction.id);
+      if (!current || current.price_source === "manual") { removeRetry.run(transaction.id); continue; }
       const date = isoDay(transaction.timestamp);
       const mappedChain = chainForNativeAsset(transaction.asset, transaction.chain);
       const exchangeAsset = EXCHANGE_ASSET_CONFIG[transaction.asset];
@@ -2873,9 +2886,9 @@ async function backfillHistoricalPrices({ force = false, priceFetchRunId = null 
         const recordedAt = record?.updated_at || null;
         const result = update.run(price, provider, recordedAt, transaction.id);
         updated += result.changes;
-        if (result.changes) recordAutomaticPriceAudit.run(transaction.id, price, `Automatisch ergänzt · ${provider}`);
+        if (result.changes) recordAutomaticPriceAudit.run(transaction.id, price, `${targeted ? "Auf Anfrage abgerufen" : "Automatisch ergänzt"} · ${provider}`);
         removeRetry.run(transaction.id);
-      } else {
+      } else if (!positiveNumber(current.price_transaction_eur)) {
         unresolvedTransactions.push(transaction);
       }
     }
@@ -2903,6 +2916,17 @@ async function backfillHistoricalPrices({ force = false, priceFetchRunId = null 
   const remaining = pendingHistoricalPriceCount();
   const requiresExtendedHistory = candidates.some((transaction) => needsExtendedCoinGeckoHistory(isoDay(transaction.timestamp)));
   const usingPro = usesCoinGeckoPro(settings.coinGeckoBaseUrl, settings.coinGeckoApiKey);
+  if (targeted) {
+    const current = currentPrice.get(transactionId);
+    const skipped = !current || current.price_source === "manual";
+    return {
+      transactionId, outcome: updated ? "updated" : skipped ? "skipped" : "unavailable",
+      candidates: 1, attempted: 1, updated, unresolved: skipped ? 0 : unresolved, remaining,
+      hint: updated ? "Historischer EUR-Kurs abgerufen und gespeichert."
+        : skipped ? "Die Buchung wurde entfernt oder inzwischen manuell bewertet. Es wurde kein Kurs überschrieben."
+          : "Die Preisquellen lieferten keinen historischen EUR-Kurs. Ein vorhandener Kurs bleibt erhalten; fehlende Werte bleiben offen.",
+    };
+  }
   return {
     candidates: totalPending,
     attempted: candidates.length,
@@ -2919,13 +2943,20 @@ async function backfillHistoricalPrices({ force = false, priceFetchRunId = null 
 }
 
 let historicalPriceBackfillInFlight = null;
+let historicalPriceBackfillTargetId = null;
 let nextAutomaticHistoricalPriceBackfillAt = 0;
 const historicalPriceInitialCheckAt = Date.now() + 15000;
 
-function runHistoricalPriceBackfill({ force = false, trigger = "automatisch" } = {}) {
-  if (historicalPriceBackfillInFlight) return historicalPriceBackfillInFlight;
-  const priceRunId = startHistoricalPriceRun({ trigger, force, pendingCount: pendingHistoricalPriceCount() });
-  historicalPriceBackfillInFlight = backfillHistoricalPrices({ force, priceFetchRunId: priceRunId })
+function runHistoricalPriceBackfill({ force = false, trigger = "automatisch", transactionId = null } = {}) {
+  if (historicalPriceBackfillInFlight) {
+    if (transactionId === null && historicalPriceBackfillTargetId === null) return historicalPriceBackfillInFlight;
+    // A request for one booking must never receive another run's result.
+    return historicalPriceBackfillInFlight.catch(() => undefined)
+      .then(() => runHistoricalPriceBackfill({ force, trigger, transactionId }));
+  }
+  historicalPriceBackfillTargetId = transactionId;
+  const priceRunId = startHistoricalPriceRun({ trigger, force, pendingCount: transactionId === null ? pendingHistoricalPriceCount() : 1 });
+  historicalPriceBackfillInFlight = backfillHistoricalPrices({ force, priceFetchRunId: priceRunId, transactionId })
     .then((result) => {
       finishHistoricalPriceRun(priceRunId, result);
       return result;
@@ -2934,7 +2965,7 @@ function runHistoricalPriceBackfill({ force = false, trigger = "automatisch" } =
       failHistoricalPriceRun(priceRunId, error);
       throw error;
     })
-    .finally(() => { historicalPriceBackfillInFlight = null; });
+    .finally(() => { historicalPriceBackfillInFlight = null; historicalPriceBackfillTargetId = null; });
   return historicalPriceBackfillInFlight;
 }
 
@@ -5048,6 +5079,25 @@ app.patch("/api/transactions/bulk", (request, response, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+app.post("/api/transactions/:id/historical-price/fetch", (request, response, next) => {
+  try {
+    const id = Number(request.params.id);
+    if (!/^\d+$/.test(request.params.id) || !Number.isSafeInteger(id) || id <= 0) throw makeError("Ungültige Transaktions-ID.");
+    const transaction = db.prepare(`SELECT t.*, w.chain FROM transactions t JOIN wallets w ON w.id = t.wallet_id WHERE t.id = ?`).get(id);
+    if (!transaction) throw makeError("Transaktion nicht gefunden.", 404);
+    if (transaction.price_source === "manual") throw makeError("Dieser Kurs ist manuell oder durch einen Import geschützt. Aktiviere ausdrücklich die Automatik, bevor du ihn neu abrufst.", 409);
+    if (!transaction.timestamp || !Number.isFinite(Date.parse(transaction.timestamp))) throw makeError("Für den Kursabruf benötigt die Transaktion ein gültiges Datum.", 422);
+    if (transaction.asset_type === "nft" || !historicalPriceCoinId(transaction)) throw makeError("Für dieses Asset ist kein automatischer historischer EUR-Kurs verfügbar.", 422);
+    const existing = db.prepare(`SELECT * FROM background_jobs WHERE type = 'price_backfill' AND status IN ('queued', 'running')
+      AND json_valid(payload_json) AND json_extract(payload_json, '$.transactionId') = ? ORDER BY id LIMIT 1`).get(id);
+    const job = existing || enqueueJob("price_backfill", { transactionId: id, walletId: transaction.wallet_id, force: true });
+    response.status(202).json({
+      transactionId: id, job, reused: Boolean(existing),
+      links: { status: `/api/jobs/${job.id}`, transaction: `/api/v1/transactions/${id}`, priceAudit: `/api/v1/price-audit?transaction_id=${id}` },
+    });
+  } catch (error) { next(error); }
 });
 
 app.patch("/api/transactions/:id/historical-price", (request, response, next) => {

@@ -120,12 +120,15 @@
       <form id="historic-price-form">
         <div class="modal-head">
           <div>
-            <p class="eyebrow">MANUELLE KURSKORREKTUR</p>
-            <h2 id="historic-price-modal-title">Historischen Kurs setzen</h2>
+            <p class="eyebrow">TRANSAKTION · HISTORISCHER EUR-KURS</p>
+            <h2 id="historic-price-modal-title">Transaktion öffnen</h2>
           </div>
           <button class="modal-close" type="button" id="close-historic-price-modal" aria-label="Dialog schließen">×</button>
         </div>
         <p class="modal-copy" id="historic-price-modal-copy">Der manuelle EUR-Kurs wird bei späteren Synchronisierungen nicht überschrieben.</p>
+        <button type="button" class="button button-secondary" id="fetch-historic-price">Jetzt Kursdaten abrufen</button>
+        <p class="data-note" id="historic-price-fetch-status" role="status" aria-live="polite"></p>
+        <p class="data-note">Der Abruf prüft den historischen EUR-Kurs zum Buchungsdatum erneut. Tageskurse sind unverbindliche Schätzungen. Geschützte manuelle Kurse bleiben erhalten.</p>
         <label>
           <span>Preis je Coin in EUR</span>
           <input id="historic-price-input" type="number" min="0.00000001" step="any" inputmode="decimal" required />

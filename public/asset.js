@@ -1,7 +1,7 @@
 const params = new URLSearchParams(window.location.search);
 const requestedChain = String(params.get("chain") || "BTC").toUpperCase();
 const requestedAsset = String(params.get("asset") || "");
-const state = { portfolio: null, selected: new Set(), editingHistoricPriceTransaction: null, documentTransaction: null, chart: null, filters: { search: "", direction: "" } };
+const state = { portfolio: null, selected: new Set(), editingHistoricPriceTransaction: null, priceFetchJobs: new Map(), documentTransaction: null, chart: null, filters: { search: "", direction: "" } };
 const { api, el, formatCurrency, priceProviderLabel, purposeInfo, toast } = window.CryptoBuchUI;
 const price = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 4 });
 const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
@@ -397,7 +397,7 @@ function renderTransactions() {
     const editHistoricPrice = document.createElement("button");
     editHistoricPrice.type = "button";
     editHistoricPrice.className = "text-button historic-price-edit";
-    editHistoricPrice.textContent = "Kurs bearbeiten";
+    editHistoricPrice.textContent = "Transaktion öffnen";
     editHistoricPrice.addEventListener("click", () => openHistoricPriceModal(transaction));
     historic.append(historicDetail, historicProvenance, editHistoricPrice);
     row.append(selectCell, operation, wallet, amount, now, historic, renderPurpose(transaction));
@@ -488,6 +488,9 @@ async function loadPortfolio({ quiet = false } = {}) {
   try {
     if (!quiet) el("price-status").textContent = "Ansicht wird geladen …";
     state.portfolio = await api("/api/portfolio");
+    if (state.editingHistoricPriceTransaction) {
+      state.editingHistoricPriceTransaction = state.portfolio.transactions.find((entry) => entry.id === state.editingHistoricPriceTransaction.id) || state.editingHistoricPriceTransaction;
+    }
     if (!state.portfolio.assets?.[activeAssetId()] || state.portfolio.assets[activeAssetId()].chain !== requestedChain) return window.location.replace("/");
     renderPage();
   } catch (error) {
@@ -521,11 +524,25 @@ async function openHistoricPriceModal(transaction) {
   el("historic-price-input").value = hasPrice(transaction.price_transaction_eur) ? String(transaction.price_transaction_eur) : "";
   el("historic-price-note").value = "";
   el("historic-price-history").hidden = true;
-  el("historic-price-modal-copy").textContent = `${assetInfo(transaction.asset).symbol} · ${transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : "ohne Zeitstempel"}. Ein manueller EUR-Kurs wird nicht automatisch überschrieben.`;
+  el("historic-price-modal-title").textContent = `Transaktion #${transaction.id}`;
+  el("historic-price-modal-copy").textContent = `${formatAmount(transaction.amount, transaction.asset)} · ${transaction.direction === "in" ? "Eingang" : transaction.direction === "out" ? "Ausgang" : "Intern"} · ${transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : "ohne Zeitstempel"}. Ein manueller EUR-Kurs wird nicht automatisch überschrieben.`;
+  el("historic-price-fetch-status").textContent = "";
+  updatePriceFetchControls();
   el("historic-price-modal").showModal();
   setTimeout(() => el("historic-price-input").focus(), 0);
+  if (state.priceFetchJobs.has(transaction.id)) pollTransactionPrice(transaction);
+  await loadHistoricPriceHistory(transaction);
+}
+
+async function loadHistoricPriceHistory(transaction) {
+  const initialInput = el("historic-price-input").value;
   try {
     const history = await api(`/api/transactions/${transaction.id}/price-history`);
+    if (state.editingHistoricPriceTransaction?.id !== transaction.id) return;
+    Object.assign(transaction, history.transaction);
+    if (el("historic-price-input").value === initialInput) {
+      el("historic-price-input").value = hasPrice(transaction.price_transaction_eur) ? String(transaction.price_transaction_eur) : "";
+    }
     const provenance = historicPriceProvenance({ ...transaction, ...history.transaction });
     const latest = history.changes[0];
     const audit = latest
@@ -533,8 +550,85 @@ async function openHistoricPriceModal(transaction) {
       : "";
     el("historic-price-history").textContent = `Kursherkunft: ${provenance.provider} · Datenqualität: ${provenance.quality}.${audit}`;
     el("historic-price-history").hidden = false;
+    updatePriceFetchControls();
   } catch (_) {
     // The editor remains usable even if older audit data is unavailable.
+  }
+}
+
+function updatePriceFetchControls() {
+  const transaction = state.editingHistoricPriceTransaction;
+  if (!transaction) return;
+  const job = state.priceFetchJobs.get(transaction.id);
+  const unavailable = transaction.price_source === "manual" ? "Dieser Kurs ist geschützt. Für einen neuen Abruf zuerst ausdrücklich Automatik verwenden wählen."
+    : !transaction.timestamp || !Number.isFinite(Date.parse(transaction.timestamp)) ? "Für den Kursabruf fehlt ein gültiges Buchungsdatum."
+      : transaction.asset_type === "nft" ? "Für NFTs ist kein automatischer historischer Kurs verfügbar." : null;
+  const button = el("fetch-historic-price");
+  button.disabled = Boolean(unavailable || job?.polling || job?.submitting);
+  button.textContent = job ? "Kursabruf läuft …" : "Jetzt Kursdaten abrufen";
+  if (job && !job.polling && !job.submitting) button.textContent = "Status aktualisieren";
+  for (const id of ["save-historic-price", "restore-historic-price", "historic-price-input", "historic-price-note"]) el(id).disabled = Boolean(job);
+  if (unavailable) el("historic-price-fetch-status").textContent = unavailable;
+}
+
+async function fetchTransactionPrice() {
+  const transaction = state.editingHistoricPriceTransaction;
+  if (!transaction) return;
+  if (state.priceFetchJobs.has(transaction.id)) return pollTransactionPrice(transaction);
+  state.priceFetchJobs.set(transaction.id, { submitting: true });
+  updatePriceFetchControls();
+  el("historic-price-error").hidden = true;
+  try {
+    const result = await api(`/api/transactions/${transaction.id}/historical-price/fetch`, { method: "POST" });
+    state.priceFetchJobs.set(transaction.id, { id: result.job.id, polling: false });
+    await pollTransactionPrice(transaction);
+  } catch (error) {
+    state.priceFetchJobs.delete(transaction.id);
+    if (state.editingHistoricPriceTransaction?.id === transaction.id) {
+      el("historic-price-error").textContent = error.message;
+      el("historic-price-error").hidden = false;
+    }
+  } finally { updatePriceFetchControls(); }
+}
+
+async function pollTransactionPrice(transaction) {
+  const entry = state.priceFetchJobs.get(transaction.id);
+  if (!entry?.id || entry.polling) return;
+  const visible = () => el("historic-price-modal").open && state.editingHistoricPriceTransaction?.id === transaction.id && !document.hidden;
+  if (!visible()) return;
+  entry.polling = true;
+  updatePriceFetchControls();
+  try {
+    for (let attempt = 0; attempt < 90 && visible(); attempt += 1) {
+      const job = await api(`/api/jobs/${entry.id}`);
+      if (!visible()) return;
+      el("historic-price-fetch-status").textContent = `Kursabruf #${entry.id}: ${job.status === "queued" ? "wartet auf einen freien Platz" : "wird ausgeführt"}.`;
+      if (job.status === "error") {
+        state.priceFetchJobs.delete(transaction.id);
+        throw new Error(job.error_message || "Kursabruf fehlgeschlagen.");
+      }
+      if (job.status === "success") {
+        const fresh = await api(`/api/v1/transactions/${transaction.id}`);
+        if (!visible()) return;
+        Object.assign(transaction, fresh.data);
+        el("historic-price-input").value = hasPrice(transaction.price_transaction_eur) ? String(transaction.price_transaction_eur) : "";
+        el("historic-price-fetch-status").textContent = job.result?.hint || "Kursabruf abgeschlossen.";
+        state.priceFetchJobs.delete(transaction.id);
+        await loadHistoricPriceHistory(transaction);
+        await loadPortfolio({ quiet: true });
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    if (visible()) el("historic-price-fetch-status").textContent = "Der Auftrag läuft auf dem Server weiter. Du kannst den Status erneut aktualisieren.";
+  } catch (error) {
+    if (visible()) {
+      el("historic-price-error").textContent = error.message;
+      el("historic-price-error").hidden = false;
+    }
+  } finally {
+    entry.polling = false;
+    updatePriceFetchControls();
   }
 }
 
@@ -558,9 +652,7 @@ async function saveHistoricPrice(useAutomatic = false) {
     transaction.price_provider = result.price_provider;
     transaction.price_recorded_at = result.price_recorded_at;
     closeHistoricPriceModal();
-    renderMetrics();
-    renderChart();
-    renderTransactions();
+    await loadPortfolio({ quiet: true });
     toast(result.price_source === "manual" ? "Historischer Kurs manuell gespeichert." : "Automatische Preisergänzung wieder aktiviert.");
   } catch (requestError) {
     error.textContent = requestError.message;
@@ -653,6 +745,10 @@ el("refresh-chain").addEventListener("click", syncChain);
 el("close-historic-price-modal").addEventListener("click", closeHistoricPriceModal);
 el("historic-price-form").addEventListener("submit", (event) => { event.preventDefault(); saveHistoricPrice(); });
 el("restore-historic-price").addEventListener("click", () => saveHistoricPrice(true));
+el("fetch-historic-price").addEventListener("click", fetchTransactionPrice);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && state.editingHistoricPriceTransaction) pollTransactionPrice(state.editingHistoricPriceTransaction);
+});
 el("close-transaction-document-modal").addEventListener("click", () => el("transaction-document-modal").close());
 el("transaction-document-form").addEventListener("submit", uploadDocument);
 loadPortfolio();
