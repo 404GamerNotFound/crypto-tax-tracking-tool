@@ -5,13 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Crypto-Bestände, Wallets und Börsenverbindungen in CryptoBuch" />
     <title>CryptoBuch · Crypto-Bestände</title>
-    <link rel="stylesheet" href="/styles.css?v=20260929-5" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/styles.css?v=20261004-brand-1" />
   </head>
   <body>
     <div class="shell wallet-page-shell">
       <header class="topbar">
         <a class="brand" href="/" aria-label="CryptoBuch Dashboard">
-          <span class="brand-mark" aria-hidden="true">₿</span>
+          <img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" />
           <span>CryptoBuch</span>
         </a>
         <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
@@ -45,9 +47,9 @@
           </div>
           <div class="wallets-page-list" id="wallet-list"></div>
           <div id="wallet-empty" class="wallet-empty wallet-page-empty" hidden>
-            <span class="empty-icon">◇</span>
+            <img class="brand-illustration" src="/images/brand/cryptobuch-journal-480.jpg" srcset="/images/brand/cryptobuch-journal-480.jpg 480w, /images/brand/cryptobuch-journal-960.jpg 960w" sizes="(max-width: 440px) calc(100vw - 96px), 320px" alt="" width="960" height="640" loading="lazy" decoding="async" />
             <strong>Noch keine Wallet</strong>
-            <p>Füge eine öffentliche Adresse oder einen Bitcoin-xPub hinzu.</p>
+            <p>Füge eine öffentliche Adresse, einen Bitcoin-xPub oder eine Cardano-Stake-Adresse hinzu.</p>
             <button class="button button-primary" id="open-wallet-empty">Wallet anlegen</button>
           </div>
         </section>

@@ -5,13 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokales Crypto-Portfolio für öffentliche Blockchain-Wallets" />
     <title>CryptoBuch · Dashboard</title>
-    <link rel="stylesheet" href="/styles.css?v=20260929-5" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/styles.css?v=20261004-brand-1" />
   </head>
   <body>
     <div class="shell dashboard-shell">
       <header class="topbar">
         <a class="brand" href="/" aria-label="CryptoBuch Dashboard">
-          <span class="brand-mark" aria-hidden="true">₿</span>
+          <img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" />
           <span>CryptoBuch</span>
         </a>
         <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
@@ -25,11 +27,16 @@
             <h1 id="page-title">Dein Bestand,<br /><em>Coin für Coin.</em></h1>
             <p class="hero-copy">Käufe, noch gehaltene Bestände, Staking-Erträge und die Entwicklung gegenüber dem Kaufkurs in einer übersichtlichen Gesamtansicht.</p>
           </div>
-          <div class="hero-actions">
-            <a class="button button-primary" href="/wallets.html">Crypto-Bestände verwalten</a>
-            <a class="button button-secondary" href="/maintenance.html">Betrieb &amp; Backups</a>
-            <button class="button button-secondary" id="backfill-historical-prices" title="Fehlende historische EUR-Kurse ohne erneuten Blockchain-Import ergänzen">Historische Kurse ergänzen</button>
-            <button class="button button-secondary" id="refresh-all" title="Alle gespeicherten Wallets neu synchronisieren">Alles aktualisieren</button>
+          <div class="dashboard-brand-aside">
+            <picture class="brand-hero-art" aria-hidden="true">
+              <img src="/images/brand/cryptobuch-journal-480.jpg" srcset="/images/brand/cryptobuch-journal-480.jpg 480w, /images/brand/cryptobuch-journal-960.jpg 960w" sizes="306px" width="960" height="640" alt="" decoding="async" />
+            </picture>
+            <div class="hero-actions">
+              <a class="button button-primary" href="/wallets.html">Crypto-Bestände verwalten</a>
+              <a class="button button-secondary" href="/maintenance.html">Betrieb &amp; Backups</a>
+              <button class="button button-secondary" id="backfill-historical-prices" title="Fehlende historische EUR-Kurse ohne erneuten Blockchain-Import ergänzen">Historische Kurse ergänzen</button>
+              <button class="button button-secondary" id="refresh-all" title="Alle gespeicherten Wallets neu synchronisieren">Alles aktualisieren</button>
+            </div>
           </div>
         </section>
 
@@ -98,7 +105,7 @@
           </div>
           <div id="asset-dashboard" class="asset-dashboard"></div>
           <div id="dashboard-empty" class="dashboard-empty" hidden>
-            <span class="empty-icon">◇</span>
+            <img class="brand-empty-logo" src="/images/brand/cryptobuch-logo-256.png" alt="" width="64" height="64" loading="lazy" decoding="async" />
             <strong>Noch keine Blockchain-Daten</strong>
             <p>Lege auf der Wallet-Seite eine öffentliche Adresse an und synchronisiere sie.</p>
             <a class="button button-primary" href="/wallets.html">Wallet hinzufügen</a>

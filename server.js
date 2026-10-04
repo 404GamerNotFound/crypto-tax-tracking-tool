@@ -4294,10 +4294,16 @@ app.patch("/api/wallets/:id", (request, response, next) => {
   try {
     const id = asPositiveId(request.params.id);
     if (!id) throw makeError("Ungültige Wallet-ID.");
-    getWallet(id);
-    const label = cleanLabel(request.body?.label, 80);
+    const wallet = getWallet(id);
+    const body = request.body || {};
+    if (["chain", "address", "sourceType", "xpubAddressType"].some((key) => Object.hasOwn(body, key))) {
+      throw makeError("Netzwerk, Adresse und Quellentyp sind unveränderlich. Bitte dafür eine neue Wallet hinzufügen.");
+    }
+    const label = Object.hasOwn(body, "label") ? cleanLabel(body.label, 80) : wallet.label;
+    const groupName = Object.hasOwn(body, "groupName") ? body.groupName : wallet.group_name;
+    const tags = Object.hasOwn(body, "tags") ? body.tags : JSON.parse(wallet.tags);
     db.prepare("UPDATE wallets SET label = ? WHERE id = ?").run(label, id);
-    updateWalletMetadata(id, request.body?.groupName, request.body?.tags);
+    updateWalletMetadata(id, groupName, tags);
     response.json(getWallet(id));
   } catch (error) { next(error); }
 });

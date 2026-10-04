@@ -290,3 +290,13 @@ Für die Tests:
 ```bash
 npm test
 ```
+
+### Wallet-Verwaltung über App und API
+
+Die native iOS-App kann unter **Quellen** öffentliche Wallets anlegen, Name/Gruppe/Tags bearbeiten und eine Wallet nach ausdrücklicher Bestätigung löschen. Die vorhandenen Endpunkte sind `POST /api/wallets` (201), `PATCH /api/wallets/{id}` (200) und `DELETE /api/wallets/{id}` (204 ohne Body). Netzwerk- und Quellentyp-Auswahl kommen aus `GET /api/v1/metadata`; normalisierte Wallet-Daten aus `GET /api/v1/wallets`.
+
+PATCH erhält nicht übermittelte Metadaten. Leere Strings beziehungsweise `tags: []` löschen die jeweilige Zuordnung. Netzwerk, Adresse, Quellentyp und xPub-Adressformat werden nicht verändert; dafür eine neue Wallet anlegen. DELETE entfernt dauerhaft auch abhängige Buchungen, Verknüpfungen und lokale Belege, aber keine Coins auf der Blockchain und keine separat gespeicherten Backups. Das Anlegen startet keinen Import; dafür anschließend `POST /api/jobs/sync` verwenden.
+
+### Gemeinsames Logo für Web und App
+
+Die Weboberfläche verwendet das neue CryptoBuch-Logo auf allen Seiten, als Favicon und als Apple-Touch-Icon. Dashboard und leere Wallet-Ansicht nutzen die passende Journal-Illustration. Alle Bilddateien werden lokal ausgeliefert und vom vorhandenen Docker-Build übernommen. Details und Dateizuordnung: [docs/branding.md](docs/branding.md).
