@@ -811,3 +811,24 @@ a.market-availability:hover { text-decoration: underline; }
   .hero h1 { font-size: clamp(46px, 4.65vw, 72px); }
   .compact-hero h1, .asset-hero h1 { font-size: clamp(42px, 4.2vw, 64px); }
 }
+
+/* Persistent portfolio visibility controls. */
+.asset-visibility-panel { margin: 18px 0 24px; padding: 18px; border: 1px solid var(--line); border-radius: 16px; }
+.asset-visibility-panel summary { cursor: pointer; font-weight: 700; }
+.asset-visibility-panel p { line-height: 1.6; }
+.asset-visibility-panel input { display: block; width: 100%; margin: 8px 0 16px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: inherit; font: inherit; }
+#asset-visibility-list { max-height: 420px; overflow-y: auto; }
+.asset-visibility-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.asset-visibility-row > div { min-width: 0; }
+.asset-visibility-row small { display: block; margin-top: 5px; overflow-wrap: anywhere; }
+.asset-visibility-row .button { flex-shrink: 0; }
+@media (max-width: 440px) { .asset-visibility-row { align-items: stretch; flex-direction: column; } }
+
+.login-main { max-width: 520px; margin: 8vh auto; padding: 24px; }
+.login-main .brand { margin-bottom: 32px; }
+.login-main form, #auth-password-form { display: grid; gap: 18px; }
+.login-main label, #auth-password-form label { display: grid; gap: 8px; }
+.login-main input, #auth-password-form input { width: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+#auth-password-error, #login-error { color: #ad3434; }
+
+#auth-current-label[hidden] { display: none; }

@@ -7,7 +7,7 @@
     <title>CryptoBuch · Dashboard</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=20261004-brand-1" />
+    <link rel="stylesheet" href="/styles.css?v=20261004-visibility-1" />
   </head>
   <body>
     <div class="shell dashboard-shell">
@@ -103,6 +103,13 @@
             </div>
             <p class="section-copy">Öffne einen Coin für Transaktionen und Zweckzuordnungen.</p>
           </div>
+          <p id="hidden-assets-note" class="analytics-note" hidden></p>
+          <details class="asset-visibility-panel">
+            <summary>Coins ein- / ausblenden</summary>
+            <p>Ausgeblendete Coins zählen nicht zum Portfolio-Wert, zur Verteilung oder Wertentwicklung. Buchungen, Datenqualität und Steuerberichte bleiben erhalten. Die Auswahl gilt auch in der App und kann jederzeit rückgängig gemacht werden.</p>
+            <label>Coin suchen <input id="asset-visibility-search" type="search" placeholder="Name, Symbol oder Contract-Adresse" /></label>
+            <div id="asset-visibility-list" aria-live="polite"></div>
+          </details>
           <div id="asset-dashboard" class="asset-dashboard"></div>
           <div id="dashboard-empty" class="dashboard-empty" hidden>
             <img class="brand-empty-logo" src="/images/brand/cryptobuch-logo-256.png" alt="" width="64" height="64" loading="lazy" decoding="async" />
@@ -135,9 +142,9 @@
       </main>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/ui.js?v=20260929-1" defer></script>
-    <script src="/navigation.js?v=20260929-2" defer></script>
+    <script src="/ui.js?v=20261004-auth-1" defer></script>
+    <script src="/navigation.js?v=20261004-auth-1" defer></script>
     <script src="/notifications.js?v=20260925-1" defer></script>
-    <script src="/app.js?v=20260930-1" defer></script>
+    <script src="/app.js?v=20261004-visibility-1" defer></script>
   </body>
 </html>

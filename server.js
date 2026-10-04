@@ -255,6 +255,10 @@ const db = new DatabaseSync(DB_PATH);
 db.exec(`
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
+  CREATE TABLE IF NOT EXISTS hidden_assets (
+    asset TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
   CREATE TABLE IF NOT EXISTS wallets (
     id INTEGER PRIMARY KEY,
     chain TEXT NOT NULL,
@@ -766,11 +770,14 @@ if (!priceHistoryColumnNames.has("source")) db.exec("ALTER TABLE price_history A
 
 const app = express();
 app.disable("x-powered-by");
+app.use((_request, response, next) => { response.set("X-Frame-Options", "DENY"); response.set("Referrer-Policy", "no-referrer"); next(); });
 app.use("/api", (_request, response, next) => {
   response.set("Cache-Control", "no-store");
   next();
 });
 app.use(express.json({ limit: "64kb" }));
+const { createAuth } = require("./lib/auth");
+createAuth({ dataDir: DATA_DIR }).register(app);
 
 let currentPriceCache = { expiresAt: 0, data: {} };
 let tokenPriceCache = { expiresAt: 0, data: {} };
@@ -3440,7 +3447,31 @@ function exchangePosition(wallet, connection, journalHoldings) {
   return { positions, reconciliations, snapshot };
 }
 
+function assetVisibilityResponse() {
+  return { hiddenAssets: db.prepare("SELECT asset FROM hidden_assets ORDER BY asset").all().map((row) => row.asset), scope: "portfolio" };
+}
+
+app.get("/api/asset-visibility", (_request, response) => response.json(assetVisibilityResponse()));
+app.patch("/api/asset-visibility", (request, response, next) => {
+  try {
+    const { asset, hidden } = request.body || {};
+    if (typeof asset !== "string" || !asset.length || asset.length > 200 || /[\s\x00-\x1f]/.test(asset) || typeof hidden !== "boolean") {
+      throw makeError("Bitte eine gültige Asset-ID und hidden als Wahrheitswert angeben.");
+    }
+    const known = Object.hasOwn(nativeAssetDescriptors(), asset)
+      || db.prepare("SELECT 1 FROM transactions WHERE asset = ? LIMIT 1").get(asset)
+      || db.prepare("SELECT 1 FROM exchange_balance_snapshots WHERE asset = ? LIMIT 1").get(asset)
+      || db.prepare("SELECT 1 FROM hidden_assets WHERE asset = ?").get(asset);
+    if (!known) throw makeError("Dieser Coin ist nicht bekannt.", 404);
+    if (hidden) db.prepare("INSERT INTO hidden_assets (asset) VALUES (?) ON CONFLICT(asset) DO NOTHING").run(asset);
+    else db.prepare("DELETE FROM hidden_assets WHERE asset = ?").run(asset);
+    response.json(assetVisibilityResponse());
+  } catch (error) { next(error); }
+});
+
 async function portfolioResponse() {
+  const { hiddenAssets } = assetVisibilityResponse();
+  const hidden = new Set(hiddenAssets);
   const wallets = db.prepare(`SELECT w.*, COALESCE(m.group_name, '') AS group_name, COALESCE(m.tags, '[]') AS tags
     FROM wallets w LEFT JOIN wallet_metadata m ON m.wallet_id = w.id
     WHERE w.source_type <> 'exchange' ORDER BY w.created_at DESC`).all()
@@ -3484,16 +3515,16 @@ async function portfolioResponse() {
   const currentPrices = await getCurrentPrices();
   const tokenPrices = await getErc20CurrentPrices(
     Object.values(assets)
-      .filter((asset) => asset.kind === "erc20" && Number(holdings[asset.id] || 0) !== 0)
+      .filter((asset) => !hidden.has(asset.id) && asset.kind === "erc20" && Number(holdings[asset.id] || 0) !== 0)
       .map((asset) => asset.contractAddress),
     runtimeSettings(),
   );
   const exchangeAssetPrices = await getExchangeAssetCurrentPrices(
-    Object.values(assets).filter((asset) => asset.kind === "exchange" && Number(holdings[asset.id] || 0) !== 0).map((asset) => asset.id),
+    Object.values(assets).filter((asset) => !hidden.has(asset.id) && asset.kind === "exchange" && Number(holdings[asset.id] || 0) !== 0).map((asset) => asset.id),
   );
   const pricesByAsset = Object.fromEntries(Object.entries(assets).map(([assetId, asset]) => [
     assetId,
-    asset.kind === "erc20" ? tokenPrices[asset.contractAddress] || null
+    hidden.has(assetId) ? null : asset.kind === "erc20" ? tokenPrices[asset.contractAddress] || null
       : asset.kind === "exchange" ? exchangeAssetPrices[assetId] || null
         : asset.kind === "nft" || asset.kind === "unknown" ? null : currentPrices[asset.chain] || null,
   ]));
@@ -3502,29 +3533,32 @@ async function portfolioResponse() {
     price_now_eur: pricesByAsset[transaction.asset] || null,
   }));
   const totalValueEur = Object.entries(holdings).reduce(
-    (sum, [asset, amount]) => sum + amount * Number(pricesByAsset[asset] || 0),
+    (sum, [asset, amount]) => sum + (hidden.has(asset) ? 0 : amount * Number(pricesByAsset[asset] || 0)),
     0,
   );
   const assetAnalytics = calculateAssetAnalytics(enriched, pricesByAsset, holdings, assets);
-  const allocation = Object.entries(assetAnalytics)
+  const visibleAnalytics = Object.fromEntries(Object.entries(assetAnalytics).filter(([asset]) => !hidden.has(asset)));
+  const visibleTransactions = enriched.filter((transaction) => !hidden.has(transaction.asset));
+  const allocation = Object.entries(visibleAnalytics)
     .map(([asset, report]) => ({ asset, valueEur: Number(report.holdingValueEur || 0), share: totalValueEur > 0 ? Number(report.holdingValueEur || 0) / totalValueEur : 0 }))
     .filter((entry) => entry.valueEur > 0)
     .sort((a, b) => b.valueEur - a.valueEur);
-  const valueHistory = buildBookValueHistory(enriched);
-  const unrealizedProfitEur = Object.values(assetAnalytics).reduce((sum, report) => sum + Number(report.purchases?.profitEur || 0), 0);
-  const remainingPurchaseCostEur = Object.values(assetAnalytics).reduce((sum, report) => sum + Number(report.purchases?.remainingCostEur || 0), 0);
-  const realizedYear = calculateTaxReport(enriched, new Date().getFullYear(), runtimeSettings()).summary.realizedProfitEur;
-  const netInvestmentEur = enriched.reduce((sum, transaction) => {
+  const valueHistory = buildBookValueHistory(visibleTransactions);
+  const unrealizedProfitEur = Object.values(visibleAnalytics).reduce((sum, report) => sum + Number(report.purchases?.profitEur || 0), 0);
+  const remainingPurchaseCostEur = Object.values(visibleAnalytics).reduce((sum, report) => sum + Number(report.purchases?.remainingCostEur || 0), 0);
+  const realizedYear = calculateTaxReport(visibleTransactions, new Date().getFullYear(), runtimeSettings()).summary.realizedProfitEur;
+  const netInvestmentEur = visibleTransactions.reduce((sum, transaction) => {
     if (!positiveNumber(transaction.price_transaction_eur)) return sum;
     const value = Number(transaction.amount) * Number(transaction.price_transaction_eur);
     return transaction.purpose === "Kauf" && transaction.direction === "in" ? sum + value
       : transaction.purpose === "Verkauf" && transaction.direction === "out" ? sum - value : sum;
   }, 0);
-  const incomeHistoricValueEur = Object.values(assetAnalytics).reduce((sum, report) => sum + Number(report.staking?.historicValueEur || 0), 0);
+  const incomeHistoricValueEur = Object.values(visibleAnalytics).reduce((sum, report) => sum + Number(report.staking?.historicValueEur || 0), 0);
 
   return {
     wallets,
     transactions: enriched,
+    hiddenAssets,
     holdings,
     balanceReconciliations,
     assetAnalytics,
@@ -3645,6 +3679,7 @@ function resetLocalData() {
     DELETE FROM notifications;
     DELETE FROM tax_report_snapshots;
     DELETE FROM app_settings;
+    DELETE FROM hidden_assets;
     DELETE FROM historical_price_fetch_events;
     DELETE FROM historical_price_runs;
     DELETE FROM price_history;
@@ -4611,7 +4646,7 @@ async function exchangePortfolioResponse(id) {
   const wallet = { id: connection.wallet_id, label: connection.account_label || connection.label };
   const position = exchangePosition(wallet, connection, journalHoldings);
   const assets = [...position.positions.entries()]
-    .filter(([, amount]) => amount > HOLDING_EPSILON)
+    .filter(([asset, amount]) => !portfolio.hiddenAssets.includes(asset) && amount > HOLDING_EPSILON)
     .map(([assetId, amount]) => {
       const asset = portfolio.assets[assetId] || { id: assetId, name: assetId, symbol: assetId, decimals: 8, icon: "◇", kind: "unknown" };
       const priceEur = positiveNumber(portfolio.assetPrices[assetId]);
@@ -4626,6 +4661,7 @@ async function exchangePortfolioResponse(id) {
   const totalValueEur = assets.reduce((sum, asset) => sum + Number(asset.currentValueEur || 0), 0);
   return {
     connection: exchangeConnectionView(connection),
+    hiddenAssets: portfolio.hiddenAssets,
     balance: {
       source: position.snapshot ? exchangeSnapshotSource(connection.provider) : "journal",
       observedAt: position.snapshot?.observedAt || null,

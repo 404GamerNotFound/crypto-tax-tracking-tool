@@ -7,7 +7,7 @@
     <title>CryptoBuch · Coin</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=20261004-brand-1" />
+    <link rel="stylesheet" href="/styles.css?v=20261004-visibility-1" />
     <link rel="stylesheet" href="/vendor/uplot.css" />
   </head>
   <body>
@@ -34,10 +34,12 @@
           </div>
           <div class="hero-actions">
             <a class="button button-secondary" href="/wallets.html">Wallet hinzufügen</a>
+            <button class="button button-secondary" id="toggle-asset-visibility" disabled>Coin ausblenden</button>
             <button class="button button-primary" id="refresh-chain">Coin aktualisieren</button>
           </div>
         </section>
 
+        <p id="asset-visibility-note" class="analytics-note">Ausblenden entfernt diesen Coin aus Portfolio-Summen und Wertentwicklung. Buchungen und Steuerberichte bleiben erhalten.</p>
         <section id="asset-metrics" class="asset-metrics" aria-label="Coin-Auswertung"></section>
         <section class="asset-chart-panel" aria-labelledby="asset-chart-title">
           <div class="section-heading chart-heading">
@@ -155,10 +157,10 @@
       <ul id="transaction-document-list" class="tax-snapshot-list"><li class="muted">Nachweise werden geladen …</li></ul><p class="data-note">Anhänge verbleiben im lokalen Datenverzeichnis und werden nicht an externe Anbieter übertragen.</p>
     </dialog>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/ui.js?v=20260929-1" defer></script>
-    <script src="/navigation.js?v=20260929-2" defer></script>
+    <script src="/ui.js?v=20261004-auth-1" defer></script>
+    <script src="/navigation.js?v=20261004-auth-1" defer></script>
     <script src="/notifications.js?v=20260925-1" defer></script>
     <script src="/vendor/uplot.js" defer></script>
-    <script src="/asset.js?v=20260929-2" defer></script>
+    <script src="/asset.js?v=20261004-visibility-1" defer></script>
   </body>
 </html>

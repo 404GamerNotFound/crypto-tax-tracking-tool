@@ -300,3 +300,15 @@ PATCH erhält nicht übermittelte Metadaten. Leere Strings beziehungsweise `tags
 ### Gemeinsames Logo für Web und App
 
 Die Weboberfläche verwendet das neue CryptoBuch-Logo auf allen Seiten, als Favicon und als Apple-Touch-Icon. Dashboard und leere Wallet-Ansicht nutzen die passende Journal-Illustration. Alle Bilddateien werden lokal ausgeliefert und vom vorhandenen Docker-Build übernommen. Details und Dateizuordnung: [docs/branding.md](docs/branding.md).
+
+### Coins aus dem Portfolio ausblenden
+
+Im Dashboard unter **Coins ein- / ausblenden** oder in einer Coin-Detailansicht können einzelne Assets ausgeblendet und wieder eingeblendet werden. In der iOS-App stehen die Aktionen unter **Überblick → Deine Bestände** und **Ausgeblendete Coins** bereit. Die Auswahl wird serverweit in der additiven Tabelle `hidden_assets` gespeichert und bleibt über Neustarts und Synchronisierungen erhalten. Sie wird mit der SQLite-Datenbank gesichert und beim ausdrücklichen Zurücksetzen der lokalen Daten mit entfernt.
+
+Die exakte Asset-ID (bei Token einschließlich Contract) verhindert, dass gleichnamige Assets gemeinsam ausgeblendet werden. Ausgeblendete Coins zählen nicht zum Portfolio-/Börsenwert, zur Allokation, zum Buchwertverlauf und zu den Portfolio-Performancekennzahlen. **Buchungen, gespeicherte Kurse, Zwecke, Datenqualität und Steuerberichte bleiben vollständig und unverändert.** Ausblenden korrigiert keine falschen Kursdaten und ist keine steuerliche Klassifizierung. Wiederherstellen ist jederzeit möglich.
+
+API: `GET /api/asset-visibility` liefert `hiddenAssets` und `scope: "portfolio"`. `PATCH /api/asset-visibility` akzeptiert `{ "asset": "BTC", "hidden": true }` (bzw. `false`). `/api/portfolio` enthält die Liste ebenfalls; seine Rohbestände und Buchungen bleiben vollständig, während Gesamtwerte und `insights` die Auswahl berücksichtigen. Aktuelle Einzelkurse ausgeblendeter Assets sind `null`. Details und Abhängigkeiten stehen auf der API-Dokumentationsseite.
+
+### Passwortschutz und Face ID
+
+Unter **Einstellungen → Passwortschutz** kann die gesamte Installation einschließlich Daten-APIs geschützt werden. Die iOS-App unterstützt die Anmeldung mit demselben Passwort und optional dessen biometrisch geschützte Ablage im Schlüsselbund. Einrichtung, Docker-Secrets, HTTPS, Sitzungen und administrative Passwort-Wiederherstellung: [Passwortschutz-Dokumentation](docs/password-protection.md).

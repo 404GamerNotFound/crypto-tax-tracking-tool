@@ -7,7 +7,7 @@
     <title>CryptoBuch · Einstellungen</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/styles.css?v=20261004-brand-1" />
+    <link rel="stylesheet" href="/styles.css?v=20261004-auth-1" />
   </head>
   <body>
     <div class="shell settings-shell">
@@ -27,6 +27,19 @@
         </section>
 
         <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
+        <section class="settings-card" id="zugangsschutz" aria-labelledby="auth-password-title">
+          <p class="eyebrow">SICHERHEIT</p><h2 id="auth-password-title">Passwortschutz</h2>
+          <p id="auth-password-status" aria-live="polite">Status wird geladen …</p>
+          <form id="auth-password-form">
+            <label id="auth-current-label" hidden>Aktuelles Passwort<input id="auth-current-password" type="password" autocomplete="current-password" maxlength="1024" /></label>
+            <label>Neues Passwort<input id="auth-new-password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required /></label>
+            <label>Neues Passwort wiederholen<input id="auth-confirm-password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required /></label>
+            <p>Mindestens 12 Zeichen. Nach dem Speichern müssen sich Web und App erneut anmelden. In der App kannst du das Passwort mit Face ID im Schlüsselbund sichern.</p>
+            <p id="auth-settings-transport" class="muted" hidden>HTTP überträgt Passwort und Daten unverschlüsselt. Verwende HTTPS oder ein vertrauenswürdiges privates Netz.</p>
+            <p id="auth-password-error" role="alert" hidden></p>
+            <div class="hero-actions"><button id="auth-save" class="button button-primary" type="submit">Passwort speichern</button><button id="auth-disable" class="button button-secondary" type="button" hidden>Passwortschutz ausschalten</button></div>
+          </form>
+        </section>
         <form id="settings-form" class="settings-form">
           <section class="settings-card" id="synchronisierung" aria-labelledby="sync-title">
             <div class="settings-heading">
@@ -394,9 +407,10 @@
       </main>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/ui.js?v=20260929-1" defer></script>
-    <script src="/navigation.js?v=20260929-2" defer></script>
+    <script src="/ui.js?v=20261004-auth-1" defer></script>
+    <script src="/navigation.js?v=20261004-auth-1" defer></script>
     <script src="/notifications.js?v=20260925-1" defer></script>
     <script src="/settings.js?v=20260929-1" defer></script>
+    <script src="/auth-settings.js?v=20261004-auth-1" defer></script>
   </body>
 </html>
