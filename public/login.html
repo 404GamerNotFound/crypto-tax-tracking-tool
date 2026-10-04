@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CryptoBuch · Anmelden</title>
+  <link rel="icon" href="/images/brand/favicon-32.png" />
+  <link rel="stylesheet" href="/styles.css?v=20261004-auth-1" />
+</head>
+<body>
+  <main class="login-main">
+    <a class="brand" href="/"><img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" /><span>CryptoBuch</span></a>
+    <section class="settings-card">
+      <p class="eyebrow">DEIN LOKALES PORTFOLIO</p><h1>Anmelden</h1>
+      <p>Gib das Passwort deines CryptoBuch-Servers ein.</p>
+      <form id="login-form">
+        <label>Passwort<input id="login-password" name="password" type="password" autocomplete="current-password" maxlength="1024" required autofocus /></label>
+        <p id="login-error" role="alert" hidden></p>
+        <button class="button button-primary" type="submit">Anmelden</button>
+      </form>
+      <p id="auth-transport-note" class="muted" hidden>Diese Verbindung verwendet HTTP. Passwort und Daten werden unverschlüsselt übertragen. Verwende HTTPS oder ein vertrauenswürdiges privates Netz.</p>
+    </section>
+  </main>
+  <script src="/login.js?v=20261004-auth-1" defer></script>
+</body>
+</html>

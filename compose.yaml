@@ -7,6 +7,9 @@ services:
     environment:
       PORT: 3000
       DATA_DIR: /data
+      # Optional: gemountete Secret-Datei zur einmaligen Passwort-Ersteinrichtung.
+      CRYPTOBUCH_PASSWORD_FILE: ${CRYPTOBUCH_PASSWORD_FILE:-}
+      CRYPTOBUCH_SECURE_COOKIE: ${CRYPTOBUCH_SECURE_COOKIE:-false}
       # Diese Werte dienen beim allerersten Start als Vorgaben. Danach werden sie
       # sicher pro Installation in der UI unter „Einstellungen“ verwaltet.
       # 0 = alle vom Explorer bereitgestellten Transaktionen laden

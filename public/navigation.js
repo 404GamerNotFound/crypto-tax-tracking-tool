@@ -52,6 +52,7 @@
       { href: "#daten-reset", label: "Daten zurücksetzen" },
     ]),
     settings: Object.freeze([
+      { href: "#zugangsschutz", label: "Passwortschutz" },
       { href: "#synchronisierung", label: "Synchronisierung" },
       { href: "#steuerprofil", label: "Steuerprofil" },
       { href: "#preisdaten", label: "Preis- & API-Daten" },
@@ -109,3 +110,22 @@
   else mountNavigation();
   window.addEventListener("hashchange", mountNavigation);
 })();
+
+// Sessions use an HttpOnly cookie; no credentials are kept in browser storage.
+fetch("/api/auth/status", { cache: "no-store" }).then(response => response.json()).then(status => {
+  if (!status.enabled) return;
+  const navigation = document.querySelector("[data-primary-navigation]");
+  if (!navigation) return;
+  const button = document.createElement("button");
+  button.className = "button button-secondary"; button.textContent = "Abmelden";
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST", headers: { "X-CryptoBuch-Request": "1" } });
+      if (!response.ok) throw new Error();
+      location.replace("/login.html");
+    } catch { button.disabled = false; button.textContent = "Abmelden erneut versuchen"; }
+  });
+  navigation.append(button);
+}).catch(() => {});
+window.addEventListener("pageshow", event => { if (event.persisted) location.reload(); });

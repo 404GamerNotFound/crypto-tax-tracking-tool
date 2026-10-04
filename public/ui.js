@@ -121,11 +121,12 @@
 
   async function api(url, options = {}) {
     const response = await fetch(url, {
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
       ...options,
+      headers: { "Content-Type": "application/json", "X-CryptoBuch-Request": "1", ...(options.headers || {}) },
     });
     if (response.status === 204) return null;
     const payload = await response.json().catch(() => ({}));
+    if (response.status === 401 && !String(url).startsWith("/api/auth/")) location.assign("/login.html");
     if (!response.ok) throw new Error(payload.error || "Der Vorgang ist fehlgeschlagen.");
     return payload;
   }

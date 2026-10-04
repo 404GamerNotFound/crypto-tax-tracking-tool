@@ -86,7 +86,8 @@ function render() {
   el("total-value").textContent = formatCurrency(portfolio.totalValueEur);
   el("wallet-count").textContent = (portfolio.wallets || []).length.toLocaleString("de-DE");
   el("transaction-count").textContent = (portfolio.transactions || []).length.toLocaleString("de-DE");
-  const reports = Object.values(portfolio.assetAnalytics || {});
+  const hidden = new Set(portfolio.hiddenAssets || []);
+  const reports = Object.entries(portfolio.assetAnalytics || {}).filter(([id]) => !hidden.has(id)).map(([, report]) => report);
   const knownProfits = reports.map((report) => report?.purchases?.profitEur).filter((value) => hasNumber(value));
   const partialProfits = reports.filter((report) => report?.purchases?.profitIsPartial).length;
   const earningsValue = reports.reduce((sum, report) => sum + Number(report?.staking?.currentValueEur || 0), 0);
@@ -110,15 +111,54 @@ function render() {
   const walletChains = new Set((portfolio.wallets || []).map((wallet) => wallet.chain));
   for (const chain of Object.values(portfolio.chains || {})) {
     const asset = assetInfo(chain.asset);
-    if (walletChains.has(chain.asset) || Number(portfolio.holdings?.[chain.asset] || 0) > 0) dashboard.append(renderAssetCard(chain.asset, asset));
+    if (!hidden.has(chain.asset) && (walletChains.has(chain.asset) || Number(portfolio.holdings?.[chain.asset] || 0) > 0)) dashboard.append(renderAssetCard(chain.asset, asset));
   }
   for (const [assetId, asset] of Object.entries(portfolio.assets || {})) {
-    if (["erc20", "exchange"].includes(asset.kind) && Number(portfolio.holdings?.[assetId] || 0) > 0) dashboard.append(renderAssetCard(assetId, asset));
+    if (!hidden.has(assetId) && ["erc20", "exchange"].includes(asset.kind) && Number(portfolio.holdings?.[assetId] || 0) > 0) dashboard.append(renderAssetCard(assetId, asset));
   }
   const hasDataSources = (portfolio.wallets || []).length > 0 || (portfolio.transactions || []).some((transaction) => transaction.source_type === "exchange");
   dashboard.hidden = !hasDataSources;
   el("dashboard-empty").hidden = hasDataSources;
+  el("hidden-assets-note").hidden = hidden.size === 0;
+  el("hidden-assets-note").textContent = `${hidden.size} ${hidden.size === 1 ? "Coin" : "Coins"} ausgeblendet und aus den Portfolio-Summen ausgeschlossen. Buchungen und Steuerberichte bleiben vollständig.`;
+  renderAssetVisibility();
   renderInsights(portfolio.insights || {});
+}
+
+function renderAssetVisibility() {
+  const portfolio = state.portfolio;
+  if (!portfolio) return;
+  const hidden = new Set(portfolio.hiddenAssets || []);
+  const used = new Set([...Object.keys(portfolio.holdings || {}).filter((id) => Number(portfolio.holdings[id]) !== 0),
+    ...(portfolio.transactions || []).map((transaction) => transaction.asset),
+    ...(portfolio.wallets || []).map((wallet) => wallet.chain), ...hidden]);
+  const query = el("asset-visibility-search").value.trim().toLocaleLowerCase("de");
+  const list = el("asset-visibility-list");
+  list.replaceChildren();
+  for (const id of [...used].sort((a, b) => Number(hidden.has(b)) - Number(hidden.has(a)) || a.localeCompare(b))) {
+    const asset = assetInfo(id);
+    if (!`${asset.name} ${asset.symbol} ${id}`.toLocaleLowerCase("de").includes(query)) continue;
+    const row = document.createElement("div"); row.className = "asset-visibility-row";
+    const label = document.createElement("div");
+    const name = document.createElement("strong"); name.textContent = `${asset.name || id} · ${asset.symbol || id}`;
+    const identity = document.createElement("small"); identity.textContent = `${id}${hidden.has(id) ? " · Ausgeblendet" : ""}`;
+    label.append(name, identity);
+    const button = document.createElement("button"); button.className = "button button-secondary";
+    button.textContent = hidden.has(id) ? "Einblenden" : "Ausblenden";
+    button.setAttribute("aria-label", `${asset.name || id} ${hidden.has(id) ? "einblenden" : "ausblenden"}`);
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        const result = await api("/api/asset-visibility", { method: "PATCH", body: JSON.stringify({ asset: id, hidden: !hidden.has(id) }) });
+        state.portfolio.hiddenAssets = result.hiddenAssets;
+        await loadPortfolio({ quiet: true });
+        toast(hidden.has(id) ? "Coin wieder eingeblendet." : "Coin aus dem Portfolio ausgeblendet. Buchungen bleiben erhalten.");
+      } catch (error) { toast(error.message, "error"); }
+      finally { button.disabled = false; }
+    });
+    row.append(label, button); list.append(row);
+  }
+  if (!list.children.length) list.textContent = "Keine passenden Coins vorhanden.";
 }
 
 function historyPoints(valueHistory) {
@@ -387,6 +427,7 @@ async function backfillHistoricalPrices() {
   }
 }
 
+el("asset-visibility-search").addEventListener("input", renderAssetVisibility);
 el("refresh-all").addEventListener("click", syncAll);
 el("backfill-historical-prices").addEventListener("click", backfillHistoricalPrices);
 for (const button of document.querySelectorAll("[data-history-range]")) {

@@ -130,6 +130,7 @@ function renderMetrics() {
   const report = state.portfolio.assetAnalytics?.[activeAssetId()];
   const purchases = report?.purchases || {};
   const partialProfit = Boolean(purchases.profitIsPartial);
+  const hidden = (state.portfolio.hiddenAssets || []).includes(activeAssetId());
   const missingLotHint = purchases.unknownCostLotCount
     ? `Unvollständig · ${purchases.unknownCostLotCount} verbleibende Kaufcharge${purchases.unknownCostLotCount === 1 ? "" : "n"} ohne Kurs`
     : "Historischer Kaufkurs fehlt";
@@ -139,7 +140,7 @@ function renderMetrics() {
     metric("Aktueller Bestand", formatAmount(report?.holdingAmount || 0), `Marktwert ${formatCurrency(report?.holdingValueEur)}`, "highlight"),
     metric("Als Kauf erfasst", formatAmount(purchases.acquiredAmount || 0), `${purchases.count || 0} Kauf-Transaktionen`),
     metric("Noch aus Käufen gehalten", formatAmount(purchases.remainingAmount || 0), purchases.hasUnknownCost ? missingLotHint : `Kosten ${formatCurrency(purchases.remainingCostEur)}`),
-    metric(partialProfit ? "Gewinn ggü. Kauf · teilweise" : "Gewinn ggü. Kauf", formatCurrency(purchases.profitEur), purchases.profitEur === null ? missingLotHint : partialProfit ? `Berechnet aus ${formatAmount(purchases.knownRemainingAmount || 0)} mit Kaufkurs` : "Aktueller Wert minus FIFO-Kaufkosten", Number(purchases.profitEur) >= 0 ? "positive" : "negative"),
+    metric(partialProfit ? "Gewinn ggü. Kauf · teilweise" : "Gewinn ggü. Kauf", formatCurrency(purchases.profitEur), hidden ? "Coin ausgeblendet · keine aktuelle Bewertung" : purchases.profitEur === null ? missingLotHint : partialProfit ? `Berechnet aus ${formatAmount(purchases.knownRemainingAmount || 0)} mit Kaufkurs` : "Aktueller Wert minus FIFO-Kaufkosten", Number(purchases.profitEur) >= 0 ? "positive" : "negative"),
     metric("Staking-Ertrag", formatAmount(report?.staking?.amount || 0), `${report?.staking?.count || 0} Ertrags-Transaktionen · aktuell ${formatCurrency(report?.staking?.currentValueEur)}`, "staking"),
   );
 }
@@ -176,7 +177,9 @@ function renderChart() {
     empty.className = "chart-empty";
     empty.textContent = "Für einen Verlauf werden mindestens zwei Bewegungen mit historischen Kursen benötigt.";
     container.append(empty);
-    copy.textContent = "Historische Kurse werden automatisch ergänzt, sobald sie verfügbar sind.";
+    copy.textContent = (state.portfolio.hiddenAssets || []).includes(activeAssetId())
+      ? "Coin ausgeblendet: keine aktuelle Bewertung. Historische Buchungswerte bleiben erhalten."
+      : "Historische Kurse werden automatisch ergänzt, sobald sie verfügbar sind.";
     return;
   }
 
@@ -475,10 +478,16 @@ function renderPage() {
     ? `Ethereum ERC-20 · ${asset.symbol} · Transaktionen und Auswertung dieses Tokens.`
     : asset.kind === "exchange" ? `Börsenbestand · ${asset.symbol} · Synchronisierung und Mapping erfolgen unter Datenqualität.`
     : `Käufe, Erträge und alle ${asset.symbol}-Bewegungen in deinem Portfolio.`;
+  const hidden = (state.portfolio.hiddenAssets || []).includes(activeAssetId());
+  el("toggle-asset-visibility").disabled = false;
+  el("toggle-asset-visibility").textContent = hidden ? "Coin wieder einblenden" : "Coin ausblenden";
+  el("asset-visibility-note").textContent = hidden
+    ? "Dieser Coin ist ausgeblendet: Er zählt nicht zu Portfolio-Summen und Wertentwicklung. Buchungen und Steuerberichte bleiben vollständig; aktuelle Kurse werden hier nicht bewertet."
+    : "Ausblenden entfernt diesen Coin aus Portfolio-Summen und Wertentwicklung. Buchungen und Steuerberichte bleiben erhalten.";
   el("refresh-chain").hidden = asset.kind === "exchange";
   const report = state.portfolio.assetAnalytics?.[activeAssetId()];
   const prices = state.portfolio.currentPrices || {};
-  el("price-status").textContent = prices.warning ? "Preisabfrage momentan nicht verfügbar" : hasPrice(report?.currentPriceEur) ? `1 ${asset.symbol} · ${formatPrice(report.currentPriceEur)}` : "Aktueller Preis nicht verfügbar";
+  el("price-status").textContent = hidden ? "Coin ausgeblendet · keine aktuelle Bewertung" : prices.warning ? "Preisabfrage momentan nicht verfügbar" : hasPrice(report?.currentPriceEur) ? `1 ${asset.symbol} · ${formatPrice(report.currentPriceEur)}` : "Aktueller Preis nicht verfügbar";
   renderMetrics();
   renderChart();
   renderTransactions();
@@ -752,3 +761,15 @@ document.addEventListener("visibilitychange", () => {
 el("close-transaction-document-modal").addEventListener("click", () => el("transaction-document-modal").close());
 el("transaction-document-form").addEventListener("submit", uploadDocument);
 loadPortfolio();
+
+el("toggle-asset-visibility").addEventListener("click", async () => {
+  const button = el("toggle-asset-visibility");
+  button.disabled = true;
+  try {
+    const hidden = !(state.portfolio.hiddenAssets || []).includes(activeAssetId());
+    await api("/api/asset-visibility", { method: "PATCH", body: JSON.stringify({ asset: activeAssetId(), hidden }) });
+    await loadPortfolio({ quiet: true });
+    toast(hidden ? "Coin ausgeblendet. Buchungen bleiben erhalten." : "Coin wieder eingeblendet.");
+  } catch (error) { toast(error.message, "error"); }
+  finally { button.disabled = false; }
+});

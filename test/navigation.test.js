@@ -13,7 +13,7 @@ test("bindet die zentrale Hauptnavigation auf jeder Oberfläche ein", () => {
   for (const page of pages) {
     const html = fs.readFileSync(path.join(publicDir, page), "utf8");
     assert.match(html, /<nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation><\/nav>/, page);
-    assert.match(html, /<script src="\/navigation\.js\?v=20260929-2" defer><\/script>/, page);
+    assert.match(html, /<script src="\/navigation\.js\?v=20261004-auth-1" defer><\/script>/, page);
     assert.doesNotMatch(html, /<a class="topbar-link/, `${page} enthält keine kopierte Navigation mehr`);
   }
 });

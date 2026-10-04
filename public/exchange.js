@@ -64,7 +64,7 @@ function renderMetrics() {
   const priced = assets.filter((asset) => hasNumber(asset.currentValueEur)).length;
   const metrics = el("exchange-metrics");
   const entries = [
-    metric("Börsenwert", formatCurrency(data.totalValueEur), `${priced} von ${assets.length} Beständen aktuell bewertet`, "highlight"),
+    metric("Börsenwert", formatCurrency(data.totalValueEur), `${priced} von ${assets.length} Beständen aktuell bewertet${data.hiddenAssets?.length ? " · Ausgeblendete Coins ausgeschlossen (Auswahl im Dashboard)." : ""}`, "highlight"),
     metric("Aktive Bestände", assets.length.toLocaleString("de-DE"), "Assets mit positivem Saldo"),
     metric("Buchungen gespeichert", data.transactionCount.toLocaleString("de-DE"), "Alle lokal importierten Ein- und Ausgänge"),
     metric("Letzter Import", data.connection.lastSyncedAt ? dateTime.format(new Date(`${data.connection.lastSyncedAt}Z`)) : "Noch keiner", data.connection.importMode === "csv" ? "Lokaler CSV-/Beleg-Import" : "Read-only-API · keine Handelsrechte"),
