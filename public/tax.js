@@ -51,7 +51,13 @@ function renderIncome() {
 function populateIncomeFilters() {
   const entries = state.report?.income || [];
   const sources = [...new Map(entries.map((entry) => [`${entry.sourceKind}:${entry.sourceLabel}`, { value: `${entry.sourceKind}:${entry.sourceLabel}`, label: `${entry.sourceKind === "exchange" ? "Börse" : "Wallet"}: ${entry.sourceLabel}` }])).values()].sort((left, right) => left.label.localeCompare(right.label, "de"));
-  const assets = [...new Set(entries.map((entry) => entry.asset).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+  const assets = [...new Set([...(state.report?.availableAssets || []), ...entries.map((entry) => entry.asset)].filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right))
+    .map((asset) => ({ value: asset, label: entries.some((entry) => entry.asset === asset) ? asset : `${asset} · keine Erträge im Jahr` }));
+  const undated = state.report?.undatedIncome || [];
+  const note = el("undated-income-note");
+  note.hidden = !undated.length;
+  note.textContent = `${undated.length} Ertragspositionen ohne Datum (${[...new Set(undated.map((entry) => entry.asset))].join(", ")}) sind keinem Steuerjahr zugeordnet und fehlen in den Jahressummen. Bitte die betroffenen Wallets erneut synchronisieren und offene Buchungen prüfen.`;
   replaceOptions("income-source-filter", sources, "Alle Quellen", state.incomeFilters.source);
   replaceOptions("income-asset-filter", assets, "Alle Coins", state.incomeFilters.asset);
 }

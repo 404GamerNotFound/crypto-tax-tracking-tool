@@ -7,7 +7,6 @@ const QRCode = require("qrcode");
 const { z } = require("zod");
 const { createPublicClient, http, parseAbi } = require("viem");
 const { mainnet } = require("viem/chains");
-const { BlockFrostAPI } = require("@blockfrost/blockfrost-js");
 const {
   XPUB_ADDRESS_TYPES,
   deriveXpubAddress,
@@ -19,7 +18,7 @@ const { previewPsbt } = require("./lib/bitcoin-psbt");
 const { CHAIN_CONFIG, cleanLabel, isValidAddress, isValidCardanoStakeAddress } = require("./lib/validation");
 const { isConfirmedStakingPayout, trustedPayoutAliases } = require("./lib/tezos-staking");
 const { normalizeTronNativeTransfer } = require("./lib/tron");
-const { normalizeCardanoTransaction } = require("./lib/cardano");
+const { normalizeCardanoTransaction, normalizeCardanoReward, fetchCardanoRewardHistory } = require("./lib/cardano");
 const { normalizeEthereumTransaction, normalizeErc20Transfer, normalizeNftTransfer } = require("./lib/ethereum");
 const { buildTopMarketCatalog } = require("./lib/market-catalog");
 const { calculateAssetAnalytics } = require("./lib/portfolio-analytics");
@@ -1686,33 +1685,9 @@ function cardanoHeaders(settings) {
   return { project_id: settings.blockfrostProjectId };
 }
 
-const cardanoRewardsSchema = z.array(z.object({ epoch: z.coerce.number().int(), amount: z.coerce.string(), pool_id: z.string().optional() }));
-
 async function fetchCardanoRewards(stakeAddress, settings) {
-  const client = new BlockFrostAPI({ projectId: settings.blockfrostProjectId, customBackend: settings.blockfrostBaseUrl });
-  const result = await client.accountsRewards(stakeAddress, { count: 100, order: "desc" });
-  return cardanoRewardsSchema.parse(result);
-}
-
-function normalizeCardanoReward(reward) {
-  const amount = Number(reward.amount || 0) / 1000000;
-  if (!Number.isFinite(amount) || amount <= 0) return null;
-  return {
-    externalId: `ada-reward:${reward.epoch}:${reward.pool_id || "unknown"}:${reward.amount}`,
-    hash: `cardano-reward:${reward.epoch}:${reward.pool_id || "unknown"}`,
-    timestamp: null,
-    direction: "in",
-    asset: "ADA",
-    assetSymbol: "ADA",
-    assetName: "Cardano",
-    assetDecimals: 6,
-    amount,
-    fee: 0,
-    counterparty: reward.pool_id || null,
-    historicalPrice: null,
-    autoPurpose: "Staking Rewards",
-    rawJson: JSON.stringify(reward),
-  };
+  const headers = cardanoHeaders(settings);
+  return fetchCardanoRewardHistory(stakeAddress, (route) => fetchJson(`${settings.blockfrostBaseUrl}${route}`, headers));
 }
 
 async function fetchCardanoAccountAddresses(stakeAddress, settings) {
@@ -1753,7 +1728,7 @@ async function fetchCardanoTransactionReferences(address, settings, remaining = 
   return remaining ? references.slice(0, remaining) : references;
 }
 
-async function fetchCardanoTransactions(addresses, settings) {
+async function fetchCardanoTransactions(addresses, settings, stakeAddress = null) {
   const paymentAddresses = [...new Set(Array.isArray(addresses) ? addresses : [addresses])];
   const references = [];
   const seen = new Set();
@@ -1774,7 +1749,25 @@ async function fetchCardanoTransactions(addresses, settings) {
     const hash = reference.tx_hash || reference.hash;
     if (!hash) continue;
     const transaction = await fetchJson(`${settings.blockfrostBaseUrl}/txs/${encodeURIComponent(hash)}/utxos`, headers);
-    if (!transaction.block_time && reference.block_time) transaction.block_time = reference.block_time;
+    const details = await fetchJson(`${settings.blockfrostBaseUrl}/txs/${encodeURIComponent(hash)}`, headers);
+    if (!details || typeof details.valid_contract !== "boolean" || !Number.isInteger(details.withdrawal_count)
+      || details.withdrawal_count < 0 || !/^\d+$/.test(String(details.fees))) {
+      throw makeError("Cardano: unvollständige Transaktionsdetails.");
+    }
+    transaction.block_time = details.block_time ?? reference.block_time;
+    transaction.fee = details.fees;
+    transaction.valid_contract = details.valid_contract;
+    if (stakeAddress && details.withdrawal_count > 0 && details.valid_contract !== false) {
+      transaction.withdrawals = [];
+      for (let page = 1; ; page++) {
+        const batch = await fetchJson(`${settings.blockfrostBaseUrl}/txs/${encodeURIComponent(hash)}/withdrawals?count=100&page=${page}`, headers);
+        if (!Array.isArray(batch) || batch.some((row) => typeof row.address !== "string" || !/^\d+$/.test(String(row.amount)))) {
+          throw makeError("Cardano: ungültige Prämienauszahlungen.");
+        }
+        transaction.withdrawals.push(...batch);
+        if (batch.length < 100) break;
+      }
+    }
     transactions.push(transaction);
   }
   return transactions;
@@ -2181,8 +2174,9 @@ const CHAIN_ADAPTERS = {
         if (addresses.length === 0) {
           throw makeError("Zu dieser Cardano-Stake-Adresse wurden keine Zahlungsadressen gefunden. Prüfe, ob es eine Mainnet-Stake-Adresse ist.");
         }
-        const [transactions, rewards] = await Promise.all([fetchCardanoTransactions(addresses, settings), fetchCardanoRewards(wallet.address, settings).catch(() => [])]);
-        return { rawTransactions: [...transactions.map((transaction) => ({ type: "utxo", transaction })), ...rewards.map((reward) => ({ type: "reward", reward }))], context: new Set(addresses), xpubCapped: false };
+        const transactions = await fetchCardanoTransactions(addresses, settings, wallet.address);
+        const rewards = await fetchCardanoRewards(wallet.address, settings);
+        return { rawTransactions: [...transactions.map((transaction) => ({ type: "utxo", transaction })), ...rewards.map((reward) => ({ type: "reward", reward }))], context: { addresses: new Set(addresses), stakeAddress: wallet.address }, xpubCapped: false };
       }
       return { rawTransactions: (await fetchCardanoTransactions(wallet.address, settings)).map((transaction) => ({ type: "utxo", transaction })), context: new Set([wallet.address]), xpubCapped: false };
     },
@@ -4034,7 +4028,6 @@ function taxReportResponse(year) {
   const transactions = db.prepare(`
     SELECT t.*, w.label AS source_label, w.source_type
     FROM transactions t JOIN wallets w ON w.id = t.wallet_id
-    WHERE t.timestamp IS NOT NULL
     ORDER BY t.timestamp ASC
   `).all();
   const report = calculateTaxReport(transactions, year, runtimeSettings());

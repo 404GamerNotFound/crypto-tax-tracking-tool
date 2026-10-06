@@ -81,3 +81,17 @@ test("wendet ein anpassbares Steuerprofil mit Haltefrist, Freigrenze und getrenn
   assert.equal(report.summary.estimatedIncomeTaxEur, 300);
   assert.equal(report.summary.estimatedTaxEur, 300);
 });
+
+test('ADA bleibt auswählbar ohne Erträge; undatierte Prämien werden getrennt von Jahressummen gemeldet', () => {
+  const report = calculateTaxReport([
+    { id: 1, asset: 'ADA', direction: 'in', purpose: 'Kauf', amount: 890, timestamp: '2025-01-01T00:00:00Z', price_transaction_eur: 1 },
+    { id: 2, asset: 'ADA', direction: 'in', purpose: 'Staking Rewards', amount: 52, timestamp: null, price_transaction_eur: 1 },
+    { id: 3, asset: 'ADA', direction: 'in', purpose: 'Transfer', amount: 890, timestamp: '2026-01-01T00:00:00Z', price_transaction_eur: 1 },
+  ], 2026);
+  assert.deepEqual(report.availableAssets, ['ADA']);
+  assert.equal(report.income.length, 0);
+  assert.equal(report.summary.incomeEur, 0);
+  assert.equal(report.undatedIncome.length, 1);
+  assert.equal(report.undatedIncome[0].transactionId, 2);
+  assert.equal(report.undatedIncome[0].valueEur, null);
+});

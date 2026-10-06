@@ -312,3 +312,7 @@ API: `GET /api/asset-visibility` liefert `hiddenAssets` und `scope: "portfolio"`
 ### Passwortschutz und Face ID
 
 Unter **Einstellungen → Passwortschutz** kann die gesamte Installation einschließlich Daten-APIs geschützt werden. Die iOS-App unterstützt die Anmeldung mit demselben Passwort und optional dessen biometrisch geschützte Ablage im Schlüsselbund. Einrichtung, Docker-Secrets, HTTPS, Sitzungen und administrative Passwort-Wiederherstellung: [Passwortschutz-Dokumentation](docs/password-protection.md).
+
+### Cardano-Bestand und fehlende ADA-Erträge
+
+Nach einem Update die Stake-Wallet erneut synchronisieren: Prämien erhalten den Beginn ihrer verfügbaren Epoche als Datum; ihre spätere Auszahlung wird nicht nochmals zum Bestand addiert. Der Steuerbericht weist nicht datierte Erträge gesondert aus. Details, API-Erweiterungen und Grenzen beim Bestandsabgleich: [Cardano-Bestand und Erträge](docs/cardano-balance-and-rewards.md).
