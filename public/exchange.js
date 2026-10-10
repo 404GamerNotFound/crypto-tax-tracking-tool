@@ -213,7 +213,7 @@ function render() {
   const data = state.data;
   document.title = `CryptoBuch · ${data.connection.label || providerLabel(data.connection.provider)}`;
   el("exchange-title").textContent = data.connection.label || providerLabel(data.connection.provider);
-  el("exchange-icon").textContent = data.connection.provider === "binance" ? "B" : data.connection.provider === "coinbase" ? "CB" : data.connection.provider === "bitvavo" ? "V" : data.connection.provider === "etoro" ? "eT" : data.connection.provider === "bsdex" ? "BS" : "TR";
+  el("exchange-icon").textContent = data.connection.provider === "binance" ? "B" : ["coinbase", "coinbase_advanced"].includes(data.connection.provider) ? "CB" : data.connection.provider === "bitvavo" ? "V" : data.connection.provider === "etoro" ? "eT" : data.connection.provider === "bsdex" ? "BS" : "TR";
   el("exchange-icon").className = `asset-hero-icon exchange ${data.connection.provider}`;
   const csv = data.connection.importMode === "csv";
   const tradeRepublic = data.connection.tradeRepublic;
