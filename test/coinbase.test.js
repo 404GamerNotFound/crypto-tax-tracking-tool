@@ -7,6 +7,7 @@ const {
   normalizeLedgerEntry,
   normalizeCoinbaseHistoryState,
   fetchCoinbaseHistoryBatch,
+  fetchCoinbaseHistory,
 } = require("../lib/coinbase");
 
 test("signiert Coinbase-Exchange-GET-Anfragen mit dem decodierten API-Secret", () => {
@@ -42,11 +43,11 @@ test("lädt die Coinbase-Historie seriell über Konten, Ledger und Fills", async
     const request = new URL(url);
     calls.push({ path: request.pathname, after: request.searchParams.get("after"), headers: options.headers });
     if (request.pathname === "/accounts") return { ok: true, headers: new Headers(), json: async () => [{ id: "account-btc", currency: "BTC", balance: "1", available: "1", hold: "0" }] };
-    if (request.pathname === "/accounts/account-btc/ledger") return { ok: true, headers: new Headers(), json: async () => [{ id: "ledger-1", type: "transfer", currency: "BTC", amount: "1", created_at: "2025-01-02T12:00:00Z" }] };
-    if (request.pathname === "/fills") return { ok: true, headers: new Headers(), json: async () => [{ trade_id: "fill-1", created_at: "2025-01-03T12:00:00Z", product_id: "BTC-EUR", side: "buy", size: "0.1", price: "40000", fee: "4" }] };
+    if (request.pathname === "/accounts/account-btc/ledger") return { ok: true, headers: new Headers(), json: async () => [{ id: "ledger-1", type: "transfer", currency: "BTC", amount: "1", created_at: "2025-01-02T12:00:00Z" }, { id: "match-1", type: "match", details: { order_id: "order-1" } }] };
+    if (request.pathname === "/fills") { assert.equal(request.searchParams.get("order_id"), "order-1"); return { ok: true, headers: new Headers(), json: async () => [{ trade_id: "fill-1", created_at: "2025-01-03T12:00:00Z", product_id: "BTC-EUR", side: "buy", size: "0.1", price: "40000", fee: "4" }] }; }
     throw new Error(`Unexpected ${request.pathname}`);
   };
-  const credentials = { apiBaseUrl: "https://api.exchange.coinbase.com", apiKey: "public-key", apiSecret: "c2VjcmV0", passphrase: "passphrase", fetchImpl, now: 1700000000000 };
+  const credentials = { apiBaseUrl: "https://api.exchange.coinbase.com", apiKey: "public-key", apiSecret: "c2VjcmV0", passphrase: "passphrase", fetchImpl, now: 1700000000000, requestGapMs: 0, retryGapMs: 0 };
   const accounts = await fetchCoinbaseHistoryBatch({ ...credentials, state: { phase: "accounts" } });
   assert.deepEqual(accounts.accountBalances, null);
   assert.equal(accounts.nextState.phase, "ledgers");
@@ -61,4 +62,58 @@ test("lädt die Coinbase-Historie seriell über Konten, Ledger und Fills", async
   assert.deepEqual(calls.map((call) => call.path), ["/accounts", "/accounts/account-btc/ledger", "/fills"]);
   assert.ok(calls.every((call) => call.headers["CB-ACCESS-SIGN"]));
   assert.equal(normalizeCoinbaseHistoryState(JSON.stringify(fills.nextState)).phase, "complete");
+});
+
+const credentials = { apiBaseUrl: 'https://coinbase.fixture.invalid', apiKey: 'test-key', apiSecret: 'c2VjcmV0', passphrase: 'test-passphrase', requestGapMs: 0, retryGapMs: 0 };
+
+test('Coinbase-Sync filtert Fills nach deduplizierten Ledger-Orders', async () => {
+  const orders = [];
+  const result = await fetchCoinbaseHistory({ ...credentials, fetchImpl: async (url) => {
+    const u = new URL(url);
+    if (u.pathname === '/accounts') return Response.json([{ id: 'btc', currency: 'BTC', balance: '1' }, { id: 'eur', currency: 'EUR', balance: '100' }]);
+    if (u.pathname.endsWith('/ledger')) return Response.json([{ type: 'match', details: { order_id: 'order-1' } }]);
+    assert.equal(u.pathname, '/fills');
+    orders.push(u.searchParams.get('order_id'));
+    return Response.json([{ trade_id: '1', product_id: 'BTC-EUR', created_at: '2026-10-01T00:00:00Z', size: '1', price: '100', side: 'buy' }]);
+  } });
+  assert.deepEqual(orders, ['order-1']); assert.equal(result.rows.length, 1);
+});
+
+test('Coinbase-Historie verarbeitet mehrere Orders und Cursor seriell', async () => {
+  const calls = [];
+  const fetchImpl = async url => {
+    const u = new URL(url); const order = u.searchParams.get('order_id'); calls.push([order, u.searchParams.get('after')]);
+    assert.ok(order);
+    return Response.json([], { headers: order === 'order-1' && !u.searchParams.get('after') ? { 'cb-after': 'cursor-1' } : {} });
+  };
+  let state = { version: 2, phase: 'fills', orderIds: ['order-1', 'order-2'] };
+  let result = await fetchCoinbaseHistoryBatch({ ...credentials, fetchImpl, state });
+  assert.equal(result.complete, false); assert.equal(result.nextState.orderIndex, 0);
+  result = await fetchCoinbaseHistoryBatch({ ...credentials, fetchImpl, state: result.nextState });
+  assert.equal(result.nextState.orderIndex, 1); assert.equal(result.nextState.fillsCursor, '');
+  result = await fetchCoinbaseHistoryBatch({ ...credentials, fetchImpl, state: result.nextState });
+  assert.equal(result.complete, true);
+  assert.deepEqual(calls, [['order-1', null], ['order-1', 'cursor-1'], ['order-2', null]]);
+  assert.equal(normalizeCoinbaseHistoryState({ version: 1, phase: 'fills', fillsCursor: 'unsafe-cursor' }).phase, 'accounts');
+});
+
+test('Coinbase wiederholt vorübergehende HTTP- und Netzwerkfehler begrenzt und verrät keine Rohdaten', async () => {
+  let calls = 0;
+  const fetchImpl = async () => { calls++; return calls < 3 ? Response.json({ message: 'secret: raw-sensitive-body' }, { status: 500 }) : Response.json([]); };
+  const result = await fetchCoinbaseHistoryBatch({ ...credentials, fetchImpl });
+  assert.equal(calls, 3); assert.equal(result.nextState.phase, 'ledgers');
+  calls = 0;
+  await assert.rejects(fetchCoinbaseHistoryBatch({ ...credentials, fetchImpl: async () => {
+    calls++; throw Object.assign(new TypeError('fetch failed: secret-value'), { cause: { code: 'ENOTFOUND' } });
+  } }), error => /Coinbase Exchange · Konten: DNS/.test(error.message) && !/secret-value|fetch failed/.test(error.message));
+  assert.equal(calls, 3);
+  calls = 0;
+  await assert.rejects(fetchCoinbaseHistoryBatch({ ...credentials, fetchImpl: async () => { calls++; return Response.json({ message: 'secret: raw-sensitive-body' }, { status: 401 }); } }), /HTTP 401, Zugang abgelehnt/);
+  assert.equal(calls, 1);
+});
+
+test('Coinbase markiert fehlerhafte Antworten nicht als erfolgreich importierte leere Historie', async () => {
+  await assert.rejects(fetchCoinbaseHistoryBatch({ ...credentials, fetchImpl: async () => Response.json({ accounts: [] }) }), /Unerwartete Datenstruktur/);
+  await assert.rejects(fetchCoinbaseHistoryBatch({ ...credentials, fetchImpl: async () => new Response('<html>error</html>', { status: 502 }) }), /HTTP 502, ungültige JSON/);
+  await assert.rejects(fetchCoinbaseHistoryBatch({ ...credentials, state: { version: 2, phase: 'ledgers', accounts: [{ id: 'btc', currency: 'BTC' }] }, fetchImpl: async () => Response.json([{ type: 'match', details: {} }]) }), /Trade ohne verwertbare Order-ID/);
 });

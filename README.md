@@ -316,3 +316,7 @@ Unter **Einstellungen → Passwortschutz** kann die gesamte Installation einschl
 ### Cardano-Bestand und fehlende ADA-Erträge
 
 Nach einem Update die Stake-Wallet erneut synchronisieren: Prämien erhalten den Beginn ihrer verfügbaren Epoche als Datum; ihre spätere Auszahlung wird nicht nochmals zum Bestand addiert. Der Steuerbericht weist nicht datierte Erträge gesondert aus. Details, API-Erweiterungen und Grenzen beim Bestandsabgleich: [Cardano-Bestand und Erträge](docs/cardano-balance-and-rewards.md).
+
+### Coinbase-Importfehler
+
+Trades werden nach Order-IDs aus dem Kontojournal abgefragt und historische Seiten seriell nachgeladen. Netzwerk-/HTTP-Fehler werden konkret angezeigt; Jobs nennen ihre Börsenquelle. Hinweise zum Update und zur Diagnose: [Coinbase-Synchronisierung](docs/coinbase-sync-troubleshooting.md).

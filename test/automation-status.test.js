@@ -41,6 +41,7 @@ test("zeigt lokale Zeitsteuerungen und sichere Hintergrundjob-Metadaten", () => 
   assert.deepEqual(status.queue.recent[0], {
     id: 1,
     label: "Wallet synchronisieren",
+    sourceType: "wallet", sourceId: 1, sourceLabel: "BSDEX · EXCHANGE",
     status: "queued",
     progressCurrent: 0,
     progressTotal: 0,
@@ -56,4 +57,14 @@ test("zeigt lokale Zeitsteuerungen und sichere Hintergrundjob-Metadaten", () => 
   const protectedStatus = automationStatusResponse();
   assert.equal(protectedStatus.queue.recent[0].errorMessage.includes("nicht-zeigen"), false);
   assert.equal(protectedStatus.queue.recent[0].errorMessage.includes("https://"), false);
+});
+
+test('Börsenjobs nennen ihre konkrete Quelle, ohne Credentials oder Payload auszugeben', () => {
+  const walletId = Number(db.prepare("INSERT INTO wallets (chain, address, label, source_type) VALUES ('EXCHANGE', 'exchange:coinbase:job-test', 'Coinbase Exchange', 'exchange')").run().lastInsertRowid);
+  const connectionId = Number(db.prepare("INSERT INTO exchange_connections (provider, wallet_id, label, api_key, api_secret, coinbase_passphrase) VALUES ('coinbase', ?, 'Coinbase Exchange', 'credential-canary', 'secret-canary', 'passphrase-canary')").run(walletId).lastInsertRowid);
+  db.prepare("INSERT INTO background_jobs (type, payload_json, status) VALUES ('exchange_history_sync', ?, 'error')").run(JSON.stringify({ connectionId }));
+  const job = automationStatusResponse().queue.recent[0];
+  assert.equal(job.sourceType, 'exchange'); assert.equal(job.sourceId, connectionId);
+  assert.equal(job.sourceLabel, 'Coinbase Exchange · coinbase');
+  assert.doesNotMatch(JSON.stringify(job), /canary|payload_json|api_secret|api_key|passphrase/);
 });

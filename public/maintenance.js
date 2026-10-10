@@ -101,6 +101,12 @@ function renderAutomations(automations) {
     const row = document.createElement("tr");
     const name = document.createElement("td");
     name.textContent = `#${job.id} · ${job.label}`;
+    if (job.sourceLabel) {
+      const source = document.createElement(job.sourceType === "exchange" ? "a" : "span");
+      source.textContent = job.sourceLabel;
+      if (job.sourceType === "exchange") source.href = `/exchange.html?id=${encodeURIComponent(job.sourceId)}`;
+      name.append(document.createElement("br"), source);
+    }
     const status = document.createElement("td");
     status.append(automationState(job.status));
     const finished = job.errorMessage

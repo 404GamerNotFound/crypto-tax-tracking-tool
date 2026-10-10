@@ -3002,6 +3002,21 @@ function safeAutomationMessage(value) {
   return message ? message.slice(0, 220) : null;
 }
 
+function backgroundJobSource(job) {
+  const payload = safeJson(job.payload_json, {});
+  const exchangeId = asPositiveId(payload?.connectionId);
+  if (["exchange_sync", "exchange_history_sync", "exchange_transfer_check"].includes(job.type) && exchangeId) {
+    const source = db.prepare("SELECT id, provider, label FROM exchange_connections WHERE id = ?").get(exchangeId);
+    return { sourceType: "exchange", sourceId: exchangeId, sourceLabel: source ? `${source.label || source.provider} · ${source.provider}` : "Entfernte Börsenverbindung" };
+  }
+  const walletId = asPositiveId(payload?.walletId);
+  if (job.type === "wallet_sync" && walletId) {
+    const source = db.prepare("SELECT id, label, chain FROM wallets WHERE id = ?").get(walletId);
+    return { sourceType: "wallet", sourceId: walletId, sourceLabel: source ? `${source.label || "Wallet"} · ${source.chain}` : "Entfernte Wallet" };
+  }
+  return { sourceType: null, sourceId: null, sourceLabel: null };
+}
+
 function automationStatusResponse() {
   const settings = runtimeSettings();
   const now = new Date();
@@ -3045,7 +3060,7 @@ function automationStatusResponse() {
     };
   });
   const queueRows = db.prepare(`
-    SELECT id, type, status, progress_current, progress_total, error_message, created_at, started_at, finished_at
+    SELECT id, type, status, progress_current, progress_total, error_message, created_at, started_at, finished_at, payload_json
     FROM background_jobs
     ORDER BY id DESC
     LIMIT 25
@@ -3096,6 +3111,7 @@ function automationStatusResponse() {
       recent: queueRows.map((job) => ({
         id: job.id,
         label: BACKGROUND_JOB_LABELS[job.type] || job.type,
+        ...backgroundJobSource(job),
         status: job.status,
         progressCurrent: Number(job.progress_current || 0),
         progressTotal: Number(job.progress_total || 0),

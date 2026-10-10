@@ -171,7 +171,7 @@ function updateExchangeProviderForm() {
       : etoro
         ? "Read-only & lokal: Der User-Key muss zur gewählten eToro-Kontoart (Real oder Demo) gehören und nur Leserechte besitzen. Er wird nach dem Speichern nicht erneut angezeigt."
         : coinbase
-          ? "Read-only & lokal: Erstelle den Coinbase-Exchange-Key ausschließlich mit dem Recht „View“. API-Key, Secret und Passphrase werden nur für signierte GET-Anfragen zu Konten, Ledger und Fills genutzt und danach nicht erneut angezeigt."
+          ? "Read-only & lokal: Erstelle den Coinbase-Exchange-Key ausschließlich mit dem Recht „View“. API-Key, Secret und Passphrase werden nur für signierte GET-Anfragen zu Konten, Ledger und Fills genutzt und danach nicht erneut angezeigt. Coinbase Advanced Trade/CDP nutzt andere Zugangsdaten und ist mit diesem Exchange-Adapter nicht kompatibel."
       : "Read-only & lokal: Die Zugangsdaten dürfen nur Kontostände und Historie lesen. Sie werden nach dem Speichern nicht erneut angezeigt."
     : "Nur lokale Belege: Für diese Quelle werden keine API-, Login- oder Zugangsdaten benötigt oder gespeichert.";
   if (!api) {
