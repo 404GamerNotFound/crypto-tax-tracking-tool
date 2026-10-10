@@ -21,6 +21,10 @@
     "/exchange.html": "/wallets.html",
     "/price-fetches.html": "/quality.html",
     "/tax-print.html": "/tax.html",
+    "/settings-sync.html": "/settings.html",
+    "/settings-tax.html": "/settings.html",
+    "/settings-prices.html": "/settings.html",
+    "/settings-networks.html": "/settings.html",
   });
 
   // Local navigation is intentionally kept beside the primary navigation.
@@ -52,11 +56,11 @@
       { href: "#daten-reset", label: "Daten zurücksetzen" },
     ]),
     settings: Object.freeze([
-      { href: "#zugangsschutz", label: "Passwortschutz" },
-      { href: "#synchronisierung", label: "Synchronisierung" },
-      { href: "#steuerprofil", label: "Steuerprofil" },
-      { href: "#preisdaten", label: "Preis- & API-Daten" },
-      { href: "#netzwerke", label: "Netzwerke" },
+      { href: "/settings.html", label: "Passwortschutz" },
+      { href: "/settings-sync.html", label: "Synchronisierung" },
+      { href: "/settings-tax.html", label: "Steuerprofil" },
+      { href: "/settings-prices.html", label: "Preis- & API-Daten" },
+      { href: "/settings-networks.html", label: "Netzwerke" },
     ]),
   });
 
@@ -95,7 +99,7 @@
       link.textContent = entry.label;
       if (entry.href === activeHref) {
         link.classList.add("is-active");
-        link.setAttribute("aria-current", "location");
+        link.setAttribute("aria-current", entry.href.startsWith("#") ? "location" : "page");
       }
       navigation.append(link);
     }

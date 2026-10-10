@@ -1,74 +1,108 @@
 const { api, el, toast } = window.CryptoBuchUI;
 
+function assign(id, property, value) {
+  const field = el(id);
+  if (field) field[property] = value;
+}
+
 function render(settings) {
-  el("max-transactions").value = settings.maxTransactionsPerSync;
-  el("bulk-purpose-limit").value = settings.bulkPurposeLimit;
-  el("historical-price-retry-interval").value = settings.historicalPriceRetryIntervalMinutes;
-  el("historical-price-batch-size").value = settings.historicalPriceBackfillBatchSize;
+  assign("max-transactions", "value", settings.maxTransactionsPerSync);
+  assign("bulk-purpose-limit", "value", settings.bulkPurposeLimit);
+  assign("historical-price-retry-interval", "value", settings.historicalPriceRetryIntervalMinutes);
+  assign("historical-price-batch-size", "value", settings.historicalPriceBackfillBatchSize);
   const profile = settings.taxProfile;
-  el("personal-tax-rate").value = profile.incomeTaxRatePercent;
-  el("tax-profile-label").value = profile.label;
-  el("tax-country-code").value = profile.countryCode;
-  el("tax-disposal-rate").value = profile.disposalTaxRatePercent;
-  el("tax-income-rate").value = profile.incomeTaxRatePercent;
-  el("tax-cost-basis-method").value = profile.costBasisMethod || "FIFO";
-  el("tax-holding-days").value = profile.holdingPeriodDays;
-  el("tax-threshold").value = profile.exemptionThresholdEur;
-  el("tax-disposal-enabled").checked = profile.disposalTaxEnabled;
-  el("tax-holding-enabled").checked = profile.holdingPeriodEnabled;
-  el("tax-threshold-enabled").checked = profile.exemptionThresholdEnabled;
-  el("tax-loss-offset-enabled").checked = profile.lossOffsetEnabled;
-  el("tax-income-enabled").checked = profile.incomeTaxEnabled;
-  el("tax-income-purposes").value = profile.incomePurposes.join(", ");
-  el("tax-rule-note").value = profile.ruleNote;
-  el("bitcoin-explorer").value = settings.bitcoinExplorerBaseUrl;
-  el("tzkt-api").value = settings.tzktApiBaseUrl;
-  el("trongrid-api").value = settings.tronGridBaseUrl;
-  el("blockfrost-api").value = settings.blockfrostBaseUrl;
-  el("etherscan-api").value = settings.etherscanApiBaseUrl;
-  el("ethereum-rpc").value = settings.ethereumRpcUrl;
-  el("bscscan-api").value = settings.bscScanApiBaseUrl;
-  el("snowtrace-api").value = settings.snowtraceApiBaseUrl;
-  el("solscan-api").value = settings.solscanApiBaseUrl;
-  el("xrpl-rpc").value = settings.xrplRpcUrl;
-  el("stellar-horizon").value = settings.stellarHorizonBaseUrl;
-  el("nearblocks-api").value = settings.nearBlocksApiBaseUrl;
-  el("tonapi-api").value = settings.tonApiBaseUrl;
-  el("bitcoin-cash-api").value = settings.bitcoinCashApiBaseUrl;
-  el("blockchair-api").value = settings.blockchairApiBaseUrl;
-  el("blockcypher-api").value = settings.blockCypherApiBaseUrl;
-  el("coingecko-api").value = settings.coinGeckoBaseUrl;
-  el("bitvavo-api").value = settings.bitvavoApiBaseUrl;
-  el("coinbase-exchange-api").value = settings.coinbaseExchangeApiBaseUrl;
-  el("kraken-api").value = settings.krakenApiBaseUrl;
-  el("cryptocompare-api").value = settings.cryptoCompareApiBaseUrl;
-  el("binance-api").value = settings.binanceApiBaseUrl;
-  el("etoro-api").value = settings.etoroApiBaseUrl;
-  el("xpub-gap").value = settings.xpubGapLimit;
-  el("xpub-maximum").value = settings.xpubMaxDerivationsPerBranch;
-  el("staking-aliases").value = settings.xtzStakingPayoutAliases;
-  el("trongrid-key-status").textContent = settings.tronGridApiKeyConfigured
+  assign("personal-tax-rate", "value", profile.incomeTaxRatePercent);
+  assign("tax-profile-label", "value", profile.label);
+  assign("tax-country-code", "value", profile.countryCode);
+  assign("tax-disposal-rate", "value", profile.disposalTaxRatePercent);
+  assign("tax-income-rate", "value", profile.incomeTaxRatePercent);
+  assign("tax-cost-basis-method", "value", profile.costBasisMethod || "FIFO");
+  assign("tax-holding-days", "value", profile.holdingPeriodDays);
+  assign("tax-threshold", "value", profile.exemptionThresholdEur);
+  assign("tax-disposal-enabled", "checked", profile.disposalTaxEnabled);
+  assign("tax-holding-enabled", "checked", profile.holdingPeriodEnabled);
+  assign("tax-threshold-enabled", "checked", profile.exemptionThresholdEnabled);
+  assign("tax-loss-offset-enabled", "checked", profile.lossOffsetEnabled);
+  assign("tax-income-enabled", "checked", profile.incomeTaxEnabled);
+  assign("tax-income-purposes", "value", profile.incomePurposes.join(", "));
+  assign("tax-rule-note", "value", profile.ruleNote);
+  assign("bitcoin-explorer", "value", settings.bitcoinExplorerBaseUrl);
+  assign("tzkt-api", "value", settings.tzktApiBaseUrl);
+  assign("trongrid-api", "value", settings.tronGridBaseUrl);
+  assign("blockfrost-api", "value", settings.blockfrostBaseUrl);
+  assign("etherscan-api", "value", settings.etherscanApiBaseUrl);
+  assign("ethereum-rpc", "value", settings.ethereumRpcUrl);
+  assign("bscscan-api", "value", settings.bscScanApiBaseUrl);
+  assign("snowtrace-api", "value", settings.snowtraceApiBaseUrl);
+  assign("solscan-api", "value", settings.solscanApiBaseUrl);
+  assign("xrpl-rpc", "value", settings.xrplRpcUrl);
+  assign("stellar-horizon", "value", settings.stellarHorizonBaseUrl);
+  assign("nearblocks-api", "value", settings.nearBlocksApiBaseUrl);
+  assign("tonapi-api", "value", settings.tonApiBaseUrl);
+  assign("bitcoin-cash-api", "value", settings.bitcoinCashApiBaseUrl);
+  assign("blockchair-api", "value", settings.blockchairApiBaseUrl);
+  assign("blockcypher-api", "value", settings.blockCypherApiBaseUrl);
+  assign("coingecko-api", "value", settings.coinGeckoBaseUrl);
+  assign("bitvavo-api", "value", settings.bitvavoApiBaseUrl);
+  assign("coinbase-exchange-api", "value", settings.coinbaseExchangeApiBaseUrl);
+  assign("kraken-api", "value", settings.krakenApiBaseUrl);
+  assign("cryptocompare-api", "value", settings.cryptoCompareApiBaseUrl);
+  assign("binance-api", "value", settings.binanceApiBaseUrl);
+  assign("etoro-api", "value", settings.etoroApiBaseUrl);
+  assign("xpub-gap", "value", settings.xpubGapLimit);
+  assign("xpub-maximum", "value", settings.xpubMaxDerivationsPerBranch);
+  assign("staking-aliases", "value", settings.xtzStakingPayoutAliases);
+  assign("trongrid-key-status", "textContent", settings.tronGridApiKeyConfigured
     ? "Ein API-Key ist gespeichert. Leer lassen, um ihn beizubehalten."
-    : "Kein API-Key gespeichert. Ohne Key gelten die öffentlichen Rate Limits.";
-  el("blockfrost-project-id-status").textContent = settings.blockfrostProjectIdConfigured
+    : "Kein API-Key gespeichert. Ohne Key gelten die öffentlichen Rate Limits.");
+  assign("blockfrost-project-id-status", "textContent", settings.blockfrostProjectIdConfigured
     ? "Eine Project-ID ist gespeichert. Leer lassen, um sie beizubehalten."
-    : "Keine Project-ID gespeichert. Cardano-Wallets können noch nicht synchronisiert werden.";
-  el("etherscan-key-status").textContent = settings.etherscanApiKeyConfigured
+    : "Keine Project-ID gespeichert. Cardano-Wallets können noch nicht synchronisiert werden.");
+  assign("etherscan-key-status", "textContent", settings.etherscanApiKeyConfigured
     ? "Ein API-Key ist gespeichert. Leer lassen, um ihn beizubehalten."
-    : "Kein API-Key gespeichert. Ethereum-Wallets können noch nicht synchronisiert werden.";
-  el("bscscan-key-status").textContent = settings.bscScanApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. BNB-Wallets können noch nicht synchronisiert werden.";
-  el("snowtrace-key-status").textContent = settings.snowtraceApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. AVAX-Wallets können noch nicht synchronisiert werden.";
-  el("solscan-key-status").textContent = settings.solscanApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. Solana-Wallets können noch nicht synchronisiert werden.";
-  el("nearblocks-key-status").textContent = settings.nearBlocksApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. NEAR-Wallets können noch nicht synchronisiert werden.";
-  el("tonapi-key-status").textContent = settings.tonApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche TonAPI-Rate kann begrenzt sein.";
-  el("blockchair-key-status").textContent = settings.blockchairApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche Blockchair-Rate für Zcash kann begrenzt sein.";
-  el("blockcypher-token-status").textContent = settings.blockCypherApiTokenConfigured ? "Ein Token ist gespeichert." : "Kein Token gespeichert; die öffentliche BlockCypher-Rate kann begrenzt sein.";
-  el("coingecko-key-status").textContent = settings.coinGeckoApiKeyConfigured
+    : "Kein API-Key gespeichert. Ethereum-Wallets können noch nicht synchronisiert werden.");
+  assign("bscscan-key-status", "textContent", settings.bscScanApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. BNB-Wallets können noch nicht synchronisiert werden.");
+  assign("snowtrace-key-status", "textContent", settings.snowtraceApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. AVAX-Wallets können noch nicht synchronisiert werden.");
+  assign("solscan-key-status", "textContent", settings.solscanApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. Solana-Wallets können noch nicht synchronisiert werden.");
+  assign("nearblocks-key-status", "textContent", settings.nearBlocksApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. NEAR-Wallets können noch nicht synchronisiert werden.");
+  assign("tonapi-key-status", "textContent", settings.tonApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche TonAPI-Rate kann begrenzt sein.");
+  assign("blockchair-key-status", "textContent", settings.blockchairApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche Blockchair-Rate für Zcash kann begrenzt sein.");
+  assign("blockcypher-token-status", "textContent", settings.blockCypherApiTokenConfigured ? "Ein Token ist gespeichert." : "Kein Token gespeichert; die öffentliche BlockCypher-Rate kann begrenzt sein.");
+  assign("coingecko-key-status", "textContent", settings.coinGeckoApiKeyConfigured
     ? "Ein API-Key ist gespeichert. Bei pro-api.coingecko.com wird er als Pro-Key verwendet."
-    : "Kein API-Key gespeichert. Die öffentliche CoinGecko-API liefert historische Daten nur für die letzten 365 Tage.";
-  el("cryptocompare-key-status").textContent = settings.cryptoCompareApiKeyConfigured
+    : "Kein API-Key gespeichert. Die öffentliche CoinGecko-API liefert historische Daten nur für die letzten 365 Tage.");
+  assign("cryptocompare-key-status", "textContent", settings.cryptoCompareApiKeyConfigured
     ? "Ein API-Key ist gespeichert. Die Quelle wird erst nach den vier vorherigen Preisquellen verwendet."
-    : "Kein API-Key gespeichert; CryptoCompare wird übersprungen, die vier öffentlichen Quellen bleiben aktiv.";
+    : "Kein API-Key gespeichert; CryptoCompare wird übersprungen, die vier öffentlichen Quellen bleiben aktiv.");
+}
+
+function settingsPayload(formElement) {
+  // Only submit controls present on this subpage; other settings remain server-side.
+  const payload = Object.fromEntries(new FormData(formElement));
+  for (const field of formElement.querySelectorAll('input[type="checkbox"][name]')) {
+    payload[field.name] = field.checked;
+  }
+  if (el("tax-country-code")) {
+    payload.personalTaxRatePercent = el("tax-income-rate").value;
+    payload.taxProfile = {
+      id: `${String(el("tax-country-code").value || "CUSTOM").trim().toUpperCase()}-CUSTOM`,
+      countryCode: el("tax-country-code").value,
+      label: el("tax-profile-label").value,
+      disposalTaxRatePercent: el("tax-disposal-rate").value,
+      incomeTaxRatePercent: el("tax-income-rate").value,
+      costBasisMethod: el("tax-cost-basis-method").value,
+      holdingPeriodDays: el("tax-holding-days").value,
+      exemptionThresholdEur: el("tax-threshold").value,
+      disposalTaxEnabled: el("tax-disposal-enabled").checked,
+      holdingPeriodEnabled: el("tax-holding-enabled").checked,
+      exemptionThresholdEnabled: el("tax-threshold-enabled").checked,
+      lossOffsetEnabled: el("tax-loss-offset-enabled").checked,
+      incomeTaxEnabled: el("tax-income-enabled").checked,
+      incomePurposes: el("tax-income-purposes").value.split(",").map((value) => value.trim()).filter(Boolean),
+      ruleNote: el("tax-rule-note").value,
+    };
+  }
+  return payload;
 }
 
 function setSaving(button, saving) {
@@ -87,7 +121,7 @@ async function loadSettings() {
 
 el("settings-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formElement = event.currentTarget;
   const save = el("save-settings");
   const error = el("settings-error");
   error.hidden = true;
@@ -95,87 +129,10 @@ el("settings-form").addEventListener("submit", async (event) => {
     setSaving(save, true);
     const settings = await api("/api/settings", {
       method: "PUT",
-      body: JSON.stringify({
-        maxTransactionsPerSync: form.get("maxTransactionsPerSync"),
-        bulkPurposeLimit: form.get("bulkPurposeLimit"),
-        historicalPriceRetryIntervalMinutes: form.get("historicalPriceRetryIntervalMinutes"),
-        historicalPriceBackfillBatchSize: form.get("historicalPriceBackfillBatchSize"),
-        personalTaxRatePercent: el("tax-income-rate").value,
-        taxProfile: {
-          id: `${String(el("tax-country-code").value || "CUSTOM").trim().toUpperCase()}-CUSTOM`,
-          countryCode: el("tax-country-code").value,
-          label: el("tax-profile-label").value,
-          disposalTaxRatePercent: el("tax-disposal-rate").value,
-          incomeTaxRatePercent: el("tax-income-rate").value,
-          costBasisMethod: el("tax-cost-basis-method").value,
-          holdingPeriodDays: el("tax-holding-days").value,
-          exemptionThresholdEur: el("tax-threshold").value,
-          disposalTaxEnabled: el("tax-disposal-enabled").checked,
-          holdingPeriodEnabled: el("tax-holding-enabled").checked,
-          exemptionThresholdEnabled: el("tax-threshold-enabled").checked,
-          lossOffsetEnabled: el("tax-loss-offset-enabled").checked,
-          incomeTaxEnabled: el("tax-income-enabled").checked,
-          incomePurposes: el("tax-income-purposes").value.split(",").map((value) => value.trim()).filter(Boolean),
-          ruleNote: el("tax-rule-note").value,
-        },
-        bitcoinExplorerBaseUrl: form.get("bitcoinExplorerBaseUrl"),
-        tzktApiBaseUrl: form.get("tzktApiBaseUrl"),
-        tronGridBaseUrl: form.get("tronGridBaseUrl"),
-        blockfrostBaseUrl: form.get("blockfrostBaseUrl"),
-        etherscanApiBaseUrl: form.get("etherscanApiBaseUrl"),
-        ethereumRpcUrl: form.get("ethereumRpcUrl"),
-        bscScanApiBaseUrl: form.get("bscScanApiBaseUrl"),
-        snowtraceApiBaseUrl: form.get("snowtraceApiBaseUrl"),
-        solscanApiBaseUrl: form.get("solscanApiBaseUrl"),
-        xrplRpcUrl: form.get("xrplRpcUrl"),
-        stellarHorizonBaseUrl: form.get("stellarHorizonBaseUrl"),
-        nearBlocksApiBaseUrl: form.get("nearBlocksApiBaseUrl"),
-        tonApiBaseUrl: form.get("tonApiBaseUrl"),
-        bitcoinCashApiBaseUrl: form.get("bitcoinCashApiBaseUrl"),
-        blockchairApiBaseUrl: form.get("blockchairApiBaseUrl"),
-        blockCypherApiBaseUrl: form.get("blockCypherApiBaseUrl"),
-        coinGeckoBaseUrl: form.get("coinGeckoBaseUrl"),
-        bitvavoApiBaseUrl: form.get("bitvavoApiBaseUrl"),
-        coinbaseExchangeApiBaseUrl: form.get("coinbaseExchangeApiBaseUrl"),
-        krakenApiBaseUrl: form.get("krakenApiBaseUrl"),
-        cryptoCompareApiBaseUrl: form.get("cryptoCompareApiBaseUrl"),
-        binanceApiBaseUrl: form.get("binanceApiBaseUrl"),
-        etoroApiBaseUrl: form.get("etoroApiBaseUrl"),
-        coinGeckoApiKey: form.get("coinGeckoApiKey"),
-        clearCoinGeckoApiKey: form.get("clearCoinGeckoApiKey") === "on",
-        cryptoCompareApiKey: form.get("cryptoCompareApiKey"),
-        clearCryptoCompareApiKey: form.get("clearCryptoCompareApiKey") === "on",
-        xpubGapLimit: form.get("xpubGapLimit"),
-        xpubMaxDerivationsPerBranch: form.get("xpubMaxDerivationsPerBranch"),
-        xtzStakingPayoutAliases: form.get("xtzStakingPayoutAliases"),
-        tronGridApiKey: form.get("tronGridApiKey"),
-        clearTronGridApiKey: form.get("clearTronGridApiKey") === "on",
-        blockfrostProjectId: form.get("blockfrostProjectId"),
-        clearBlockfrostProjectId: form.get("clearBlockfrostProjectId") === "on",
-        etherscanApiKey: form.get("etherscanApiKey"),
-        clearEtherscanApiKey: form.get("clearEtherscanApiKey") === "on",
-        bscScanApiKey: form.get("bscScanApiKey"),
-        snowtraceApiKey: form.get("snowtraceApiKey"),
-        solscanApiKey: form.get("solscanApiKey"),
-        nearBlocksApiKey: form.get("nearBlocksApiKey"),
-        tonApiKey: form.get("tonApiKey"),
-        blockchairApiKey: form.get("blockchairApiKey"),
-        blockCypherApiToken: form.get("blockCypherApiToken"),
-        clearAdditionalNetworkApiKeys: form.get("clearAdditionalNetworkApiKeys") === "on",
-      }),
+      body: JSON.stringify(settingsPayload(formElement)),
     });
-    el("trongrid-key").value = "";
-    el("clear-trongrid-key").checked = false;
-    el("blockfrost-project-id").value = "";
-    el("clear-blockfrost-project-id").checked = false;
-    el("etherscan-key").value = "";
-    el("clear-etherscan-key").checked = false;
-    el("coingecko-key").value = "";
-    el("clear-coingecko-key").checked = false;
-    el("cryptocompare-key").value = "";
-    el("clear-cryptocompare-key").checked = false;
-    for (const id of ["bscscan-key", "snowtrace-key", "solscan-key", "nearblocks-key", "tonapi-key", "blockchair-key", "blockcypher-token"]) el(id).value = "";
-    el("clear-additional-network-keys").checked = false;
+    for (const field of formElement.querySelectorAll('input[type="password"]')) field.value = "";
+    for (const field of formElement.querySelectorAll('input[type="checkbox"][name^="clear"]')) field.checked = false;
     render(settings);
     toast("Einstellungen gespeichert. Sie gelten beim nächsten Synchronisieren.");
   } catch (requestError) {

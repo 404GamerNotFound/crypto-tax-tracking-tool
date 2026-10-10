@@ -964,6 +964,9 @@ function settingsResponse() {
 
 function updateSettings(input) {
   const current = runtimeSettings();
+  // Subpages submit only their own fields. Resolve omitted values on the server
+  // so unrelated settings and credentials are preserved even with stale clients.
+  input = { ...current, ...input };
   const maxTransactionsPerSync = boundedInteger(input.maxTransactionsPerSync, current.maxTransactionsPerSync, 0, 100000);
   if (String(input.maxTransactionsPerSync ?? "") !== "" && Number(input.maxTransactionsPerSync) !== maxTransactionsPerSync) {
     throw makeError("Das Transaktionslimit muss eine ganze Zahl zwischen 0 und 100.000 sein.");

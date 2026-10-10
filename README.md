@@ -51,7 +51,7 @@ docker compose down
 - TRON-Transaktionen werden über die [TronGrid Account Transactions API](https://developers.tron.network/reference/get-transaction-info-by-account-address) abgerufen. Es werden nur bestätigte native TRX-Transfers berücksichtigt; TRC-10, TRC-20, interne Smart-Contract-Transfers und Staking sind bewusst nicht Teil dieses ersten TRON-Umfangs.
 - Cardano-Transaktionen werden über die [Blockfrost Open API](https://docs.blockfrost.io/) abgerufen. Der Import benötigt eine kostenlose oder eigene Blockfrost Project-ID und berücksichtigt die ADA-Nettobewegung einer Cardano-Zahlungsadresse. Native Tokens, Stake-Adressen und Rewards sind noch nicht enthalten.
 - Ethereum-Transaktionen werden über die [Etherscan API V2](https://docs.etherscan.io/) abgerufen. Der Adapter importiert bestätigte native ETH-Transfers und ERC-20-Transfer-Events einer Ethereum-Mainnet-Adresse. Interne Transaktionen sowie ERC-721/1155-NFTs sind nicht Teil dieses Umfangs.
-- Weitere Top-30-Netzwerke nutzen absichtlich keinen universellen Multi-Chain-Importer. Ihre Quellen und optionalen Zugangsdaten werden getrennt unter **Einstellungen → Weitere Netzwerke** verwaltet. Die Adapter beziehen aktuell native Transfers; ERC-20-Token werden bereits beim Ethereum-Import erkannt.
+- Weitere Top-30-Netzwerke nutzen absichtlich keinen universellen Multi-Chain-Importer. Ihre Quellen und optionalen Zugangsdaten werden getrennt unter **Einstellungen → Netzwerke** verwaltet. Die Adapter beziehen aktuell native Transfers; ERC-20-Token werden bereits beim Ethereum-Import erkannt.
 - Monero kann ohne privaten View-Key nicht aus einer öffentlichen Adresse synchronisiert werden. Shielded-Zcash-Adressen, Canton und Figure HELOC haben ebenfalls keine für diesen read-only Ansatz passende, frei zugängliche Adresshistorie; sie werden deshalb nicht als voll synchronisierbare Wallet angeboten.
 - Aktuelle EUR-Kurse kommen von [CoinGecko](https://www.coingecko.com/en/api). Historische Kurse werden pro Kalendertag samt Herkunft in der lokalen Datenbank zwischengespeichert und die verwendete Quelle samt Abrufzeitpunkt direkt an der jeweiligen Buchung festgehalten. Für native Coins und Börsenassets ergänzt CryptoBuch fehlende CoinGecko-Historie seriell mit EUR-Tageskerzen von Bitvavo, [Coinbase Exchange](https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles) und [Kraken](https://docs.kraken.com/api-reference/market-data/get-ohlc-data); mit einem eigenen CryptoCompare-Key kommt eine fünfte Quelle hinzu. Fehlende Werte werden auch ohne geöffnete Browserseite in kleinen, seriellen Batches wiederholt; fehlgeschlagene Werte erhalten ein exponentiell wachsendes Retry-Intervall. Die öffentliche CoinGecko-API beschränkt historische Abrufe auf die letzten 365 Tage; Kraken liefert nur die jüngsten etwa 720 Tageskerzen, und ERC-20-Preise bleiben contract-spezifisch auf CoinGecko beschränkt. Falls keine Quelle einen Kurs kennt, bleiben Transaktionen sichtbar und zeigen `k. A.`.
 - Die Top-30-Marktansicht bezieht ebenfalls CoinGecko-Marktdaten und wird für fünf Minuten im Speicher zwischengespeichert. Die Rangfolge ist daher stets aktuell und nicht als feste Coin-Liste im Programm hinterlegt.
@@ -74,7 +74,7 @@ Unter **Betrieb & Backups** lassen sich Datenbank-Snapshots erstellen und herunt
 
 ## Konfiguration
 
-Alle fachlichen Einstellungen lassen sich nach der Installation unter **Einstellungen** in der Weboberfläche ändern. Dazu gehören Importlimits, Bitcoin-/Tezos-/TRON-/Cardano-/Ethereum-Datenquellen, die Preisquellen CoinGecko, Bitvavo, Coinbase Exchange, Kraken und optional CryptoCompare, die xPub-Suchgrenzen und die vertrauenswürdigen XTZ-Staking-Payout-Aliase. Änderungen werden lokal in SQLite gespeichert und gelten ab der nächsten Synchronisierung. Zugangsdaten werden aus Sicherheitsgründen nur gespeichert; sie werden nicht wieder an den Browser zurückgegeben.
+Alle fachlichen Einstellungen lassen sich nach der Installation unter **Einstellungen** in der Weboberfläche ändern. Die Bereiche Passwortschutz (`/settings.html`), Synchronisierung (`/settings-sync.html`), Steuerprofil (`/settings-tax.html`), Preis- & API-Daten (`/settings-prices.html`) und Netzwerke (`/settings-networks.html`) sind eigenständige Unterseiten. Jede Seite speichert ausschließlich ihre eigenen Felder; `PUT /api/settings` unterstützt dafür Teiländerungen ohne Zurücksetzen anderer Einstellungen. Dazu gehören Importlimits, Bitcoin-/Tezos-/TRON-/Cardano-/Ethereum-Datenquellen, die Preisquellen CoinGecko, Bitvavo, Coinbase Exchange, Kraken und optional CryptoCompare, die xPub-Suchgrenzen und die vertrauenswürdigen XTZ-Staking-Payout-Aliase. Änderungen werden lokal in SQLite gespeichert und gelten ab der nächsten Synchronisierung. Zugangsdaten werden aus Sicherheitsgründen nur gespeichert; sie werden nicht wieder an den Browser zurückgegeben.
 
 Die Umgebungsvariablen in `.env` bzw. Portainer dienen beim allerersten Start als Startwerte oder für automatisierte Deployments. Sobald ein Wert in der Weboberfläche gespeichert wurde, hat diese lokale Einstellung Vorrang. Port, Container-Name und Docker-Volume bleiben bewusst Portainer-/Docker-Einstellungen, da ihre Änderung einen Container-Neustart erfordert.
 
@@ -217,7 +217,7 @@ Der Adapter ruft maximal 200 Einträge pro TronGrid-Seite ab und verwendet den v
 
 ### Cardano / Blockfrost
 
-Für die Cardano-Transaktionshistorie benötigst du eine Blockfrost Project-ID. Erstelle sie im Blockfrost-Dashboard für das Cardano-Mainnet und hinterlege sie danach unter **Einstellungen → Cardano**. Alternativ kann sie beim ersten Start über Portainer bzw. `.env` gesetzt werden:
+Für die Cardano-Transaktionshistorie benötigst du eine Blockfrost Project-ID. Erstelle sie im Blockfrost-Dashboard für das Cardano-Mainnet und hinterlege sie danach unter **Einstellungen → Netzwerke → Cardano**. Alternativ kann sie beim ersten Start über Portainer bzw. `.env` gesetzt werden:
 
 ```dotenv
 BLOCKFROST_PROJECT_ID=deine_blockfrost_project_id
@@ -229,7 +229,7 @@ Die Anwendung fragt anschließend die paginierten Transaktions-Referenzen der Za
 
 ### Ethereum / Etherscan und ERC-20
 
-Für Ethereum wird ein Etherscan-API-Key benötigt. Er kann nach der Installation unter **Einstellungen → Ethereum** hinterlegt oder beim ersten Start über Portainer bzw. `.env` gesetzt werden:
+Für Ethereum wird ein Etherscan-API-Key benötigt. Er kann nach der Installation unter **Einstellungen → Netzwerke → Ethereum** hinterlegt oder beim ersten Start über Portainer bzw. `.env` gesetzt werden:
 
 ```dotenv
 ETHERSCAN_API_KEY=dein_etherscan_api_key

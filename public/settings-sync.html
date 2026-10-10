@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
+    <title>CryptoBuch · Einstellungen · Synchronisierung</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/styles.css?v=20261004-auth-1" />
+  </head>
+  <body>
+    <div class="shell settings-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Zurück zum CryptoBuch Portfolio">
+          <img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" />
+          <span>CryptoBuch</span>
+        </a>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
+      </header>
+
+      <main class="settings-main">
+        <section class="settings-intro" aria-labelledby="settings-title">
+          <p class="eyebrow">LOKALE KONFIGURATION</p>
+          <h1 id="settings-title">Synchronisierung<br /><em>für deinen Import.</em></h1>
+          <p>Lege die Importlimits und die automatische Nachbearbeitung fehlender historischer Kurse fest. Änderungen werden lokal gespeichert und gelten beim nächsten Durchlauf.</p>
+        </section>
+
+        <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
+        <form id="settings-form" class="settings-form">
+          <section class="settings-card" aria-labelledby="sync-title">
+            <div class="settings-heading">
+              <div>
+                <p class="eyebrow">IMPORT</p>
+                <h2 id="sync-title">Synchronisierung</h2>
+              </div>
+              <span class="settings-mark">01</span>
+            </div>
+            <label>
+              <span>Maximale Transaktionen pro Synchronisierung</span>
+              <input id="max-transactions" name="maxTransactionsPerSync" type="number" min="0" max="100000" step="1" required />
+              <small><code>0</code> bedeutet: komplette vom Explorer bereitgestellte Historie laden.</small>
+            </label>
+            <label>
+              <span>Maximale Transaktionen für eine Sammel-Zweckzuordnung</span>
+              <input id="bulk-purpose-limit" name="bulkPurposeLimit" type="number" min="1" max="2500" step="1" required />
+              <small>Aus Sicherheits- und Bedienungsgründen sind höchstens 2.500 möglich.</small>
+            </label>
+            <div class="form-grid settings-grid">
+              <label>
+                <span>Wiederholung fehlender historischer Kurse</span>
+                <input id="historical-price-retry-interval" name="historicalPriceRetryIntervalMinutes" type="number" min="5" max="1440" step="1" required />
+                <small>Minuten zwischen automatischen Durchläufen. Fehlgeschlagene Werte erhalten zusätzlich eine steigende Wartezeit.</small>
+              </label>
+              <label>
+                <span>Historische Kurse je Durchlauf</span>
+                <input id="historical-price-batch-size" name="historicalPriceBackfillBatchSize" type="number" min="1" max="250" step="1" required />
+                <small>Begrenzt die Nachbearbeitung; historische Provider-Anfragen laufen einzeln und gedrosselt.</small>
+              </label>
+            </div>
+          </section>
+
+          <p id="settings-error" class="form-error" role="alert" hidden></p>
+          <div class="settings-actions">
+            <a class="button button-secondary" href="/">Abbrechen</a>
+            <button id="save-settings" class="button button-primary" type="submit">Einstellungen speichern</button>
+          </div>
+        </form>
+
+        <aside class="settings-note">
+          <strong>Docker &amp; Portainer</strong>
+          <p>Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.</p>
+        </aside>
+      </main>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/ui.js?v=20261004-auth-1" defer></script>
+    <script src="/navigation.js?v=20261010-settings-1" defer></script>
+    <script src="/notifications.js?v=20260925-1" defer></script>
+    <script src="/settings.js?v=20261010-settings-1" defer></script>
+  </body>
+</html>
