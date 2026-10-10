@@ -6,6 +6,7 @@ const {
   normalizeFill,
   normalizeLedgerEntry,
   normalizeCoinbaseHistoryState,
+  fetchCoinbaseAccounts,
   fetchCoinbaseHistoryBatch,
   fetchCoinbaseHistory,
 } = require("../lib/coinbase");
@@ -116,4 +117,53 @@ test('Coinbase markiert fehlerhafte Antworten nicht als erfolgreich importierte 
   await assert.rejects(fetchCoinbaseHistoryBatch({ ...credentials, fetchImpl: async () => Response.json({ accounts: [] }) }), /Unerwartete Datenstruktur/);
   await assert.rejects(fetchCoinbaseHistoryBatch({ ...credentials, fetchImpl: async () => new Response('<html>error</html>', { status: 502 }) }), /HTTP 502, ungültige JSON/);
   await assert.rejects(fetchCoinbaseHistoryBatch({ ...credentials, state: { version: 2, phase: 'ledgers', accounts: [{ id: 'btc', currency: 'BTC' }] }, fetchImpl: async () => Response.json([{ type: 'match', details: {} }]) }), /Trade ohne verwertbare Order-ID/);
+});
+
+test('Coinbase-Konten verwenden den unpaginierten Endpunkt und ersetzen alte Teilstände', async () => {
+  const calls = [];
+  const fetchImpl = async url => {
+    calls.push(url);
+    // Model a service that rejects undocumented account query parameters.
+    assert.equal(new URL(url).search, '');
+    return Response.json([{ id: 'current-account', currency: 'ADA', balance: '42' }], { headers: { 'cb-after': 'irrelevant-header' } });
+  };
+  const result = await fetchCoinbaseAccounts({ ...credentials, fetchImpl });
+  assert.equal(result.accounts.length, 1);
+  assert.equal(result.cursor, '');
+  const batch = await fetchCoinbaseHistoryBatch({ ...credentials, fetchImpl, state: {
+    version: 2, phase: 'accounts', accountsCursor: 'old-cursor', accounts: [{ id: 'stale-account', currency: 'BTC' }], accountIndex: 1,
+  } });
+  assert.deepEqual(batch.nextState.accounts, [{ id: 'current-account', currency: 'ADA' }]);
+  assert.equal(batch.nextState.accountsCursor, '');
+  assert.equal(batch.nextState.accountIndex, 0);
+  assert.equal(batch.nextState.phase, 'ledgers');
+  assert.equal(calls.length, 2);
+});
+
+test('Coinbase signiert die gesendeten Ledger- und Fill-Parameter einschließlich codierter Cursor', async () => {
+  const fixtures = [
+    { state: { version: 2, phase: 'ledgers', accounts: [{ id: 'account-btc', currency: 'BTC' }] },
+      path: '/accounts/account-btc/ledger?limit=100', signature: 'mkZM7TGU8MSEiNCNZCd6KDdPjTvUTUy7OtPLWzhTdLI=' },
+    { state: { version: 2, phase: 'fills', orderIds: ['order-1'], fillsCursor: 'cursor+/=' },
+      path: '/fills?order_id=order-1&limit=100&after=cursor%2B%2F%3D', signature: '6I5+maXwZdkEvbJlEFpuDT2gORXYdRLWxUQr9tG2koI=' },
+  ];
+  for (const fixture of fixtures) {
+    await fetchCoinbaseHistoryBatch({ ...credentials, now: 1700000000000, state: fixture.state, fetchImpl: async (url, options) => {
+      assert.equal(url, credentials.apiBaseUrl + fixture.path);
+      assert.equal(options.method, 'GET');
+      assert.equal(options.headers['CB-ACCESS-TIMESTAMP'], '1700000000');
+      // Fixed reference digests calculated independently with Python's HMAC.
+      assert.equal(options.headers['CB-ACCESS-SIGN'], fixture.signature);
+      return Response.json([]);
+    } });
+  }
+});
+
+test('Coinbase lehnt unvollständige oder abgeschnittene Kontenlisten ab', async () => {
+  for (const payload of [[null], [{ id: 'account' }], [{ id: '', currency: 'BTC' }]]) {
+    await assert.rejects(fetchCoinbaseAccounts({ ...credentials, fetchImpl: async () => Response.json(payload) }), /Unvollständige Kontodaten/);
+  }
+  await assert.rejects(fetchCoinbaseAccounts({ ...credentials, fetchImpl: async () => Response.json(
+    Array.from({ length: 501 }, (_, i) => ({ id: `account-${i}`, currency: 'BTC' }))
+  ) }), /Zu viele Konten/);
 });

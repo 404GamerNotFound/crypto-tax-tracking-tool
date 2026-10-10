@@ -1,5 +1,15 @@
 # Coinbase-Import und Fehler in der Betriebsübersicht
 
+## Kontenabruf und Signaturen
+
+Die Meldung „Coinbase Exchange · Konten: HTTP 500“ zeigt, dass der Abruf bereits bei `/accounts` scheitert. Der Adapter verwendet jetzt den dokumentierten, unpaginierten Kontenabruf ohne `limit` oder `after`. Beide Importwege teilen diese Funktion. Alte Konten-Cursor werden beim nächsten Kontenabruf verworfen, und die vollständige Antwort ersetzt ältere Teilstände. Unvollständige Konteneinträge und mehr als 500 Konten führen zu einem sichtbaren Fehler statt zu einem stillen Teilimport. Bestehende Buchungen bleiben erhalten; eine Datenbank-Schemamigration ist nicht nötig.
+
+Ein weiterer bestätigter Fehler betraf die Signatur: Der Adapter signierte bislang nur den URL-Pfad, obwohl Query-Parameter gesendet wurden. Das offizielle Coinbase-Exchange-SDK bezieht die exakte codierte Query-Zeichenfolge in die HMAC-Signatur ein. Dies ist nun auch für Ledger- und Fill-Abfragen einschließlich Order-ID, Seitenlimit und Cursor umgesetzt. Die Dokumentation formuliert „path of the API endpoint“; für die Behandlung der Query-Parameter ist der konkrete SDK-Code maßgeblich. Regressionstests vergleichen die tatsächlich gesendeten URLs und Header mit unabhängig berechneten Referenzsignaturen.
+
+Diese Korrekturen beseitigen Fehler im Adapter. Ob sie den konkreten HTTP 500 der produktiven Verbindung beheben, ist erst nach dem Container-Update und einem erneuten Abruf mit dessen Zugangsdaten feststellbar. Ein HTTP 500 alleine beweist weder falsche Zugangsdaten noch einen allgemeinen Coinbase-Ausfall.
+
+## Trades und Hintergrundjobs
+
 Die Coinbase-Exchange-API verlangt beim Abruf von `/fills` mindestens `order_id` oder `product_id`. Der frühere Adapter rief diesen Endpunkt ohne Filter ab; beide Importwege (Synchronisierung und historische Job-Queue) waren betroffen.
 
 Der Adapter ermittelt nun Order-IDs aus den Match-/Gebühreneinträgen des Kontojournals. IDs werden über Konten und Seiten dedupliziert. Fills werden pro Order geladen; die Historien-Queue speichert zusätzlich Order-Liste, Index und Cursor. Bestehende Version-1-Zwischenstände beginnen mit einer erneuten Konten-/Ledger-Erfassung, damit Orders von bereits gelesenen Seiten erhalten bleiben. Die Buchungs-IDs bleiben unverändert, und die bestehende Importlogik erhält manuelle Kurse und Zwecke. Es ist keine Datenbank-Schemamigration erforderlich.
@@ -16,4 +26,4 @@ Coinbase Exchange einmal erneut synchronisieren. Bei einem weiter auftretenden F
 
 Das Update korrigiert den nachgewiesenen Abruffehler. Es kann einen externen Coinbase-Ausfall oder ungültige Zugangsdaten nicht beheben. Der erfolgreiche Abruf mit den produktiven Zugangsdaten muss nach dem Deployment geprüft werden.
 
-Quellen: [Coinbase Fills](https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/orders/get-all-fills), [Exchange-Authentifizierung](https://docs.cdp.coinbase.com/exchange/rest-api/authentication).
+Quellen: [Coinbase Konten](https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/accounts/get-all-account-profile), [Coinbase Exchange SDK: Signatur einschließlich Query](https://github.com/coinbase-samples/exchange-sdk-go/blob/main/client/rest.go), [Coinbase Fills](https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/orders/get-all-fills), [Exchange-Authentifizierung](https://docs.cdp.coinbase.com/exchange/rest-api/authentication).
