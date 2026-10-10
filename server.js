@@ -152,7 +152,7 @@ const EXCHANGE_PROVIDERS = Object.freeze({
     id: "coinbase_advanced", label: "Coinbase / Advanced Trade · Read-only API", defaultLabel: "Coinbase Advanced Trade", importMode: "api",
     apiKeyLabel: "Name des API-Schlüssels (organizations/…/apiKeys/…)", apiSecretLabel: "Privater API-Signaturschlüssel (Ed25519 / ECDSA)",
     csvProfile: "coinbase",
-    help: "Coinbase / Advanced Trade: Vollständigen Schlüsselnamen und privaten API-Signaturschlüssel aus dem Coinbase-Dialog eingeben. Ed25519 und ECDSA P-256 werden unterstützt; keine Passphrase. Nur View aktivieren. Dieser API-Schlüssel ist kein Wallet-Private-Key. Fehlende Ein-/Auszahlungen, Staking und einfache Käufe per CSV ergänzen.",
+    help: "Coinbase / Advanced Trade: Vollständigen Schlüsselnamen und privaten API-Signaturschlüssel aus dem Coinbase-Dialog eingeben. Ed25519 und ECDSA P-256 werden unterstützt; keine Passphrase. Nur View aktivieren. Kontohistorie mit Käufen, Transfers und Rewards wird zusätzlich zu Spot-Fills seriell geladen. Dieser API-Schlüssel ist kein Wallet-Private-Key.",
   }),
   bitvavo: Object.freeze({
     id: "bitvavo", label: "Bitvavo · Read-only API", defaultLabel: "Bitvavo", importMode: "api",
@@ -4591,23 +4591,31 @@ function advancedConnectionCredentials(connection) {
 
 function advancedHistoryView(connection) {
   const state = normalizeAdvancedState(connection.history_state);
-  const settled = Boolean(connection.history_completed_at) || state.phase === "complete";
-  return { status: settled ? "attention" : connection.history_started_at ? "running" : "pending",
-    phase: settled ? "complete" : "fills", phaseLabel: settled ? "Trades eingelesen · Belege ergänzen" : "Spot-Trades",
+  const settled = state.phase === "complete";
+  const phaseLabel = { fills: "Spot-Trades und Dublettenabgleich", accounts: "Coinbase-Konten", transactions: "Käufe, Transfers und Rewards", complete: state.warnings.length ? "Historie eingelesen · Zwecke prüfen" : "Kontohistorie eingelesen" }[state.phase];
+  return { status: settled ? state.warnings.length ? "attention" : "complete" : connection.history_started_at ? "running" : "pending",
+    phase: state.phase, phaseLabel,
     progressCurrent: state.pages, progressTotal: state.pages + (settled ? 0 : 1), startedAt: connection.history_started_at || null,
-    completedAt: connection.history_completed_at || null, lastError: connection.history_last_error || null,
+    completedAt: settled ? connection.history_completed_at || null : null, lastError: connection.history_last_error || null,
     markets: [], unresolvedMarkets: [], warnings: state.warnings };
 }
 
 function queueAdvancedHistoryIfNeeded(connection, { ignoreJobId = null } = {}) {
-  if (connection.history_completed_at || normalizeAdvancedState(connection.history_state).phase === "complete") return null;
+  if (normalizeAdvancedState(connection.history_state).phase === "complete") return null;
   const active = activeBinanceHistoryJob(connection.id);
   if (active && Number(active.id) !== Number(ignoreJobId)) return active;
+  // Version-1 fill-only imports must also load the account journal on update.
+  if (connection.history_completed_at) db.prepare("UPDATE exchange_connections SET history_completed_at = NULL WHERE id = ?").run(connection.id);
   return enqueueJob("exchange_history_sync", { connectionId: connection.id });
 }
 
 async function syncAdvancedHistoryBatch(connection) {
-  const result = await fetchAdvancedHistoryBatch({ ...advancedConnectionCredentials(connection), state: connection.history_state });
+  // Keep an existing account-journal order authoritative if a later API sync
+  // starts returning its fills. This also preserves user edits on those rows.
+  const accountOrderIds = db.prepare(`SELECT DISTINCT json_extract(raw_json, '$.row.advanced_trade_fill.order_id') AS id FROM transactions
+    WHERE wallet_id = ? AND json_extract(raw_json, '$.source') = 'coinbase_advanced-api'
+      AND json_extract(raw_json, '$.row.type') = 'advanced_trade_fill'`).all(connection.wallet_id).map(row => row.id).filter(Boolean);
+  const result = await fetchAdvancedHistoryBatch({ ...advancedConnectionCredentials(connection), state: connection.history_state, accountOrderIds });
   const imported = importExternalRows(getWallet(connection.wallet_id), result.rows, { source: "coinbase_advanced-api", purposeOrigin: "auto" });
   db.prepare(`UPDATE exchange_connections SET history_state = ?, history_started_at = COALESCE(history_started_at, datetime('now')),
     history_completed_at = CASE WHEN ? THEN datetime('now') ELSE NULL END, history_last_error = NULL WHERE id = ?`)

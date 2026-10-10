@@ -46,7 +46,7 @@
           <div class="section-heading transactions-title"><div><p class="eyebrow">VOLLSTÄNDIGES BUCHUNGSJOURNAL</p><h2 id="exchange-transactions-title">Alle Börsenbuchungen</h2></div><button class="icon-button" id="reload-exchange" aria-label="Ansicht neu laden" title="Ansicht neu laden">↻</button></div>
           <div class="toolbar"><label class="search-control"><span class="visually-hidden">Börsenbuchungen durchsuchen</span><span aria-hidden="true">⌕</span><input id="transaction-search" type="search" placeholder="Asset, Hash oder Zweck suchen" autocomplete="off" /></label><label class="select-control"><span class="visually-hidden">Richtung filtern</span><select id="direction-filter"><option value="">Ein- &amp; Ausgänge</option><option value="in">Eingänge</option><option value="out">Ausgänge</option><option value="self">Eigene Transfers</option></select></label></div>
           <div class="table-wrap"><table><thead><tr><th>Vorgang</th><th>Asset</th><th>Betrag</th><th>Preis jetzt</th><th>Preis Transaktionsdatum</th><th>Herkunft / Zweck</th></tr></thead><tbody id="exchange-transaction-list"></tbody></table><div id="exchange-transactions-empty" class="transactions-empty" hidden><span class="empty-icon">⌁</span><strong>Keine Buchungen gefunden</strong><p>Synchronisiere die Börse oder passe die Filter an.</p></div></div>
-          <p class="data-note">Die Ansicht zeigt sämtliche lokal gespeicherten Buchungen dieser Börsenverbindung. Die Verfügbarkeit sehr alter Daten hängt von der jeweiligen Börsen-API ab.</p>
+          <p class="data-note">Die Ansicht zeigt sämtliche lokal gespeicherten Buchungen dieser Börsenverbindung. Die Verfügbarkeit sehr alter Daten hängt von der jeweiligen Börsen-API ab. Native EUR-Belegwerte von Coinbase sind damalige Kontobewertungen und können vom Ausführungskurs abweichen; daraus abgeleitete Steuerwerte bleiben unverbindliche Schätzungen.</p>
         </section>
       </main>
     </div>
@@ -54,6 +54,6 @@
     <script src="/ui.js?v=20261004-auth-1" defer></script>
     <script src="/navigation.js?v=20261004-auth-1" defer></script>
     <script src="/notifications.js?v=20260925-1" defer></script>
-    <script src="/exchange.js?v=coinbase-advanced-20261010-1" defer></script>
+    <script src="/exchange.js?v=coinbase-history-20261010-2" defer></script>
   </body>
 </html>

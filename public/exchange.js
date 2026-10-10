@@ -51,7 +51,7 @@ function historyStatus(history) {
   if (history.status === "complete") return { value: "Vollständig", help: "Automatisch abrufbare Börsenhistorie verarbeitet", tone: "success" };
   if (history.status === "attention") {
     const markets = (history.unresolvedMarkets || []).join(", ");
-    return { value: "Unvollständig", help: markets ? `CSV-Export für ${markets} ergänzen` : "Historische Märkte oder CSV-Export ergänzen", tone: "warning" };
+    return { value: "Prüfen", help: markets ? `CSV-Export für ${markets} ergänzen` : history.warnings?.[0] || "Historische Märkte oder CSV-Export ergänzen", tone: "warning" };
   }
   if (history.lastError) return { value: "Prüfen", help: history.lastError, tone: "warning" };
   const percent = history.progressTotal ? Math.min(100, Math.round((history.progressCurrent / history.progressTotal) * 100)) : 0;
@@ -202,11 +202,16 @@ function renderTransactions() {
     if (Number(transaction.fee) > 0) { const fee = document.createElement("small"); fee.textContent = `Gebühr ${formatAmount(transaction.fee, transaction.fee_asset || transaction.asset)}`; amount.append(fee); }
     const now = document.createElement("td"); now.className = "price-cell"; now.textContent = formatPrice(transaction.price_now_eur);
     const historic = document.createElement("td"); historic.className = "price-cell"; historic.textContent = formatPrice(transaction.price_transaction_eur);
-    const historicDetail = document.createElement("small"); historicDetail.textContent = transaction.price_source === "manual" ? "Manuell festgelegt" : hasNumber(transaction.price_transaction_eur) ? "Automatische Preisquelle" : "Nicht verfügbar"; historic.append(historicDetail);
+    const historicDetail = document.createElement("small"); historicDetail.textContent = transaction.price_provider === "coinbase_advanced-api" ? "Coinbase-Belegwert (EUR)" : transaction.price_source === "manual" ? "Manuell festgelegt" : hasNumber(transaction.price_transaction_eur) ? "Automatische Preisquelle" : "Nicht verfügbar"; historic.append(historicDetail);
     row.append(operation, asset, amount, now, historic, renderPurpose(transaction));
     body.append(row);
   }
   el("exchange-transactions-empty").hidden = transactions.length > 0;
+  const history = state.data.connection.history;
+  const emptyCopy = el("exchange-transactions-empty").querySelector("p");
+  emptyCopy.textContent = !state.data.transactionCount && history && ["pending", "running"].includes(history.status)
+    ? history.lastError || "Die Kontohistorie wird im Hintergrund nachgeladen. Buchungen erscheinen hier automatisch."
+    : history?.lastError || "Synchronisiere die Börse oder passe die Filter an.";
 }
 
 function render() {
@@ -240,7 +245,7 @@ function render() {
   renderHoldings();
   renderTransactions();
   clearTimeout(historyRefreshTimer);
-  if ((data.connection.history && data.connection.history.status !== "complete" && !data.connection.history.lastError) || data.connection.live?.enabled) {
+  if ((data.connection.history && ["pending", "running"].includes(data.connection.history.status) && !data.connection.history.lastError) || data.connection.live?.enabled) {
     historyRefreshTimer = setTimeout(() => load({ quiet: true }), data.connection.live?.enabled ? 10000 : 6000);
   }
 }
@@ -279,7 +284,7 @@ async function syncExchange() {
     const queued = await api(`/api/exchange-connections/${exchangeId}/sync`, { method: "POST" });
     const result = await waitForJob(queued.job.id);
     await load({ quiet: true });
-    toast(`${(result.imported || 0).toLocaleString("de-DE")} Börsenbuchungen synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}${result.historyInProgress ? " Die Binance-Historie läuft automatisch weiter." : "."}`);
+    toast(`${(result.imported || 0).toLocaleString("de-DE")} Börsenbuchungen synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}${result.historyInProgress ? " Die Börsenhistorie läuft automatisch weiter." : "."}`);
   } catch (error) {
     toast(error.message, "error");
   } finally {
