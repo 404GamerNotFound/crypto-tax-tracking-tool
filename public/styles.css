@@ -228,8 +228,6 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
 .form-error { margin: -2px 0 15px; padding: 9px 10px; border-radius: 5px; background: #f9ded9; color: #8b372f; font-size: 12px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; padding-top: 3px; }
 .wallet-qr-image { display: block; width: min(320px, 100%); margin: 20px auto 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); }
-.psbt-result { margin-top: 18px; padding: 13px 15px; border: 1px solid #a7d7ba; border-radius: 7px; background: #edf8ef; }
-.psbt-result p { margin: 4px 0; color: var(--ink); font: 11px "DM Mono", monospace; }
 .toast { position: fixed; right: 24px; bottom: 24px; max-width: min(420px, calc(100% - 48px)); padding: 13px 16px; border-radius: 6px; color: white; background: var(--green-dark); box-shadow: var(--shadow); font-size: 13px; z-index: 5; }
 .toast.error { background: #9b4138; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
@@ -832,3 +830,11 @@ a.market-availability:hover { text-decoration: underline; }
 #auth-password-error, #login-error { color: #ad3434; }
 
 #auth-current-label[hidden] { display: none; }
+
+.price-mapping-list { display: grid; gap: 16px; padding: 0 24px 24px; }
+.price-mapping-form { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 7px; }
+.price-mapping-form label { display: grid; gap: 6px; }
+.price-mapping-form input:not([type="checkbox"]) { width: 100%; min-width: 0; padding: 10px; }
+.price-mapping-form .price-mapping-confirm { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; }
+.price-mapping-confirm input { flex: 0 0 auto; width: auto; }
+.price-mapping-form button { justify-self: start; white-space: normal; }

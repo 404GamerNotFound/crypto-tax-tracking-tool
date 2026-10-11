@@ -336,15 +336,6 @@ async function openWalletQr(wallet) {
   } catch (error) { toast(error.message, "error"); }
 }
 
-function openPsbtModal() {
-  el("psbt-error").hidden = true;
-  el("psbt-result").hidden = true;
-  el("psbt-modal").showModal();
-  setTimeout(() => el("psbt-input").focus(), 0);
-}
-
-function closePsbtModal() { el("psbt-modal").close(); }
-
 function updateLedgerFields() {
   const bitcoin = el("ledger-chain").value === "BTC";
   el("ledger-bitcoin-options").hidden = !bitcoin;
@@ -393,16 +384,8 @@ function ledgerSupportError() {
   return null;
 }
 
-function psbtRow(label, value) {
-  const row = document.createElement("p");
-  row.textContent = `${label}: ${value}`;
-  return row;
-}
-
 el("open-wallet-modal").addEventListener("click", openWalletModal);
 el("open-ledger-modal").addEventListener("click", openLedgerModal);
-el("open-psbt-modal").addEventListener("click", openPsbtModal);
-el("close-psbt-modal").addEventListener("click", closePsbtModal);
 el("close-ledger-modal").addEventListener("click", closeLedgerModal);
 el("cancel-ledger").addEventListener("click", closeLedgerModal);
 el("open-wallet-empty").addEventListener("click", openWalletModal);
@@ -458,23 +441,6 @@ el("wallet-form").addEventListener("submit", async (event) => {
   } finally {
     setBusy(save, false);
   }
-});
-
-el("psbt-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const error = el("psbt-error");
-  const result = el("psbt-result");
-  error.hidden = true;
-  try {
-    const preview = await api("/api/bitcoin/psbt-preview", { method: "POST", body: JSON.stringify({ psbt: el("psbt-input").value }) });
-    result.replaceChildren(
-      psbtRow("Eingänge", preview.inputs.length),
-      psbtRow("Ausgänge", preview.outputs.length),
-      psbtRow("Ausgangssumme", `${preview.outputTotalBtc.toLocaleString("de-DE", { maximumFractionDigits: 8 })} BTC`),
-      psbtRow("Gebühr", preview.feeBtc === null ? "nicht bestimmbar (UTXO-Daten fehlen)" : `${preview.feeBtc.toLocaleString("de-DE", { maximumFractionDigits: 8 })} BTC`),
-    );
-    result.hidden = false;
-  } catch (requestError) { error.textContent = requestError.message; error.hidden = false; }
 });
 
 el("ledger-form").addEventListener("submit", async (event) => {

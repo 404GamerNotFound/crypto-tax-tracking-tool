@@ -416,9 +416,9 @@ async function backfillHistoricalPrices() {
       ? `${result.updated.toLocaleString("de-DE")} historische Kurse ergänzt.`
       : "Keine fehlenden historischen Kurse ergänzt.";
     if (result.remaining > 0) {
-      summary += ` ${result.remaining.toLocaleString("de-DE")} fehlen noch und werden automatisch weiter geprüft.`;
+      summary += ` ${result.remaining.toLocaleString("de-DE")} sind noch offen. Abrufbare Kurse werden weiter geprüft; fehlende Zuordnungen stehen unter Datenabrufe.`;
     }
-    toast(result.hint ? `${summary} ${result.hint}` : summary, result.hint ? "error" : "success");
+    toast(result.hint ? `${summary} ${result.hint}` : summary, result.unresolved || result.blocked ? "error" : "success");
   } catch (error) {
     toast(error.message, "error");
   } finally {

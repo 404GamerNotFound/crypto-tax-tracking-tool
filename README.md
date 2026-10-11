@@ -39,7 +39,7 @@ docker compose down
 - Bis zu 2.500 Transaktionen in einem Sammelvorgang bearbeiten
 - Suchen sowie nach Blockchain und Bewegungsrichtung filtern
 - Bestätigte XTZ-Eingänge von vertrauenswürdig benannten Payout-Konten automatisch als `Staking Rewards` markieren; manuelle Zwecke bleiben dabei unangetastet
-- Interaktive Coin-Charts mit Zoom und Cursor, QR-Codes für gespeicherte öffentliche Wallet-Adressen sowie eine reine Bitcoin-PSBT-Vorschau ohne Signieren oder Speichern
+- Interaktive Coin-Charts mit Zoom und Cursor, QR-Codes für gespeicherte öffentliche Wallet-Adressen
 - Direkter, read-only Ledger-Import für Bitcoin und Ethereum: Die öffentliche Empfangsadresse wird im Browser vom Gerät gelesen und auf dem Ledger bestätigt; Private Keys, Seed-Phrases und Signaturfunktionen bleiben ausgeschlossen
 - Cardano-Stake-Wallets zusätzlich um die von Blockfrost gelieferte Reward-Historie erweitern und ERC-20-Metadaten mit read-only Ethereum-RPC-Multicalls prüfen
 - Read-only-Börsenanbindung für Bitvavo, Binance Spot, Coinbase Exchange, eToro und BSDEX: Coinbase Exchange importiert Salden, Fills, Ledgerbewegungen, Gebühren sowie Krypto-Ein- und Auszahlungen; Binance importiert Spot-Trades, Ein- und Auszahlungen, Earn-/Dividendenausschüttungen und Gebühren mit nachvollziehbarem Zweck-Mapping; BSDEX importiert Salden, eigene Trades sowie abgeschlossene Krypto-Ein- und Auszahlungen und ergänzt einen optionalen privaten Live-Abgleich für Salden und Trades mit periodischem REST-Fallback
@@ -330,3 +330,16 @@ Nach einem Update die Stake-Wallet erneut synchronisieren: Prämien erhalten den
 ### Coinbase-Importfehler
 
 Trades werden nach Order-IDs aus dem Kontojournal abgefragt und historische Seiten seriell nachgeladen. Netzwerk-/HTTP-Fehler werden konkret angezeigt; Jobs nennen ihre Börsenquelle. Hinweise zum Update und zur Diagnose: [Coinbase-Synchronisierung](docs/coinbase-sync-troubleshooting.md).
+
+
+### Historische Kurse nach Importen
+
+CSV- und Börsenimporte sowie die Rückkehr zur Preisautomatik planen sofort einen lokalen Preisjob ein. Wallet-Synchronisierungen übernehmen vorhandene Cache-/Adapterkurse und reihen fehlende Preise anschließend ein. Alle automatischen Preisjobs laufen über `background_jobs`; fällige Folge-Batches werden seriell weiterverarbeitet. Die Batchgröße begrenzt eindeutige Asset-/UTC-Tag-Kombinationen, nicht einzelne Buchungen. Ein Treffer ergänzt alle passenden offenen Buchungen, auch bei vorhandenem Retry. Einzelabrufe aktualisieren weiterhin ausschließlich die ausgewählte Buchung. Manuelle Preise und Zwecke bleiben geschützt.
+
+Unter **Datenqualität → Datenabrufe → Preiszuordnung bestätigen** können importierte Coins einer geprüften CoinGecko-API-ID zugeordnet werden. Die Zuordnung gilt je Wallet/Börsenkonto; Kürzel werden nicht automatisch geraten. Unbekannte Assets bleiben sichtbar, belegen aber keinen Abrufplatz. Für eigene Zuordnungen werden keine gleichnamigen Börsenmärkte unterstellt. Die Zuordnung allein erweitert daher nicht die verfügbare Historie des CoinGecko-Tarifs.
+
+ERC-20-Preise verwenden den Contract-Chart-Endpunkt. Neue Tagesreferenzen stammen ausschließlich vom angefragten UTC-Tag. Tageskurse sind Schätzungen, keine Ausführungspreise. Noch offene Tage werden frühestens am Folgetag um 00:40 UTC ergänzt. `price_observed_at` und `price_method` dokumentieren den Messzeitpunkt und die Bewertungsmethode; Altdaten behalten unbekannte Metadaten (`legacy`) und werden nicht stillschweigend umbewertet.
+
+Die Demo-API von CoinGecko wird nur innerhalb ihrer 365-Tage-Historie angefragt. Native Assets behalten ihre EUR-Fallbacks. Provider-Pausen bei Rate-Limits (einschließlich `Retry-After`), Zugangsstörungen und Ausfällen werden lokal gespeichert. Die Anzeige unterscheidet fehlende Zuordnung, Tarifgrenzen, offene Tage und fehlende Tagesdaten. Änderungen der Preisquellen-Einstellungen geben betroffene Retries erneut frei.
+
+Die Migration ergänzt `price_asset_mappings`, `price_provider_cooldowns`, Beobachtungsfelder in `transactions`/`price_history` und einen Retry-Grund. Bestehende Buchungen und Audit-Einträge bleiben erhalten. Die PSBT-Vorschau wurde entfernt; der alte Endpunkt antwortet vor dem Parsen eines Request-Bodys mit HTTP 410. CryptoBuch verarbeitet keine Transaktionsentwürfe.

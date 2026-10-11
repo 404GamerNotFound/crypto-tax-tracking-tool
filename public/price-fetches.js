@@ -4,17 +4,19 @@ const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeSty
 const state = { page: 1, data: null };
 
 function readableDate(value) {
+  if (!value) return "—";
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? "—" : date.format(parsed);
 }
 
 function readableDateTime(value) {
+  if (!value) return "—";
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? "—" : dateTime.format(parsed);
 }
 
 function triggerLabel(trigger) {
-  return ({ automatisch: "Automatisch", manuell: "Manuell", wallet_sync: "Wallet-Sync" })[trigger] || trigger;
+  return ({ automatisch: "Automatisch", manuell: "Manuell", wallet_sync: "Wallet-Sync", import: "Import", automatik: "Automatik aktiviert", zuordnung: "Preiszuordnung" })[trigger] || trigger;
 }
 
 function runState(run) {
@@ -28,6 +30,7 @@ function renderPipeline(pipeline) {
   const status = ({ running: "Abruf läuft", queued: "Abruf wartet", waiting: "Bereit" })[pipeline.status] || "Bereit";
   el("price-pipeline-status").textContent = status;
   el("price-pipeline-status").className = "price-pipeline-status " + pipeline.status;
+  el("pipeline-blocked").textContent = pipeline.blocked ? `${pipeline.blocked.toLocaleString("de-DE")} Buchungen pausieren wegen fehlender Zuordnung oder ungültigem Datum. Diese belegen keinen Abrufplatz.` : "Alle offenen Buchungen sind grundsätzlich zugeordnet.";
   el("pipeline-pending").textContent = pipeline.pending.toLocaleString("de-DE");
   el("pipeline-due").textContent = pipeline.due.toLocaleString("de-DE");
   el("pipeline-scheduled").textContent = pipeline.scheduled.toLocaleString("de-DE");
@@ -35,7 +38,7 @@ function renderPipeline(pipeline) {
   const copy = pipeline.status === "running"
     ? "Ein lokaler Preisabruf verarbeitet die aktuelle Warteschlange seriell."
     : pipeline.status === "queued"
-      ? pipeline.jobs.length + " manueller Kursabruf(e) warten in der lokalen Job-Warteschlange."
+      ? pipeline.jobs.length + " Kursabruf(e) warten in der lokalen Job-Warteschlange."
       : pipeline.pending
         ? "Die nächste automatische Prüfung startet " + readableDateTime(pipeline.nextAutomaticAt) + "."
         : "Aktuell sind keine fehlenden historischen Kurse vorgemerkt.";
@@ -64,8 +67,9 @@ function renderUpcoming(data) {
       readableDate(entry.timestamp),
       entry.assetSymbol || entry.asset,
       entry.sourceLabel,
-      entry.due ? "Im nächsten freien Batch" : readableDateTime(entry.nextAttemptAt),
+      entry.blocked ? "Pausiert" : entry.due ? "Fällig" : readableDateTime(entry.nextAttemptAt),
       entry.attempts ? entry.attempts.toLocaleString("de-DE") : "neu",
+      entry.reasonLabel || "—",
     ].forEach((value) => tr.append(node("td", "", value)));
     return tr;
   });
@@ -123,7 +127,7 @@ function runCard(run) {
   if (run.errorMessage) body.append(node("p", "price-fetch-run-error", run.errorMessage));
   if (run.result?.hint) body.append(node("p", "data-note", run.result.hint));
   if (!run.events.length) {
-    body.append(node("p", "data-note", "Kein externer Abruf nötig: Werte waren bereits lokal zwischengespeichert oder es gab keine passenden Kandidaten."));
+    body.append(node("p", "data-note", "Kein externer HTTP-Abruf in diesem Durchlauf. Gründe können Cache-Treffer, Tarifgrenzen, ein noch offener UTC-Tag oder fehlende Preiszuordnungen sein. Beachte das Ergebnis oben."));
   } else {
     const wrap = node("div", "table-wrap price-fetch-event-table");
     const table = node("table");
@@ -156,7 +160,56 @@ function renderRuns(data) {
   el("price-fetch-next").disabled = pagination.page >= pagination.totalPages;
 }
 
+let mappingSignature = "";
+function renderMappings(mappings) {
+  // Polling must not erase a user's partially entered ID or focus.
+  const signature = JSON.stringify(mappings);
+  if (signature === mappingSignature) return;
+  if (el("price-mapping-list").contains(document.activeElement)) return;
+  mappingSignature = signature;
+  el("price-mapping-empty").hidden = mappings.length > 0;
+  el("price-mapping-list").replaceChildren(...mappings.map((mapping) => {
+    const form = node("form", "price-mapping-form");
+    form.append(node("strong", "", `${mapping.asset} · ${mapping.sourceLabel} · ${mapping.missing} Kurse offen`));
+    const label = node("label");
+    label.append(node("span", "", "CoinGecko-ID"));
+    const input = node("input");
+    input.required = true;
+    input.maxLength = 100;
+    input.pattern = "[a-z0-9][a-z0-9_-]{0,99}";
+    input.placeholder = "API-ID des Coins";
+    input.value = mapping.coinGeckoId || "";
+    label.append(input);
+    form.append(label);
+    const confirmLabel = node("label", "price-mapping-confirm");
+    const confirmation = node("input");
+    confirmation.type = "checkbox";
+    confirmation.required = true;
+    confirmLabel.append(confirmation, document.createTextNode("Coin-Identität geprüft; Zuordnung für diese Quelle bestätigen."));
+    form.append(confirmLabel);
+    const button = node("button", "button button-secondary", "Zuordnung speichern & Kurse abrufen");
+    button.type = "submit";
+    form.append(button);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      button.disabled = true;
+      try {
+        const result = await api("/api/price-asset-mappings", { method: "PUT", body: JSON.stringify({
+          walletId: mapping.walletId, asset: mapping.asset, coinGeckoId: input.value.trim(), confirmed: confirmation.checked,
+        }) });
+        toast(`Zuordnung gespeichert. Kursabruf #${result.job.id} eingeplant.`);
+        confirmation.checked = false;
+        mappingSignature = "";
+        await load();
+      } catch (error) { toast(error.message, "error"); }
+      finally { button.disabled = false; }
+    });
+    return form;
+  }));
+}
+
 function render() {
+  renderMappings(state.data.mappings || []);
   renderPipeline(state.data.pipeline);
   renderUpcoming(state.data);
   renderRuns(state.data);

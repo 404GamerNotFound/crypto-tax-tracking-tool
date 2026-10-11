@@ -37,11 +37,19 @@
           </div>
           <div class="price-pipeline-metrics" aria-label="Status der Kurs-Pipeline">
             <article><span>Offene Kurse</span><strong id="pipeline-pending">—</strong><small>ohne manuellen Kurs</small></article>
-            <article><span>Im nächsten Batch</span><strong id="pipeline-due">—</strong><small>maximal <span id="pipeline-batch-size">—</span> je Durchlauf</small></article>
-            <article><span>Später eingeplant</span><strong id="pipeline-scheduled">—</strong><small>nach Retry-Zeitpunkt</small></article>
+            <article><span>Im nächsten Batch</span><strong id="pipeline-due">—</strong><small>maximal <span id="pipeline-batch-size">—</span> Asset-Tage je Durchlauf</small></article>
+            <article><span>Später eingeplant</span><strong id="pipeline-scheduled">—</strong><small>abrufbare Buchungen</small></article>
           </div>
+          <p class="data-note" id="pipeline-blocked"></p>
           <ol class="price-pipeline-stages" id="price-pipeline-stages" aria-label="Reihenfolge der Preisquellen"></ol>
           <p class="price-pipeline-note">Alle historischen HTTP-Anfragen teilen sich eine serielle Warteschlange. Ein Treffer beendet die Suche für dieses Datum; fehlende Werte erhalten einen lokalen Retry-Zeitpunkt.</p>
+        </section>
+
+        <section class="transactions-panel report-panel" aria-labelledby="price-mappings-title">
+          <div class="section-heading transactions-title"><div><p class="eyebrow">IMPORTIERTE ASSETS</p><h2 id="price-mappings-title">Preiszuordnung bestätigen</h2></div></div>
+          <p class="data-note">Gleiche Kürzel können verschiedene Coins bezeichnen. Prüfe die CoinGecko-ID auf der CoinGecko-Coinseite (API-ID). Die Zuordnung gilt nur für die angezeigte Quelle. Unbekannte Assets pausieren bis zur Bestätigung. Vorhandene und manuelle Kurse bleiben erhalten. Eigene Zuordnungen verwenden ausschließlich CoinGecko; dessen Tarif muss den Zeitraum abdecken.</p>
+          <div id="price-mapping-list" class="price-mapping-list"></div>
+          <p class="data-note" id="price-mapping-empty" hidden>Alle erfassten Assets haben eine feste Preisidentität.</p>
         </section>
 
         <section class="transactions-panel report-panel price-fetch-upcoming" aria-labelledby="price-fetch-upcoming-title">
@@ -50,7 +58,7 @@
             <span class="count-badge" id="price-fetch-upcoming-count">—</span>
           </div>
           <p class="data-note" id="price-fetch-next-at">Zeitplan wird geladen …</p>
-          <div class="table-wrap"><table><thead><tr><th>Transaktionsdatum</th><th>Coin</th><th>Quelle</th><th>Nächste Prüfung</th><th>Versuche</th></tr></thead><tbody id="price-fetch-upcoming-list"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Transaktionsdatum</th><th>Coin</th><th>Quelle</th><th>Nächste Prüfung</th><th>Versuche</th><th>Hinweis</th></tr></thead><tbody id="price-fetch-upcoming-list"></tbody></table></div>
           <p class="data-note" id="price-fetch-upcoming-empty" hidden>Keine fehlenden historischen Kurse in der Warteschlange.</p>
         </section>
 

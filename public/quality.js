@@ -517,7 +517,7 @@ async function savePrice(auto = false) {
   try {
     const result = await api("/api/transactions/" + state.transaction.id + "/historical-price", { method: "PATCH", body: JSON.stringify({ priceTransactionEur: auto ? null : el("quality-price-input").value }) });
     el("quality-price-modal").close();
-    toast(result.price_source === "manual" ? "Kurs gespeichert." : "Automatik aktiviert.");
+    toast(result.price_source === "manual" ? "Kurs gespeichert." : result.priceJob ? `Automatik aktiviert. Kursabruf #${result.priceJob.id} eingeplant.` : result.priceHint || "Automatik aktiviert.");
     await load();
   } catch (error) {
     el("quality-price-error").textContent = error.message;

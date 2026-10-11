@@ -69,7 +69,7 @@ function historicPriceProvenance(transaction) {
   }
   return {
     tone: "automatic",
-    quality: "automatisch ergänzt",
+    quality: ({ daily_reference: "UTC-Tagesreferenz · Schätzung", daily_close: "UTC-Tagesschluss · Schätzung", block_quote: "Blockzeitpunkt · Schätzung" })[transaction.price_method] || "automatisch · Bewertungsmethode nicht dokumentiert",
     provider: priceProviderLabel(provider),
     priceDate,
     recordedAt,
@@ -553,11 +553,12 @@ async function loadHistoricPriceHistory(transaction) {
       el("historic-price-input").value = hasPrice(transaction.price_transaction_eur) ? String(transaction.price_transaction_eur) : "";
     }
     const provenance = historicPriceProvenance({ ...transaction, ...history.transaction });
+    const observation = history.transaction.price_observed_at ? ` Kurszeitpunkt: ${formatRecordedAt(history.transaction.price_observed_at)}.` : " Kurszeitpunkt nicht dokumentiert.";
     const latest = history.changes[0];
     const audit = latest
       ? ` Letzte Änderung: ${latest.source === "manual" ? "manuell" : "automatisch"} · ${formatRecordedAt(latest.changed_at)}${latest.note ? ` · ${latest.note}` : ""}`
       : "";
-    el("historic-price-history").textContent = `Kursherkunft: ${provenance.provider} · Datenqualität: ${provenance.quality}.${audit}`;
+    el("historic-price-history").textContent = `Kursherkunft: ${provenance.provider} · Datenqualität: ${provenance.quality}.${observation}${audit}`;
     el("historic-price-history").hidden = false;
     updatePriceFetchControls();
   } catch (_) {
@@ -660,9 +661,14 @@ async function saveHistoricPrice(useAutomatic = false) {
     transaction.price_source = result.price_source;
     transaction.price_provider = result.price_provider;
     transaction.price_recorded_at = result.price_recorded_at;
+    if (useAutomatic && result.priceJob) {
+      state.priceFetchJobs.set(transaction.id, { id: result.priceJob.id, polling: false });
+      await pollTransactionPrice(transaction);
+      return;
+    }
     closeHistoricPriceModal();
     await loadPortfolio({ quiet: true });
-    toast(result.price_source === "manual" ? "Historischer Kurs manuell gespeichert." : "Automatische Preisergänzung wieder aktiviert.");
+    toast(result.price_source === "manual" ? "Historischer Kurs manuell gespeichert." : result.priceHint || "Automatische Preisergänzung wieder aktiviert.");
   } catch (requestError) {
     error.textContent = requestError.message;
     error.hidden = false;
