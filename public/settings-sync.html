@@ -50,12 +50,12 @@
               <label>
                 <span>Wiederholung fehlender historischer Kurse</span>
                 <input id="historical-price-retry-interval" name="historicalPriceRetryIntervalMinutes" type="number" min="5" max="1440" step="1" required />
-                <small>Minuten zwischen automatischen Durchläufen. Fehlgeschlagene Werte erhalten zusätzlich eine steigende Wartezeit.</small>
+                <small>Minuten zwischen regelmäßigen Prüfungen. Neue Importe und fällige Folge-Batches starten früher; Fehlschläge erhalten eine steigende Wartezeit.</small>
               </label>
               <label>
                 <span>Historische Kurse je Durchlauf</span>
                 <input id="historical-price-batch-size" name="historicalPriceBackfillBatchSize" type="number" min="1" max="250" step="1" required />
-                <small>Begrenzt die Nachbearbeitung; historische Provider-Anfragen laufen einzeln und gedrosselt.</small>
+                <small>Begrenzt unterschiedliche Coin-/Tageskurse. Mehrere passende Buchungen teilen sich einen Kurs; Anfragen laufen einzeln und gedrosselt.</small>
               </label>
             </div>
           </section>

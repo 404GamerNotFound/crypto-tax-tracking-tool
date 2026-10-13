@@ -50,7 +50,7 @@ function transferCard(item) {
   const card = node("article", "transfer-suggestion-card" + (item.origin === "exchange" ? " is-exchange" : ""));
   const header = node("div", "transfer-card-head");
   header.append(
-    node("span", "transfer-kind " + (item.origin === "exchange" ? "exchange" : "wallet"), item.origin === "exchange" ? "Börse ↔ Wallet" : "Wallet ↔ Wallet"),
+    node("span", "transfer-kind " + (item.origin === "exchange" ? "exchange" : "wallet"), item.transfer_kind === "exchange_exchange" ? "Börse ↔ Börse" : item.origin === "exchange" ? "Börse ↔ Wallet" : "Wallet ↔ Wallet"),
     node("strong", "transfer-amount", amount(item.amount, item.asset)),
   );
   const route = node("div", "transfer-route");
@@ -66,13 +66,16 @@ function transferCard(item) {
     transferDetail("Abgleich", timeDistance(item.outgoing_at, item.incoming_at)),
     transferDetail("Quelle", item.origin === "exchange" ? "Börsen-Synchronisierung" : "Wallet-Synchronisierung"),
   );
+  if (item.hash_matched) details.append(transferDetail("Transaktions-ID", "Vollständig übereinstimmend"));
+  else details.append(transferDetail("Transaktions-ID", "Nicht vollständig abgleichbar – Betrag und Zeit prüfen"));
+  if (item.fee > 0) details.append(transferDetail("Auszahlungsgebühr", amount(item.fee, item.fee_asset || item.asset)));
   if (item.fee_adjusted) details.append(transferDetail("Gebühr", "Im Betrag berücksichtigt"));
   const footer = node("div", "transfer-card-footer");
-  footer.append(node("p", "", "Bestätigung markiert ausschließlich diese beiden Buchungen als Transfer."));
+  footer.append(node("p", "", "Bestätigung verknüpft diese beiden Buchungen als eigenen Transfer. Beträge, Kurse und Gebühren bleiben erhalten."));
   const confirmTransfer = node("button", "button button-primary button-small", "Als Transfer bestätigen");
   confirmTransfer.type = "button";
   confirmTransfer.addEventListener("click", async () => {
-    const prompt = "Diesen Abgleich als eigenen Transfer bestätigen?\n\n" + (item.outgoing_wallet || "Ausgang") + " → " + (item.incoming_wallet || "Eingang") + " · " + amount(item.amount, item.asset) + "\n\nDabei werden nur die beiden Zwecke auf „Transfer“ gesetzt.";
+    const prompt = "Diesen Abgleich als eigenen Transfer bestätigen?\n\n" + (item.outgoing_wallet || "Ausgang") + " → " + (item.incoming_wallet || "Eingang") + " · " + amount(item.amount, item.asset) + "\n\nDabei werden beide Buchungen verknüpft und ihre Zwecke auf „Transfer“ gesetzt. Beträge, Kurse und Gebühren bleiben erhalten.";
     if (!confirm(prompt)) return;
     confirmTransfer.disabled = true;
     confirmTransfer.textContent = "Wird verknüpft …";

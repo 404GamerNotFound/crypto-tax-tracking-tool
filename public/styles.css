@@ -372,7 +372,7 @@ form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }
 .price-pipeline-heading p:not(.eyebrow) { max-width: 640px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .price-pipeline-status, .price-fetch-run-status { display: inline-flex; align-items: center; min-height: 23px; padding: 0 9px; border-radius: 999px; color: #54635a; background: #edf0eb; font: 500 9px "DM Mono", monospace; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
 .price-pipeline-status.running, .price-fetch-run-status.running { color: #765b14; background: #fff1ba; }
-.price-pipeline-status.queued, .price-fetch-run-status.partial { color: #725817; background: #fff5d7; }
+.price-pipeline-status.queued, .price-pipeline-status.blocked, .price-fetch-run-status.partial { color: #725817; background: #fff5d7; }
 .price-pipeline-status.waiting, .price-fetch-run-status.success { color: var(--green-dark); background: var(--mint); }
 .price-fetch-run-status.error { color: #8b3730; background: #fde2dc; }
 .price-pipeline-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #cfe6d5; border-bottom: 1px solid #cfe6d5; background: rgba(255,255,255,.48); }

@@ -22,12 +22,13 @@ function triggerLabel(trigger) {
 function runState(run) {
   if (run.status === "running") return { label: "Läuft", className: "running" };
   if (run.status === "error" || run.status === "interrupted") return { label: run.status === "interrupted" ? "Unterbrochen" : "Fehler", className: "error" };
+  if (run.result?.blocked > 0) return { label: "Klärung nötig", className: "partial" };
   if (run.unresolvedCount > 0) return { label: "Teilweise offen", className: "partial" };
   return { label: "Erfolgreich", className: "success" };
 }
 
 function renderPipeline(pipeline) {
-  const status = ({ running: "Abruf läuft", queued: "Abruf wartet", waiting: "Bereit" })[pipeline.status] || "Bereit";
+  const status = ({ running: "Abruf läuft", queued: "Abruf wartet", waiting: "Bereit", blocked: "Zuordnung fehlt" })[pipeline.status] || "Bereit";
   el("price-pipeline-status").textContent = status;
   el("price-pipeline-status").className = "price-pipeline-status " + pipeline.status;
   el("pipeline-blocked").textContent = pipeline.blocked ? `${pipeline.blocked.toLocaleString("de-DE")} Buchungen pausieren wegen fehlender Zuordnung oder ungültigem Datum. Diese belegen keinen Abrufplatz.` : "Alle offenen Buchungen sind grundsätzlich zugeordnet.";
@@ -35,7 +36,7 @@ function renderPipeline(pipeline) {
   el("pipeline-due").textContent = pipeline.due.toLocaleString("de-DE");
   el("pipeline-scheduled").textContent = pipeline.scheduled.toLocaleString("de-DE");
   el("pipeline-batch-size").textContent = pipeline.batchSize.toLocaleString("de-DE");
-  const copy = pipeline.status === "running"
+  const copy = pipeline.status === "blocked" ? "Die offenen Buchungen benötigen zuerst eine Preiszuordnung oder ein gültiges Datum." : pipeline.status === "running"
     ? "Ein lokaler Preisabruf verarbeitet die aktuelle Warteschlange seriell."
     : pipeline.status === "queued"
       ? pipeline.jobs.length + " Kursabruf(e) warten in der lokalen Job-Warteschlange."
@@ -56,10 +57,10 @@ function renderUpcoming(data) {
   const items = data.upcoming || [];
   el("price-fetch-upcoming-count").textContent = data.pipeline.pending.toLocaleString("de-DE");
   el("price-fetch-upcoming-count").setAttribute("aria-label", data.pipeline.pending.toLocaleString("de-DE") + " offene Kurse");
-  el("price-fetch-next-at").textContent = data.pipeline.status === "running"
+  el("price-fetch-next-at").textContent = data.pipeline.status === "blocked" ? "Automatische Abrufe pausieren für diese Buchungen bis zur Klärung." : data.pipeline.status === "running"
     ? "Die Pipeline läuft gerade. Neue Abrufe bleiben hinter der laufenden seriellen Anfrage eingeordnet."
     : data.pipeline.pending
-      ? "Nächste automatische Prüfung: " + readableDateTime(data.pipeline.nextAutomaticAt) + " · Wiederholung im Abstand von mindestens " + data.pipeline.retryIntervalMinutes + " Minuten."
+      ? "Nächste automatische Prüfung: " + readableDateTime(data.pipeline.nextAutomaticAt) + " · Wiederholung im Abstand von mindestens " + data.pipeline.retryIntervalMinutes + " Minuten nach Fehlschlägen. Fällige Folge-Batches laufen seriell weiter."
       : "Die Pipeline prüft weiterhin lokal, sobald neue Buchungen ohne historischen Kurs eintreffen.";
   const rows = items.map((entry) => {
     const tr = node("tr");
@@ -122,6 +123,7 @@ function runCard(run) {
     detailMetric("Geprüft", run.attemptedCount.toLocaleString("de-DE")),
     detailMetric("Ergänzt", run.updatedCount.toLocaleString("de-DE")),
     detailMetric("Noch offen", run.unresolvedCount.toLocaleString("de-DE")),
+    detailMetric("Klärung nötig", Number(run.result?.blocked || 0).toLocaleString("de-DE")),
   );
   body.append(metrics);
   if (run.errorMessage) body.append(node("p", "price-fetch-run-error", run.errorMessage));
@@ -170,7 +172,7 @@ function renderMappings(mappings) {
   el("price-mapping-empty").hidden = mappings.length > 0;
   el("price-mapping-list").replaceChildren(...mappings.map((mapping) => {
     const form = node("form", "price-mapping-form");
-    form.append(node("strong", "", `${mapping.asset} · ${mapping.sourceLabel} · ${mapping.missing} Kurse offen`));
+    form.append(node("strong", "", `${mapping.asset} · ${mapping.sourceLabel} · ${mapping.missing} ${mapping.missing === 1 ? "Kurs" : "Kurse"} offen`));
     const label = node("label");
     label.append(node("span", "", "CoinGecko-ID"));
     const input = node("input");

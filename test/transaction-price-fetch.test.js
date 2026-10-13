@@ -172,6 +172,8 @@ test('unbekannte Coins pausieren ohne künstliche Versuche; bestätigte ID gilt 
   assert.equal(requests.length, 0);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM historical_price_retries').get().n, 0);
   assert.equal(historicalPricePipelineResponse().pipeline.blocked, 2);
+  assert.equal(historicalPricePipelineResponse().pipeline.status, 'blocked');
+  assert.equal(historicalPricePipelineResponse().pipeline.due, 0);
   const body = { walletId: 1, asset: 'IOST', coinGeckoId: 'iost', confirmed: true };
   await api('/api/price-asset-mappings', { method: 'PUT', body: { ...body, confirmed: false }, status: 400 });
   const saved = await api('/api/price-asset-mappings', { method: 'PUT', body, status: 202 });

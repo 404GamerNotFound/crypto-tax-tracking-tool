@@ -305,7 +305,31 @@ function renderPurpose(transaction) {
   documents.className = "text-button historic-price-edit";
   documents.textContent = "Nachweise";
   documents.addEventListener("click", () => openDocumentModal(transaction));
-  cell.append(card, select, documents);
+  cell.append(card, select);
+  if (transaction.transferLink) {
+    const counterpart = transaction.transferLink;
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "text-button historic-price-edit";
+    link.textContent = `Verknüpft: ${counterpart.walletLabel} · Gegenbuchung #${counterpart.transactionId}`;
+    link.addEventListener("click", () => {
+      state.filters = { search: "", direction: "" };
+      el("transaction-search").value = "";
+      el("direction-filter").value = "";
+      renderTransactions();
+      const target = document.getElementById(`transaction-${counterpart.transactionId}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target?.focus({ preventScroll: true });
+    });
+    cell.append(link);
+  } else if (transaction.purpose === "Transfer") {
+    const review = document.createElement("a");
+    review.className = "text-button historic-price-edit";
+    review.href = "/quality.html#transfers";
+    review.textContent = "Noch nicht verknüpft · Transfer prüfen";
+    cell.append(review);
+  }
+  cell.append(documents);
   return cell;
 }
 
@@ -317,6 +341,8 @@ function renderTransactions() {
   body.replaceChildren();
   for (const transaction of transactions) {
     const row = document.createElement("tr");
+    row.id = `transaction-${transaction.id}`;
+    row.tabIndex = -1;
     const selectCell = document.createElement("td");
     selectCell.className = "checkbox-cell";
     const checkbox = document.createElement("input");

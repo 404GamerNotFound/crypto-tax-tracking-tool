@@ -3183,7 +3183,7 @@ function historicalPricePipelineResponse(page = 1) {
 
   return {
     pipeline: {
-      status: historicalPriceBackfillInFlight ? "running" : jobs.length ? "queued" : "waiting",
+      status: historicalPriceBackfillInFlight ? "running" : jobs.length ? "queued" : pending > 0 && blocked === pending ? "blocked" : "waiting",
       pending,
       ready, blocked, groups: batch.groups,
       due: batch.rows.length,
@@ -3446,6 +3446,18 @@ async function portfolioResponse() {
     JOIN wallets w ON w.id = t.wallet_id
     ORDER BY CASE WHEN t.timestamp IS NULL THEN 0 ELSE 1 END, t.timestamp DESC, t.id DESC
   `).all();
+  const transactionById = new Map(transactions.map((transaction) => [transaction.id, transaction]));
+  for (const link of db.prepare('SELECT * FROM transfer_links').all()) {
+    for (const [id, counterpartId] of [[link.outgoing_transaction_id, link.incoming_transaction_id], [link.incoming_transaction_id, link.outgoing_transaction_id]]) {
+      const transaction = transactionById.get(id);
+      const counterpart = transactionById.get(counterpartId);
+      if (transaction && counterpart) transaction.transferLink = {
+        transactionId: counterpart.id, walletLabel: counterpart.wallet_label || counterpart.chain,
+        direction: counterpart.direction, timestamp: counterpart.timestamp, amount: counterpart.amount,
+        asset: counterpart.asset, hash: counterpart.hash,
+      };
+    }
+  }
   const holdings = Object.fromEntries(Object.values(CHAIN_CONFIG).map((chain) => [chain.asset, 0]));
   const assets = nativeAssetDescriptors();
   const exchangeJournalByWallet = new Map();
@@ -3812,72 +3824,53 @@ function exchangeProviderFromRaw(rawJson) {
 
 function exchangeTransferSuggestions(limit = 80) {
   const desired = boundedInteger(limit, 80, 1, 400);
-  // The SQL prefilter narrows the comparison to matching asset, direction,
-  // amount and time window. The matcher below then applies the fee-aware
-  // exact comparison and assigns the human-readable direction.
+  // Canonical out/in ordering emits each pair once, including two exchange accounts.
   const rows = db.prepare(`
-    SELECT
-      exchange_row.id AS exchange_id, exchange_row.direction AS exchange_direction, exchange_row.asset AS exchange_asset,
-      exchange_row.amount AS exchange_amount, exchange_row.fee AS exchange_fee, exchange_row.fee_asset AS exchange_fee_asset,
-      exchange_row.timestamp AS exchange_timestamp, exchange_row.raw_json AS exchange_raw_json,
-      local_row.id AS local_id, local_row.direction AS local_direction, local_row.asset AS local_asset,
-      local_row.amount AS local_amount, local_row.timestamp AS local_timestamp,
-      exchange_wallet.label AS exchange_wallet, local_wallet.label AS local_wallet
-    FROM transactions exchange_row
-    JOIN transactions local_row ON local_row.asset = exchange_row.asset
-      AND ((exchange_row.direction = 'out' AND local_row.direction = 'in') OR (exchange_row.direction = 'in' AND local_row.direction = 'out'))
-      AND ABS(strftime('%s', local_row.timestamp) - strftime('%s', exchange_row.timestamp)) <= 259200
-      AND (
-        ABS(local_row.amount - exchange_row.amount) <= MAX(0.00000001, ABS(exchange_row.amount) * 0.01)
-        OR (
-          exchange_row.fee_asset = exchange_row.asset AND exchange_row.fee > 0 AND exchange_row.fee < exchange_row.amount
-          AND ABS(local_row.amount - (exchange_row.amount - exchange_row.fee)) <= MAX(0.00000001, ABS(exchange_row.amount - exchange_row.fee) * 0.01)
-        )
-      )
-    JOIN wallets exchange_wallet ON exchange_wallet.id = exchange_row.wallet_id
-    JOIN wallets local_wallet ON local_wallet.id = local_row.wallet_id
-    LEFT JOIN transfer_links linked_out ON linked_out.outgoing_transaction_id = CASE WHEN exchange_row.direction = 'out' THEN exchange_row.id ELSE local_row.id END
-    LEFT JOIN transfer_links linked_in ON linked_in.incoming_transaction_id = CASE WHEN exchange_row.direction = 'in' THEN exchange_row.id ELSE local_row.id END
-    WHERE exchange_row.purpose = 'Transfer'
-      AND (exchange_row.raw_json LIKE '%"source":"binance-api"%' OR exchange_row.raw_json LIKE '%"source":"coinbase-api"%' OR exchange_row.raw_json LIKE '%"source":"coinbase_advanced-api"%' OR exchange_row.raw_json LIKE '%"source":"bitvavo-api"%' OR exchange_row.raw_json LIKE '%"source":"bsdex-api"%')
-      AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"binance-api"%'
-      AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"coinbase-api"%'
-      AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"coinbase_advanced-api"%'
-      AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"bitvavo-api"%'
-      AND COALESCE(local_row.raw_json, '') NOT LIKE '%"source":"bsdex-api"%'
+    SELECT a.id AS outgoing_id, b.id AS incoming_id, a.asset, a.amount, a.fee, a.fee_asset,
+      a.hash, b.hash AS incoming_hash, a.timestamp, b.timestamp AS incoming_at, b.amount AS incoming_amount,
+      a.raw_json, b.raw_json AS incoming_raw_json,
+      aw.label AS outgoing_wallet, bw.label AS incoming_wallet,
+      aw.source_type AS outgoing_source_type, bw.source_type AS incoming_source_type,
+      a.purpose AS outgoing_purpose, b.purpose AS incoming_purpose
+    FROM transactions a JOIN transactions b ON b.asset = a.asset AND a.direction = 'out' AND b.direction = 'in'
+      AND a.wallet_id <> b.wallet_id
+      AND ABS(strftime('%s', b.timestamp) - strftime('%s', a.timestamp)) <= 259200
+      AND (ABS(b.amount-a.amount) <= MAX(0.00000001, ABS(a.amount)*0.003)
+        OR (a.fee_asset=a.asset AND a.fee>0 AND a.fee<a.amount
+          AND ABS(b.amount-(a.amount-a.fee)) <= MAX(0.00000001, ABS(a.amount-a.fee)*0.003)))
+    JOIN wallets aw ON aw.id=a.wallet_id JOIN wallets bw ON bw.id=b.wallet_id
+    LEFT JOIN transfer_links linked_out ON linked_out.outgoing_transaction_id=a.id
+    LEFT JOIN transfer_links linked_in ON linked_in.incoming_transaction_id=b.id
+    WHERE (a.purpose='Transfer' OR b.purpose='Transfer')
       AND linked_out.id IS NULL AND linked_in.id IS NULL
-    ORDER BY exchange_row.timestamp DESC
-    LIMIT ?
-  `).all(Math.min(desired * 4, 1600));
+    ORDER BY (a.hash=b.hash AND length(a.hash)>=64) DESC, a.timestamp DESC, a.id, b.id
+  `).iterate();
   const suggestions = [];
-  const seen = new Set();
   for (const row of rows) {
-    const provider = exchangeProviderFromRaw(row.exchange_raw_json);
-    if (!provider) continue;
-    const exchangeTransaction = {
-      id: row.exchange_id, direction: row.exchange_direction, asset: row.exchange_asset, amount: row.exchange_amount,
-      fee: row.exchange_fee, feeAsset: row.exchange_fee_asset, timestamp: row.exchange_timestamp,
-    };
-    const localTransaction = {
-      id: row.local_id, direction: row.local_direction, asset: row.local_asset, amount: row.local_amount, timestamp: row.local_timestamp,
-    };
-    const match = matchExchangeTransfer(exchangeTransaction, localTransaction);
+    const outgoingProvider = exchangeProviderFromRaw(row.raw_json);
+    const incomingProvider = exchangeProviderFromRaw(row.incoming_raw_json);
+    const outgoingExchange = row.outgoing_source_type === 'exchange' || Boolean(outgoingProvider);
+    const incomingExchange = row.incoming_source_type === 'exchange' || Boolean(incomingProvider);
+    if (!outgoingExchange && !incomingExchange) continue;
+    // Exchange trades/rewards must not be mistaken for deposits or withdrawals.
+    if ((outgoingExchange && row.outgoing_purpose !== 'Transfer') || (incomingExchange && row.incoming_purpose !== 'Transfer')) continue;
+    const match = matchExchangeTransfer({
+      id: row.outgoing_id, direction: 'out', asset: row.asset, amount: row.amount,
+      fee: row.fee, feeAsset: row.fee_asset, timestamp: row.timestamp, hash: row.hash,
+    }, {
+      id: row.incoming_id, direction: 'in', asset: row.asset, amount: row.incoming_amount,
+      timestamp: row.incoming_at, hash: row.incoming_hash,
+    });
     if (!match) continue;
-    const key = `${match.outgoing.id}:${match.incoming.id}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const exchangeIsOutgoing = match.outgoing.id === row.exchange_id;
     suggestions.push({
-      outgoing_id: match.outgoing.id,
-      incoming_id: match.incoming.id,
-      asset: match.asset,
-      amount: match.amount,
-      outgoing_at: match.outgoing.timestamp,
-      incoming_at: match.incoming.timestamp,
-      outgoing_wallet: exchangeIsOutgoing ? `${provider} · Börse` : (row.local_wallet || "Lokale Wallet"),
-      incoming_wallet: exchangeIsOutgoing ? (row.local_wallet || "Lokale Wallet") : `${provider} · Börse`,
-      origin: "exchange",
-      fee_adjusted: match.feeAdjusted,
+      outgoing_id: match.outgoing.id, incoming_id: match.incoming.id,
+      asset: match.asset, amount: match.amount,
+      outgoing_at: match.outgoing.timestamp, incoming_at: match.incoming.timestamp,
+      outgoing_wallet: (row.outgoing_wallet || outgoingProvider || (outgoingExchange ? 'Börsenkonto' : 'Lokale Wallet')) + (outgoingExchange ? ' · Börse' : ''),
+      incoming_wallet: (row.incoming_wallet || incomingProvider || (incomingExchange ? 'Börsenkonto' : 'Lokale Wallet')) + (incomingExchange ? ' · Börse' : ''),
+      origin: 'exchange', transfer_kind: outgoingExchange && incomingExchange ? 'exchange_exchange' : 'exchange_wallet',
+      fee_adjusted: match.feeAdjusted, hash_matched: match.hashMatched,
+      fee: row.fee, fee_asset: row.fee_asset,
     });
     if (suggestions.length >= desired) break;
   }
@@ -3916,7 +3909,10 @@ app.get("/api/data-quality", (_request, response, next) => {
       .slice(0, 80);
     const possibleDuplicates = db.prepare(`
       SELECT hash, asset, amount, COUNT(*) AS occurrences, GROUP_CONCAT(id) AS transaction_ids
-      FROM transactions WHERE hash <> '' GROUP BY hash, asset, amount HAVING COUNT(*) > 1 ORDER BY occurrences DESC LIMIT 80
+      FROM transactions t WHERE hash <> '' AND NOT EXISTS (
+        SELECT 1 FROM transfer_links l JOIN transactions outgoing ON outgoing.id=l.outgoing_transaction_id
+        WHERE l.incoming_transaction_id=t.id AND outgoing.hash=t.hash AND outgoing.asset=t.asset AND outgoing.amount=t.amount
+      ) GROUP BY hash, asset, amount HAVING COUNT(*) > 1 ORDER BY occurrences DESC LIMIT 80
     `).all();
     response.json({ counts, missingHistoricPrices, unassignedPurposes, possibleTransfers, possibleDuplicates });
   } catch (error) {
@@ -3969,9 +3965,13 @@ app.post("/api/transfers/link", (request, response, next) => {
     const outgoingId = asPositiveId(request.body?.outgoingTransactionId);
     const incomingId = asPositiveId(request.body?.incomingTransactionId);
     if (!outgoingId || !incomingId || outgoingId === incomingId) throw makeError("Bitte zwei unterschiedliche Transaktionen auswählen.");
-    const outgoing = db.prepare("SELECT id, direction, asset FROM transactions WHERE id = ?").get(outgoingId);
-    const incoming = db.prepare("SELECT id, direction, asset FROM transactions WHERE id = ?").get(incomingId);
+    const outgoing = db.prepare("SELECT id, wallet_id, direction, asset FROM transactions WHERE id = ?").get(outgoingId);
+    const incoming = db.prepare("SELECT id, wallet_id, direction, asset FROM transactions WHERE id = ?").get(incomingId);
     if (!outgoing || !incoming) throw makeError("Eine Transfer-Transaktion wurde nicht gefunden.", 404);
+    if (outgoing.wallet_id === incoming.wallet_id) throw makeError("Ein Transfer benötigt zwei unterschiedliche Konten oder Wallets.");
+    if (db.prepare('SELECT id FROM transfer_links WHERE outgoing_transaction_id IN (?, ?) OR incoming_transaction_id IN (?, ?)').get(outgoingId, incomingId, outgoingId, incomingId)) {
+      throw makeError("Eine dieser Buchungen ist bereits verknüpft. Bitte Vorschläge neu laden.", 409);
+    }
     if (outgoing.direction !== "out" || incoming.direction !== "in" || outgoing.asset !== incoming.asset) throw makeError("Ein Transfer benötigt einen Ausgang und Eingang desselben Assets.");
     db.exec("BEGIN");
     try {

@@ -343,3 +343,9 @@ ERC-20-Preise verwenden den Contract-Chart-Endpunkt. Neue Tagesreferenzen stamme
 Die Demo-API von CoinGecko wird nur innerhalb ihrer 365-Tage-Historie angefragt. Native Assets behalten ihre EUR-Fallbacks. Provider-Pausen bei Rate-Limits (einschließlich `Retry-After`), Zugangsstörungen und Ausfällen werden lokal gespeichert. Die Anzeige unterscheidet fehlende Zuordnung, Tarifgrenzen, offene Tage und fehlende Tagesdaten. Änderungen der Preisquellen-Einstellungen geben betroffene Retries erneut frei.
 
 Die Migration ergänzt `price_asset_mappings`, `price_provider_cooldowns`, Beobachtungsfelder in `transactions`/`price_history` und einen Retry-Grund. Bestehende Buchungen und Audit-Einträge bleiben erhalten. Die PSBT-Vorschau wurde entfernt; der alte Endpunkt antwortet vor dem Parsen eines Request-Bodys mit HTTP 410. CryptoBuch verarbeitet keine Transaktionsentwürfe.
+
+### Transfers zwischen eigenen Börsenkonten
+
+Unter **Datenqualität → Eigene Transfers prüfen** werden auch Börse-zu-Börse-Paare vorgeschlagen, selbst wenn beide Buchungen bereits den Zweck „Transfer“ tragen. Der Abgleich prüft verschiedene Konten, dasselbe Asset, entgegengesetzte Richtungen, Beträge einschließlich möglichem Gebührenabzug und maximal 72 Stunden Abstand. Vollständige unterstützte Blockchain-Hashes werden verglichen; widersprüchliche Hashes verhindern einen Vorschlag. Interne Anbieter-IDs und gekürzte Hashes gelten nicht als Hash-Nachweis. Ohne vergleichbare Hashes bleibt der Treffer ein Vorschlag anhand von Betrag und Zeit.
+
+Erst die ausdrückliche Bestätigung verknüpft die Buchungen. Bestehende Kurse, Mengen und Gebühren bleiben erhalten; die beiden Zwecke werden auf „Transfer“ gesetzt. Bereits verknüpfte Buchungen werden nicht erneut vorgeschlagen. Die Coin-Ansicht zeigt die Gegenbuchung mit einem Sprung zur passenden Zeile. Die Verknüpfung verwendet die vorhandene Tabelle `transfer_links`; eine neue Datenmigration ist nicht nötig.

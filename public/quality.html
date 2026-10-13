@@ -20,7 +20,7 @@
           <div>
             <p class="eyebrow">DATENQUALITÄT</p>
             <h1>Saubere <em>Buchungen.</em></h1>
-            <p>Prüfe fehlende historische Kurse, offene Zwecke und Überträge zwischen Börse und eigenen Wallets. Manuelle Angaben bleiben bei jeder Synchronisierung geschützt.</p>
+            <p>Prüfe fehlende historische Kurse, offene Zwecke und Überträge zwischen eigenen Börsenkonten und Wallets. Manuelle Angaben bleiben bei jeder Synchronisierung geschützt.</p>
           </div>
           <div class="hero-actions"><a class="button button-secondary" href="/price-fetches.html">Datenabrufe</a><button class="button button-primary" id="retry-prices">Kurse jetzt ergänzen</button><button class="button button-secondary" id="reload-quality">Neu laden</button></div>
         </section>
@@ -44,13 +44,13 @@
           </div>
           <div class="transfer-review-steps" aria-label="So funktioniert der Abgleich">
             <article><span>1</span><strong>Börse synchronisieren</strong><small>Ein- und Auszahlungen werden read-only importiert.</small></article>
-            <article><span>2</span><strong>Lokale Wallets vergleichen</strong><small>Coin, Richtung, Zeit und mögliche Gebühr werden geprüft.</small></article>
-            <article><span>3</span><strong>Nur bewusst bestätigen</strong><small>Erst deine Bestätigung markiert beide Buchungen als Transfer.</small></article>
+            <article><span>2</span><strong>Börsen und Wallets vergleichen</strong><small>Coin, Transaktions-ID, Richtung, Zeit und mögliche Gebühr werden geprüft.</small></article>
+            <article><span>3</span><strong>Nur bewusst bestätigen</strong><small>Erst deine Bestätigung verknüpft die beiden Transfer-Buchungen.</small></article>
           </div>
           <div class="transfer-suggestion-grid" id="transfer-suggestion-list" aria-live="polite"></div>
           <div class="transfer-empty" id="transfer-suggestion-empty" hidden>
             <span aria-hidden="true">✓</span>
-            <div><strong>Keine offenen Transfer-Vorschläge</strong><p>Nach der nächsten Börsen-Synchronisierung wird automatisch erneut gegen alle lokalen Wallets geprüft.</p></div>
+            <div><strong>Keine offenen Transfer-Vorschläge</strong><p>Nach der nächsten Börsen-Synchronisierung wird automatisch erneut gegen eigene Börsenkonten und lokale Wallets geprüft.</p></div>
           </div>
           <p class="transfer-review-footnote">Ein Vorschlag ist keine automatische steuerliche Einordnung. Unpassende Treffer einfach offen lassen; sie verändern keine Buchung.</p>
         </section>
@@ -82,7 +82,7 @@
         <section class="exchange-connect-panel report-panel" aria-labelledby="exchange-connect-title">
           <div class="section-heading transactions-title"><div><p class="eyebrow">READ-ONLY BÖRSEN-API</p><h2 id="exchange-connect-title">Börse verbinden</h2></div><span class="connection-mode">Nur lesen</span></div>
           <div class="exchange-connect-intro">
-            <div><strong>Automatischer Ablauf</strong><p>Nach dem Speichern startet der Import und danach der Abgleich mit <b>allen</b> lokalen Wallets.</p></div>
+            <div><strong>Automatischer Ablauf</strong><p>Nach dem Speichern startet der Import und danach der Abgleich mit <b>allen</b> eigenen Börsenkonten und Wallets.</p></div>
             <div><strong>Deine Kontrolle</strong><p>Trading, Auszahlungen und Transfers bleiben deaktiviert. Vorschläge bestätigst du immer selbst.</p></div>
           </div>
           <p class="data-note" id="exchange-provider-help">Lege einen separaten API-Key mit minimalen Rechten an – insbesondere niemals Auszahlungen freigeben. CryptoBuch sendet ausschließlich lesende API-Anfragen. Key und Secret werden nur lokal gespeichert und nie erneut angezeigt.</p>
@@ -90,14 +90,14 @@
             <div class="form-grid">
               <label><span>Börse</span><select id="exchange-provider" required></select></label>
               <label><span>Name <small>optional</small></span><input id="exchange-label" maxlength="80" placeholder="z. B. Binance Spot" /></label>
-              <div class="exchange-account-explanation form-wide"><span aria-hidden="true">⇄</span><p><strong>Eigenes Börsenkonto</strong><br />Die Börsenbuchungen werden automatisch einem separaten Börsenkonto zugeordnet – nie einer Blockchain-Wallet. Für Transfer-Vorschläge werden weiterhin alle lokalen Wallets abgeglichen.</p></div>
+              <div class="exchange-account-explanation form-wide"><span aria-hidden="true">⇄</span><p><strong>Eigenes Börsenkonto</strong><br />Die Börsenbuchungen werden automatisch einem separaten Börsenkonto zugeordnet – nie einer Blockchain-Wallet. Für Transfer-Vorschläge werden alle eigenen Börsenkonten und Wallets abgeglichen.</p></div>
               <label id="exchange-api-key-field"><span id="exchange-api-key-label">Read-only API-Key</span><input id="exchange-api-key" autocomplete="off" minlength="8" maxlength="512" required /></label>
               <label id="exchange-api-secret-field"><span id="exchange-api-secret-label">API-Secret</span><input id="exchange-api-secret" type="password" autocomplete="new-password" minlength="8" maxlength="512" required /></label>
               <label id="exchange-advanced-secret-field" hidden><span>Privater API-Signaturschlüssel</span><textarea id="exchange-advanced-secret" rows="4" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="8" maxlength="2048" style="-webkit-text-security: disc"></textarea><small>Den Wert „Privater Schlüssel“ aus dem Coinbase-API-Dialog einfügen. Auch mehrzeiliges ECDSA-PEM wird akzeptiert. Keine Wallet-Schlüssel oder Seed-Phrases.</small></label>
               <label id="exchange-coinbase-passphrase-field" hidden><span>Coinbase-Passphrase</span><input id="exchange-coinbase-passphrase" type="password" autocomplete="new-password" minlength="8" maxlength="100" /><small>Die Passphrase hast du beim Erstellen des Coinbase-Exchange-API-Keys selbst festgelegt.</small></label>
               <label id="exchange-etoro-environment-field" hidden><span>eToro-Konto</span><select id="exchange-etoro-environment"><option value="real">Realkonto</option><option value="demo">Demokonto</option></select><small>Der eToro User-Key gilt jeweils nur für eine Kontoart.</small></label>
               <label class="form-wide" id="exchange-symbols-field" hidden><span>Frühere Binance Spot-Märkte <small>optional</small></span><input id="exchange-symbols" maxlength="1600" placeholder="z. B. BTCEUR, BTCUSDT, ETHEUR" /><small>Leer: Bestände und bereits gefundene Assets ergänzen Märkte automatisch. Trage nur Märkte ein, deren Coin komplett verkauft wurde und deshalb nicht mehr erkennbar ist.</small></label>
-              <label class="form-wide exchange-live-updates" id="exchange-live-updates-field" hidden><input id="exchange-live-updates" type="checkbox" /><span><strong>BSDEX-Live-Updates aktivieren</strong><br />Private Salden- und Trade-Ereignisse werden lokal read-only übernommen. Krypto-Ein- und Auszahlungen werden über den regelmäßigen seriellen REST-Abgleich importiert und anschließend mit lokalen Wallets abgeglichen.</span></label>
+              <label class="form-wide exchange-live-updates" id="exchange-live-updates-field" hidden><input id="exchange-live-updates" type="checkbox" /><span><strong>BSDEX-Live-Updates aktivieren</strong><br />Private Salden- und Trade-Ereignisse werden lokal read-only übernommen. Krypto-Ein- und Auszahlungen werden über den regelmäßigen seriellen REST-Abgleich importiert und anschließend mit eigenen Börsenkonten und Wallets abgeglichen.</span></label>
               <label class="form-wide exchange-trade-republic-consent" id="exchange-trade-republic-consent-field" hidden><input id="exchange-trade-republic-consent" type="checkbox" /><span>Ich verstehe: Der Trade-Republic-Import verwendet eine <strong>inoffizielle</strong>, nur lesende Web-Schnittstelle. Die Anmeldung wird in meiner Trade-Republic-App bestätigt und meldet die App nicht als neues Gerät an. Die PIN wird nur für diese Anmeldung übertragen und nicht gespeichert. CryptoBuch legt danach ausschließlich eine verschlüsselte lokale Web-Sitzung ab und fragt nur Transaktions-Timeline und Details ab; Orders, Auszahlungen und Transfers werden nie ausgelöst.</span></label>
             </div>
             <div class="exchange-security-notice" id="exchange-security-notice"><span aria-hidden="true">⌁</span><p id="exchange-security-copy"><strong>Read-only &amp; lokal:</strong> Der Schlüssel darf nur Kontostände und Historie lesen. Er wird nach dem Speichern nicht erneut angezeigt.</p></div>

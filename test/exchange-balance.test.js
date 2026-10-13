@@ -104,6 +104,10 @@ test("schlägt eine abgeschlossene BSDEX-Auszahlung zur lokalen Wallet als Trans
     incoming_wallet: "Hardware-Wallet",
     origin: "exchange",
     fee_adjusted: false,
+    transfer_kind: "exchange_wallet",
+    hash_matched: false,
+    fee: 0,
+    fee_asset: "BTC",
   });
 });
 

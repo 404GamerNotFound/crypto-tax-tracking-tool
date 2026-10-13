@@ -28,3 +28,21 @@ test('matches a local deposit into an exchange and rejects unrelated movements',
   assert.equal(matchExchangeTransfer(exchange, { ...wallet, timestamp: '2026-10-01T11:00:00.000Z' }), null);
   assert.equal(matchExchangeTransfer(exchange, { ...wallet, asset: 'BTC' }), null);
 });
+
+test('vergleicht vollständige Hashes, ignoriert interne IDs und lehnt widersprüchliche Hashes ab', () => {
+  const outgoing = { direction: 'out', asset: 'ADA', amount: 47.119979, fee: 0.180021, feeAsset: 'ADA', timestamp: at, hash: 'a'.repeat(64) };
+  const incoming = { direction: 'in', asset: 'ADA', amount: 47.119979, timestamp: at, hash: 'A'.repeat(64) };
+  assert.equal(matchExchangeTransfer(outgoing, incoming).hashMatched, true);
+  assert.equal(matchExchangeTransfer(outgoing, incoming).feeAdjusted, false);
+  assert.equal(matchExchangeTransfer(outgoing, { ...incoming, hash: 'b'.repeat(64) }), null);
+  assert.equal(matchExchangeTransfer(outgoing, { ...incoming, hash: '88a865d502…f2c04f1' }).hashMatched, false);
+  assert.equal(matchExchangeTransfer({ ...outgoing, hash: 'provider:1' }, { ...incoming, hash: 'provider:1' }).hashMatched, false);
+  assert.equal(matchExchangeTransfer(outgoing, { ...incoming, amount: 1000 }), null);
+});
+
+test('berücksichtigt die Gebühr des Ausgangs auch wenn die Börse Empfänger ist', () => {
+  const outgoing = { direction: 'out', asset: 'ADA', amount: 50, fee: 1, feeAsset: 'ADA', timestamp: at };
+  const incoming = { direction: 'in', asset: 'ADA', amount: 49, timestamp: at };
+  assert.equal(matchExchangeTransfer(incoming, outgoing).feeAdjusted, true);
+  assert.equal(matchExchangeTransfer({ ...incoming, wallet_id: 1 }, { ...outgoing, wallet_id: 1 }), null);
+});
