@@ -1772,10 +1772,13 @@ async function fetchCardanoTransactionReferences(address, settings, remaining = 
     if (remaining && references.length >= remaining) break;
     const query = new URLSearchParams({ count: String(pageSize), page: String(page), order: "desc" });
     const batch = await fetchJson(
-      `${settings.blockfrostBaseUrl}/addresses/${encodeURIComponent(address)}/txs?${query.toString()}`,
+      `${settings.blockfrostBaseUrl}/addresses/${encodeURIComponent(address)}/transactions?${query.toString()}`,
       headers,
     );
-    if (!Array.isArray(batch) || batch.length === 0) break;
+    if (!Array.isArray(batch) || batch.some((row) => !row || typeof row.tx_hash !== "string" || !/^[a-f0-9]{64}$/i.test(row.tx_hash))) {
+      throw makeError("Cardano: ungültige Transaktionsliste. Import abgebrochen, vorhandene Buchungen bleiben erhalten.");
+    }
+    if (batch.length === 0) break;
     references.push(...batch);
     if (batch.length < pageSize) break;
     page += 1;
@@ -3462,6 +3465,7 @@ async function portfolioResponse() {
   const holdings = Object.fromEntries(Object.values(CHAIN_CONFIG).map((chain) => [chain.asset, 0]));
   const assets = nativeAssetDescriptors();
   const journalByWallet = new Map();
+  const walletsWithMovements = new Set(transactions.filter(row => !String(row.external_id).startsWith("ada-reward:")).map(row => row.wallet_id));
   for (const transaction of transactions) {
     assets[transaction.asset] = assets[transaction.asset] || assetDescriptorFromTransaction(transaction);
     const delta = transactionBalanceDelta(transaction);
@@ -3481,6 +3485,7 @@ async function portfolioResponse() {
   const balanceSources = wallets.map((wallet) => ({
     walletId: wallet.id, label: wallet.label, sourceType: wallet.source_type,
     positions: journalByWallet.get(wallet.id) || new Map(), basis: "journal", observedAt: wallet.last_synced_at,
+    incompleteReason: wallet.chain === "ADA" && wallet.source_type === "stake" && journalByWallet.has(wallet.id) && !walletsWithMovements.has(wallet.id) ? "rewards_only" : null,
   }));
   for (const wallet of exchangeWallets) {
     const journal = journalByWallet.get(wallet.id) || new Map();
@@ -3521,7 +3526,8 @@ async function portfolioResponse() {
     (sum, [asset, amount]) => sum + (hidden.has(asset) ? 0 : amount * Number(pricesByAsset[asset] || 0)),
     0,
   );
-  const assetAnalytics = calculateAssetAnalytics(enriched, pricesByAsset, holdings, assets);
+  const sourceBalances = buildSourceBalances(balanceSources);
+  const assetAnalytics = calculateAssetAnalytics(enriched, pricesByAsset, holdings, assets, sourceBalances);
   const visibleAnalytics = Object.fromEntries(Object.entries(assetAnalytics).filter(([asset]) => !hidden.has(asset)));
   const visibleTransactions = enriched.filter((transaction) => !hidden.has(transaction.asset));
   const allocation = Object.entries(visibleAnalytics)
@@ -3530,7 +3536,7 @@ async function portfolioResponse() {
     .sort((a, b) => b.valueEur - a.valueEur);
   const valueHistory = buildBookValueHistory(visibleTransactions);
   const unrealizedProfitEur = Object.values(visibleAnalytics).reduce((sum, report) => sum + Number(report.purchases?.profitEur || 0), 0);
-  const remainingPurchaseCostEur = Object.values(visibleAnalytics).reduce((sum, report) => sum + Number(report.purchases?.remainingCostEur || 0), 0);
+  const remainingPurchaseCostEur = Object.values(visibleAnalytics).filter(report => report.purchases?.profitEur != null).reduce((sum, report) => sum + Number(report.purchases?.remainingCostEur || 0), 0);
   const realizedYear = calculateTaxReport(visibleTransactions, new Date().getFullYear(), runtimeSettings()).summary.realizedProfitEur;
   const netInvestmentEur = visibleTransactions.reduce((sum, transaction) => {
     if (!positiveNumber(transaction.price_transaction_eur)) return sum;
@@ -3545,7 +3551,7 @@ async function portfolioResponse() {
     transactions: enriched,
     hiddenAssets,
     holdings,
-    sourceBalances: buildSourceBalances(balanceSources),
+    sourceBalances,
     balanceReconciliations,
     assetAnalytics,
     assets,

@@ -29,3 +29,9 @@ test('normalisiert SQLite-Zeitstempel als UTC und lässt unbekannte Stände leer
   assert.equal(sources.ADA[1].observedAt, '2026-10-14T12:00:00.000Z');
   assert.equal(sources.ADA[0].observedAt, null);
 });
+
+test('übernimmt Hinweise auf reine Reward-Teilbestände in die Quellenanzeige', () => {
+  const sources=buildSourceBalances([{walletId:9,sourceType:'stake',basis:'journal',incompleteReason:'rewards_only',positions:new Map([['ADA',102]])}]);
+  assert.equal(sources.ADA[0].incomplete,true);
+  assert.equal(sources.ADA[0].incompleteReason,'rewards_only');
+});

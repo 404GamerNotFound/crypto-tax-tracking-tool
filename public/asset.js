@@ -93,7 +93,11 @@ function assetInfo(assetId = activeAssetId()) {
 
 function formatAmount(value, assetId = activeAssetId()) {
   const asset = assetInfo(assetId);
-  return `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: asset.decimals || 6 }).format(Number(value || 0))} ${asset.symbol}`;
+  const amount = Number(value || 0);
+  const decimals = asset.decimals ?? 6;
+  const options = amount !== 0 && Math.abs(amount) < 10 ** -decimals
+    ? { maximumSignificantDigits: 3 } : { maximumFractionDigits: decimals };
+  return `${new Intl.NumberFormat("de-DE", options).format(amount)} ${asset.symbol}`;
 }
 
 function shorten(value, start = 10, end = 7) {
@@ -146,7 +150,7 @@ function appendSourceBalances(card) {
     balance.className = "asset-source-amount";
     balance.textContent = formatAmount(source.amount);
     const detail = document.createElement("small");
-    detail.textContent = source.incomplete ? "Journaldefizit · Buchungen fehlen möglicherweise"
+    detail.textContent = source.incompleteReason === "rewards_only" ? "Unvollständig: nur Rewards importiert. Wallet erneut synchronisieren." : source.incomplete ? "Journaldefizit · Buchungen fehlen möglicherweise"
       : source.basis === "exchange_snapshot" ? "Börsensaldo · inkl. gesperrter Beträge" : "Aus Buchungen berechnet";
     if (source.observedAt) detail.textContent += ` · ${source.basis === "exchange_snapshot" ? "Stand" : "Letzter Sync"} ${formatRecordedAt(source.observedAt)}`;
     item.append(name, balance, detail);
@@ -171,77 +175,61 @@ function renderMetrics() {
     : "Historischer Kaufkurs fehlt";
   const metrics = el("asset-metrics");
   metrics.replaceChildren();
-  const holdingCard = metric("Aktueller Bestand", formatAmount(report?.holdingAmount || 0), `Marktwert ${formatCurrency(report?.holdingValueEur)}`, "highlight");
+  const holdingCard = metric(report?.holdingIsPartial ? "Erfasster Teilbestand" : "Aktueller Bestand", formatAmount(report?.holdingAmount || 0), `${report?.holdingIsPartial ? "Teilwert" : "Marktwert"} ${formatCurrency(report?.holdingValueEur)}`, "highlight");
+  const balanceHint = purchases.balanceUncertain ? "Bestand und Buchungshistorie unvollständig oder widersprüchlich. Quellen synchronisieren und Transfers prüfen." : null;
   appendSourceBalances(holdingCard);
   metrics.append(
     holdingCard,
     metric("Als Kauf erfasst", formatAmount(purchases.acquiredAmount || 0), `${purchases.count || 0} Kauf-Transaktionen`),
-    metric("Noch aus Käufen gehalten", formatAmount(purchases.remainingAmount || 0), purchases.hasUnknownCost ? missingLotHint : `Kosten ${formatCurrency(purchases.remainingCostEur)}`),
-    metric(partialProfit ? "Gewinn ggü. Kauf · teilweise" : "Gewinn ggü. Kauf", formatCurrency(purchases.profitEur), hidden ? "Coin ausgeblendet · keine aktuelle Bewertung" : purchases.profitEur === null ? missingLotHint : partialProfit ? `Berechnet aus ${formatAmount(purchases.knownRemainingAmount || 0)} mit Kaufkurs` : "Aktueller Wert minus FIFO-Kaufkosten", Number(purchases.profitEur) >= 0 ? "positive" : "negative"),
-    metric("Staking-Ertrag", formatAmount(report?.staking?.amount || 0), `${report?.staking?.count || 0} Ertrags-Transaktionen · aktuell ${formatCurrency(report?.staking?.currentValueEur)}`, "staking"),
+    metric("Noch aus Käufen gehalten", purchases.balanceUncertain ? "Nicht bestimmbar" : formatAmount(purchases.remainingAmount || 0), balanceHint || (purchases.hasUnknownCost ? missingLotHint : `Kosten ${formatCurrency(purchases.remainingCostEur)}`)),
+    metric(partialProfit ? "Gewinn ggü. Kauf · teilweise" : "Gewinn ggü. Kauf", formatCurrency(purchases.profitEur), balanceHint || (hidden ? "Coin ausgeblendet · keine aktuelle Bewertung" : purchases.profitEur === null ? missingLotHint : partialProfit ? `Berechnet aus ${formatAmount(purchases.knownRemainingAmount || 0)} mit Kaufkurs` : "Aktueller Wert minus FIFO-Kaufkosten"), Number(purchases.profitEur) >= 0 ? "positive" : "negative"),
+    metric("Staking-Ertrag · kumuliert", formatAmount(report?.staking?.amount || 0), `${report?.staking?.count || 0} Ertrags-Transaktionen · kein aktueller Bestand`, "staking"),
   );
-}
-
-function chartTransactions() {
-  return (state.portfolio?.transactions || [])
-    .filter((transaction) => transaction.asset === activeAssetId() && Number.isFinite(Date.parse(transaction.timestamp)))
-    .sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
 }
 
 function renderChart() {
   const container = el("asset-chart");
   const copy = el("asset-chart-copy");
   const report = state.portfolio.assetAnalytics?.[activeAssetId()];
-  let holding = 0;
-  const points = [];
-  for (const transaction of chartTransactions()) {
-    const amount = Number(transaction.amount || 0);
-    if (!Number.isFinite(amount)) continue;
-    if (transaction.direction === "in") holding += amount;
-    if (transaction.direction === "out") holding -= amount;
-    if (hasPrice(transaction.price_transaction_eur)) {
-      points.push({ timestamp: Date.parse(transaction.timestamp), value: Math.max(0, holding) * Number(transaction.price_transaction_eur) });
-    }
-  }
-  if (hasPrice(report?.currentPriceEur) && Number.isFinite(Number(report?.holdingAmount))) {
-    points.push({ timestamp: Date.now(), value: Math.max(0, Number(report.holdingAmount)) * Number(report.currentPriceEur), current: true });
-  }
+  const history = report?.valueHistory;
+  const points = history?.points || [];
+  const validPoints = points.filter(point => Number.isFinite(point.value));
+  const limitations = [history?.missingBalanceCount ? "Lücken wegen fehlender Buchungen" : "", history?.missingPriceCount ? "fehlende Kurse" : "", history?.holdingMismatch ? "Journal und aktueller Bestand weichen ab" : ""].filter(Boolean);
+  const chartCopy = `${validPoints.length} bewertete Zeitpunkte · historische Schätzung${limitations.length ? " · " + limitations.join(" · ") : ""}.`;
+  container.setAttribute("aria-label", chartCopy);
   state.chart?.destroy();
   state.chart = null;
   container.replaceChildren();
-  if (points.length < 2) {
+  if (validPoints.length < 2) {
     const empty = document.createElement("p");
     empty.className = "chart-empty";
-    empty.textContent = "Für einen Verlauf werden mindestens zwei Bewegungen mit historischen Kursen benötigt.";
+    empty.textContent = "Für einen verlässlichen Verlauf fehlen bewertbare Bestände. Bitte Quellen synchronisieren und Kurslücken prüfen.";
     container.append(empty);
-    copy.textContent = (state.portfolio.hiddenAssets || []).includes(activeAssetId())
-      ? "Coin ausgeblendet: keine aktuelle Bewertung. Historische Buchungswerte bleiben erhalten."
-      : "Historische Kurse werden automatisch ergänzt, sobald sie verfügbar sind.";
+    copy.textContent = chartCopy;
     return;
   }
 
-  const currentPoint = points.at(-1)?.current;
   if (window.uPlot) {
     const values = points.map((point) => point.value);
     state.chart = new window.uPlot({
       width: Math.max(360, container.clientWidth), height: 250,
       cursor: { drag: { x: true, y: false } },
       legend: { show: false },
-      scales: { x: { time: true }, value: { auto: true } },
+      scales: { x: { time: true }, y: { time: false, auto: true } },
       axes: [
         { stroke: "#768178", grid: { stroke: "#dce4dc", width: 1, dash: [3, 5] }, values: (_u, ticks) => ticks.map((tick) => new Intl.DateTimeFormat("de-DE", { month: "short", year: "2-digit" }).format(new Date(tick * 1000))) },
-        { stroke: "#768178", grid: { stroke: "#dce4dc", width: 1, dash: [3, 5] }, values: (_u, ticks) => ticks.map((tick) => formatCurrency(tick)) },
+        { scale: "y", size: 90, stroke: "#768178", grid: { stroke: "#dce4dc", width: 1, dash: [3, 5] }, values: (_u, ticks) => ticks.map((tick) => tick === null ? "" : formatCurrency(tick)) },
       ],
-      series: [{}, { label: "Bestandswert", stroke: "#0b704a", width: 2.5, fill: "rgba(11,112,74,.16)", points: { show: false } }],
+      series: [{}, { label: "Bestandswert", scale: "y", spanGaps: false, stroke: "#0b704a", width: 2.5, fill: "rgba(11,112,74,.16)", points: { show: true, size: 3 } }],
     }, [points.map((point) => point.timestamp / 1000), values], container);
-    copy.textContent = `${points.length - Number(Boolean(currentPoint))} bewertete Bewegungen${currentPoint ? " · mit Zoom und Cursor erkundbar." : "."}`;
+    copy.textContent = chartCopy;
     return;
   }
 
   const width = 820;
   const height = 270;
   const padding = { top: 22, right: 24, bottom: 38, left: 66 };
-  const values = points.map((point) => point.value);
+  const values = validPoints.map((point) => point.value);
   const times = points.map((point) => point.timestamp);
   const valueMin = Math.min(...values);
   const valueMax = Math.max(...values);
@@ -266,17 +254,22 @@ function renderChart() {
   defs.append(gradient);
   svg.append(defs);
   for (let index = 0; index < 4; index += 1) {
-    const value = minY + ((maxY - minY) * index) / 3;
+    const value = maxY - ((maxY - minY) * index) / 3;
     const yPosition = padding.top + (plotHeight * index) / 3;
     svg.append(svgNode("line", { x1: padding.left, x2: width - padding.right, y1: yPosition, y2: yPosition, class: "chart-grid-line" }));
     const label = svgNode("text", { x: padding.left - 10, y: yPosition + 4, class: "chart-axis-label", "text-anchor": "end" });
     label.textContent = formatCurrency(value);
     svg.append(label);
   }
-  const line = points.map((point, index) => `${index ? "L" : "M"}${x(point).toFixed(2)},${y(point).toFixed(2)}`).join(" ");
-  const area = `${line} L${x(points.at(-1)).toFixed(2)},${(height - padding.bottom).toFixed(2)} L${x(points[0]).toFixed(2)},${(height - padding.bottom).toFixed(2)} Z`;
-  svg.append(svgNode("path", { d: area, class: "chart-area" }), svgNode("path", { d: line, class: "chart-line" }));
-  for (const point of [points[0], points.at(-1)]) {
+  let connected = false;
+  const line = points.map((point) => {
+    if (!Number.isFinite(point.value)) { connected = false; return ""; }
+    const command = `${connected ? "L" : "M"}${x(point).toFixed(2)},${y(point).toFixed(2)}`;
+    connected = true;
+    return command;
+  }).join(" ");
+  svg.append(svgNode("path", { d: line, class: "chart-line" }));
+  for (const point of [validPoints[0], validPoints.at(-1)]) {
     const marker = svgNode("circle", { cx: x(point), cy: y(point), r: 4, class: "chart-point" });
     const title = svgNode("title");
     title.textContent = `${dateTime.format(new Date(point.timestamp))}: ${formatCurrency(point.value)}`;
@@ -289,7 +282,7 @@ function renderChart() {
     svg.append(label);
   }
   container.append(svg);
-  copy.textContent = `${points.length - Number(Boolean(currentPoint))} bewertete Bewegungen${currentPoint ? " · aktueller Marktwert als letzter Punkt." : "."}`;
+  copy.textContent = chartCopy;
 }
 
 function getTransactions() {

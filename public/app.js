@@ -89,12 +89,12 @@ function render() {
   const hidden = new Set(portfolio.hiddenAssets || []);
   const reports = Object.entries(portfolio.assetAnalytics || {}).filter(([id]) => !hidden.has(id)).map(([, report]) => report);
   const knownProfits = reports.map((report) => report?.purchases?.profitEur).filter((value) => hasNumber(value));
-  const partialProfits = reports.filter((report) => report?.purchases?.profitIsPartial).length;
+  const partialProfits = reports.filter((report) => (report?.purchases?.profitIsPartial || report?.purchases?.balanceUncertain)).length;
   const earningsValue = reports.reduce((sum, report) => sum + Number(report?.staking?.currentValueEur || 0), 0);
   const dataIssues = (portfolio.transactions || []).filter((transaction) => !transaction.purpose || !hasNumber(transaction.price_transaction_eur)).length
     + (portfolio.balanceReconciliations || []).length;
   el("purchase-profit").textContent = knownProfits.length ? formatCurrency(knownProfits.reduce((sum, value) => sum + Number(value), 0)) : "k. A.";
-  el("purchase-profit-help").textContent = partialProfits ? `${partialProfits} Coin${partialProfits === 1 ? "" : "s"} teilweise bewertet` : "Vollständig bewertete FIFO-Chargen";
+  el("purchase-profit-help").textContent = partialProfits ? `${partialProfits} Coin${partialProfits === 1 ? "" : "s"} unvollständig oder nicht bewertbar` : "Vollständig bewertete FIFO-Chargen";
   el("earnings-value").textContent = formatCurrency(earningsValue);
   el("data-issues").textContent = dataIssues.toLocaleString("de-DE");
   const performance = portfolio.insights?.performance || {};

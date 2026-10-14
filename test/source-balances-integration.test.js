@@ -62,3 +62,15 @@ test('verwendet Börsenjournal nur ohne Snapshot und zeigt negative Wallet-Journ
   const fallback=(await portfolio()).sourceBalances.ADA.find(row=>row.walletId===1);
   assert.equal(fallback.amount,5); assert.equal(fallback.basis,'journal'); assert.equal(fallback.observedAt,null);
 });
+
+test('kennzeichnet Cardano-Stake-Wallets mit ausschließlich Rewards bis normale Bewegungen ergänzt sind', async () => {
+  db.exec("INSERT INTO wallets (id,chain,address,label,source_type) VALUES (4,'ADA','stake-fixture','Ledger','stake')");
+  db.exec("INSERT INTO transactions (wallet_id,external_id,hash,timestamp,direction,asset,amount,purpose,raw_json) VALUES (4,'ada-reward:1','reward','2025-01-01','in','ADA',102,'Staking Rewards','{}')");
+  const partial = await portfolio();
+  assert.equal(partial.sourceBalances.ADA.find(row=>row.walletId===4).incompleteReason,'rewards_only');
+  assert.equal(partial.assetAnalytics.ADA.holdingIsPartial,true);
+  db.exec("INSERT INTO transactions (wallet_id,external_id,hash,timestamp,direction,asset,amount,purpose,raw_json) VALUES (4,'funding','funding','2024-01-01','in','ADA',300,'Transfer','{}')");
+  const repaired = await portfolio();
+  assert.equal(repaired.sourceBalances.ADA.find(row=>row.walletId===4).incomplete,false);
+  assert.equal(repaired.sourceBalances.ADA.find(row=>row.walletId===4).amount,402);
+});
