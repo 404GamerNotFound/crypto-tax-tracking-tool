@@ -57,6 +57,7 @@ const {
   hasTradeRepublicWebSession,
   fetchTradeRepublicCryptoHistory,
 } = require("./lib/trade-republic");
+const { buildSourceBalances } = require("./lib/source-balances");
 const { matchExchangeTransfer } = require("./lib/exchange-transfer-matcher");
 const {
   bitvavoDailyClosePrices,
@@ -3460,14 +3461,13 @@ async function portfolioResponse() {
   }
   const holdings = Object.fromEntries(Object.values(CHAIN_CONFIG).map((chain) => [chain.asset, 0]));
   const assets = nativeAssetDescriptors();
-  const exchangeJournalByWallet = new Map();
+  const journalByWallet = new Map();
   for (const transaction of transactions) {
     assets[transaction.asset] = assets[transaction.asset] || assetDescriptorFromTransaction(transaction);
     const delta = transactionBalanceDelta(transaction);
-    if (transaction.source_type === "exchange") {
-      if (!exchangeJournalByWallet.has(transaction.wallet_id)) exchangeJournalByWallet.set(transaction.wallet_id, new Map());
-      addHolding(exchangeJournalByWallet.get(transaction.wallet_id), transaction.asset, delta);
-    } else {
+    if (!journalByWallet.has(transaction.wallet_id)) journalByWallet.set(transaction.wallet_id, new Map());
+    addHolding(journalByWallet.get(transaction.wallet_id), transaction.asset, delta);
+    if (transaction.source_type !== "exchange") {
       holdings[transaction.asset] = Number(holdings[transaction.asset] || 0) + delta;
     }
   }
@@ -3478,10 +3478,19 @@ async function portfolioResponse() {
     WHERE w.source_type = 'exchange'
   `).all();
   const balanceReconciliations = [];
+  const balanceSources = wallets.map((wallet) => ({
+    walletId: wallet.id, label: wallet.label, sourceType: wallet.source_type,
+    positions: journalByWallet.get(wallet.id) || new Map(), basis: "journal", observedAt: wallet.last_synced_at,
+  }));
   for (const wallet of exchangeWallets) {
-    const journal = exchangeJournalByWallet.get(wallet.id) || new Map();
+    const journal = journalByWallet.get(wallet.id) || new Map();
     const connection = wallet.connection_id ? { id: wallet.connection_id, provider: wallet.provider, label: wallet.connection_label } : null;
     const position = exchangePosition(wallet, connection, journal);
+    balanceSources.push({
+      walletId: wallet.id, label: connection?.label || wallet.label, sourceType: "exchange",
+      positions: position.positions, basis: position.snapshot ? "exchange_snapshot" : "journal",
+      observedAt: position.snapshot?.observedAt || null,
+    });
     for (const [assetId, amount] of position.positions) {
       assets[assetId] = assets[assetId] || assetDescriptorFromExchangeBalance(assetId);
       holdings[assetId] = Number(holdings[assetId] || 0) + amount;
@@ -3536,6 +3545,7 @@ async function portfolioResponse() {
     transactions: enriched,
     hiddenAssets,
     holdings,
+    sourceBalances: buildSourceBalances(balanceSources),
     balanceReconciliations,
     assetAnalytics,
     assets,

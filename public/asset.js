@@ -126,6 +126,41 @@ function metric(label, value, help = "", tone = "") {
   return article;
 }
 
+function appendSourceBalances(card) {
+  const sources = state.portfolio.sourceBalances?.[activeAssetId()] || [];
+  const section = document.createElement("div");
+  section.className = "asset-source-balances";
+  const heading = document.createElement("span");
+  heading.className = "card-label";
+  heading.textContent = "Guthaben pro Quelle";
+  section.append(heading);
+  const list = document.createElement("ul");
+  list.setAttribute("aria-label", "Guthaben pro Quelle");
+  for (const source of sources) {
+    const item = document.createElement("li");
+    const name = document.createElement("span");
+    name.className = "asset-source-name";
+    name.textContent = source.label;
+    name.title = `${source.sourceType === "exchange" ? "Börsenkonto" : "Wallet"} #${source.walletId}`;
+    const balance = document.createElement("span");
+    balance.className = "asset-source-amount";
+    balance.textContent = formatAmount(source.amount);
+    const detail = document.createElement("small");
+    detail.textContent = source.incomplete ? "Journaldefizit · Buchungen fehlen möglicherweise"
+      : source.basis === "exchange_snapshot" ? "Börsensaldo · inkl. gesperrter Beträge" : "Aus Buchungen berechnet";
+    if (source.observedAt) detail.textContent += ` · ${source.basis === "exchange_snapshot" ? "Stand" : "Letzter Sync"} ${formatRecordedAt(source.observedAt)}`;
+    item.append(name, balance, detail);
+    list.append(item);
+  }
+  if (sources.length) section.append(list);
+  else {
+    const empty = document.createElement("small");
+    empty.textContent = "Keine Bestände je Quelle vorhanden.";
+    section.append(empty);
+  }
+  card.append(section);
+}
+
 function renderMetrics() {
   const report = state.portfolio.assetAnalytics?.[activeAssetId()];
   const purchases = report?.purchases || {};
@@ -136,8 +171,10 @@ function renderMetrics() {
     : "Historischer Kaufkurs fehlt";
   const metrics = el("asset-metrics");
   metrics.replaceChildren();
+  const holdingCard = metric("Aktueller Bestand", formatAmount(report?.holdingAmount || 0), `Marktwert ${formatCurrency(report?.holdingValueEur)}`, "highlight");
+  appendSourceBalances(holdingCard);
   metrics.append(
-    metric("Aktueller Bestand", formatAmount(report?.holdingAmount || 0), `Marktwert ${formatCurrency(report?.holdingValueEur)}`, "highlight"),
+    holdingCard,
     metric("Als Kauf erfasst", formatAmount(purchases.acquiredAmount || 0), `${purchases.count || 0} Kauf-Transaktionen`),
     metric("Noch aus Käufen gehalten", formatAmount(purchases.remainingAmount || 0), purchases.hasUnknownCost ? missingLotHint : `Kosten ${formatCurrency(purchases.remainingCostEur)}`),
     metric(partialProfit ? "Gewinn ggü. Kauf · teilweise" : "Gewinn ggü. Kauf", formatCurrency(purchases.profitEur), hidden ? "Coin ausgeblendet · keine aktuelle Bewertung" : purchases.profitEur === null ? missingLotHint : partialProfit ? `Berechnet aus ${formatAmount(purchases.knownRemainingAmount || 0)} mit Kaufkurs` : "Aktueller Wert minus FIFO-Kaufkosten", Number(purchases.profitEur) >= 0 ? "positive" : "negative"),
