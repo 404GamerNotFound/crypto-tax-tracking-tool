@@ -42,6 +42,9 @@ const {
   coinbaseHistoryPhaseLabel,
 } = require("./lib/coinbase");
 const { fetchEtoroHistory } = require("./lib/etoro");
+const { initializeEtoroPositions, saveEtoroPositions, etoroPositionsView } = require("./lib/etoro-positions");
+const { createBsdexWebLogin, requirePrivateLoginTransport } = require("./lib/bsdex-web-session");
+const { fetchBsdexWebHistory } = require("./lib/bsdex-web");
 const {
   createBsdexLiveClient,
   fetchBsdexHistory,
@@ -169,12 +172,16 @@ const EXCHANGE_PROVIDERS = Object.freeze({
   etoro: Object.freeze({
     id: "etoro", label: "eToro · Read-only API", defaultLabel: "eToro", importMode: "api",
     apiKeyLabel: "eToro Public API-Key", apiSecretLabel: "eToro User-Key", supportsEnvironment: true,
-    help: "eToro: Public API-Key und User-Key werden nur für lesende Historienabfragen verwendet. Wähle Real oder Demo passend zum User-Key; eToro-Keys funktionieren jeweils nur in ihrer Kontoart. CryptoBuch sendet keine Handels-, Auszahlungs- oder Transfer-Anfragen; die API wird seriell und gedrosselt abgefragt.",
+    help: "eToro: Public API-Key und User-Key werden nur für lesende Historien-, Instrument- und Positionsabfragen verwendet. Wähle Real oder Demo passend zum User-Key; eToro-Keys funktionieren jeweils nur in ihrer Kontoart. CryptoBuch sendet keine Handels-, Auszahlungs- oder Transfer-Anfragen; die API wird seriell und gedrosselt abgefragt.",
   }),
   bsdex: Object.freeze({
     id: "bsdex", label: "BSDEX · Read-only API + Live", defaultLabel: "BSDEX", importMode: "api",
     apiKeyLabel: "BSDEX API-Key", apiSecretLabel: "BSDEX API-Secret", supportsLiveUpdates: true,
-    help: "BSDEX: API-Zugang ausschließlich mit Leserechten erstellen. CryptoBuch ruft Salden, eigene Trades sowie abgeschlossene Krypto-Ein- und Auszahlungen ab und gleicht sie mit lokalen Wallets ab. Der optionale Live-Modus verarbeitet private Salden- und Trade-Updates. Orders, Stornos und Auszahlungen werden niemals ausgelöst.",
+    help: "BSDEX bietet laut Support keine direkte API für Portfolio-Tracker in Privatkonten an. Diese Auswahl ist für bereits vorhandene API-Zugänge mit Leserecht. Für Privatkonten den BSDEX-Web-Import verwenden. Orders, Stornos und Auszahlungen werden niemals ausgelöst.",
+  }),
+  bsdex_web: Object.freeze({
+    id: "bsdex_web", label: "BSDEX · Web-Import (experimentell)", defaultLabel: "BSDEX Web", importMode: "api", requiresBsdexWebLogin: true, csvProfile: "bsdex",
+    help: "Inoffizieller Browser-Import der jährlichen BSDEX-CSV-Exporte. Anmeldung mit E-Mail, Passwort, SMS-TAN und gegebenenfalls Gerätebestätigung. Passwort, TAN und Bestätigungslink werden nicht gespeichert. Nur die bestätigte Sitzung wird lokal verschlüsselt abgelegt. Ein vollständiges Web-Konto hat mehr Rechte als ein Read-only-API-Key; der Adapter beschränkt sich auf Lesen. Ein Konto nur einmal anbinden.",
   }),
   trade_republic: Object.freeze({
     id: "trade_republic", label: "Trade Republic · inoffizieller Read-only-Import", defaultLabel: "Trade Republic", importMode: "api",
@@ -752,6 +759,17 @@ db.exec(`
     ON exchange_balance_snapshots(connection_id, asset);
 `);
 
+initializeEtoroPositions(db);
+db.exec(`CREATE TABLE IF NOT EXISTS bsdex_web_sessions (
+  connection_id INTEGER PRIMARY KEY REFERENCES exchange_connections(id) ON DELETE CASCADE,
+  session_ciphertext TEXT NOT NULL DEFAULT '',
+  account_identity TEXT NOT NULL DEFAULT '',
+  connected_at TEXT,
+  last_error TEXT,
+  accepted_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`);
+const bsdexWebLogin = createBsdexWebLogin();
+
 const transactionColumnNames = new Set(db.prepare("PRAGMA table_info(transactions)").all().map((column) => column.name));
 if (!transactionColumnNames.has("purpose_origin")) {
   db.exec("ALTER TABLE transactions ADD COLUMN purpose_origin TEXT NOT NULL DEFAULT 'unspecified'");
@@ -808,6 +826,7 @@ app.use("/api", (_request, response, next) => {
   next();
 });
 app.use("/api/bitcoin/psbt-preview", (_request, response) => response.status(410).json({ error: "Transaktionsentwürfe werden nicht angenommen. Diese Funktion wurde entfernt." }));
+app.use("/api/import/csv", express.json({ limit: "6mb" }));
 app.use(express.json({ limit: "64kb" }));
 const { createAuth } = require("./lib/auth");
 createAuth({ dataDir: DATA_DIR }).register(app);
@@ -2391,7 +2410,7 @@ function scheduleJobWorker() {
       } else if (job.type === "exchange_sync") {
         const connection = getExchangeConnection(payload.connectionId);
         result = await syncExchangeConnection(connection);
-        createNotification("success", "Börse synchronisiert", `${connection.label || connection.provider}: ${result.imported.toLocaleString("de-DE")} Buchungen importiert.`);
+        createNotification("success", "Börse synchronisiert", `${connection.label || connection.provider}: ${result.imported.toLocaleString("de-DE")} Coin-Buchungen${result.positionsImported ? ` und ${result.positionsImported.toLocaleString("de-DE")} Positionsnachweise` : ""} verarbeitet.`);
         if (result.warnings?.length) createNotification("warning", "Börsen-Sync prüfen", result.warnings[0]);
         const historyJob = queueExchangeHistoryIfNeeded(getExchangeConnection(connection.id));
         if (historyJob) {
@@ -2558,7 +2577,7 @@ function scheduleBsdexReconnect(connectionId, state, error = "") {
 }
 
 async function startBsdexLiveUpdates(connection, { subscription = null, reconcileAfterConnect = false } = {}) {
-  if (connection?.provider !== "bsdex" || !connection.live_updates_enabled || connection.import_mode !== "api") return null;
+  if (connection?.provider !== "bsdex" || !connection.live_updates_enabled || connection.import_mode !== "api" || bsdexWebSession(connection)) return null;
   const existing = bsdexLiveConnections.get(Number(connection.id));
   if (existing) return existing;
   const state = { stopped: false, attempts: 0, client: null, reconnectTimer: null, reconcileAfterConnect };
@@ -3495,6 +3514,7 @@ async function portfolioResponse() {
       walletId: wallet.id, label: connection?.label || wallet.label, sourceType: "exchange",
       positions: position.positions, basis: position.snapshot ? "exchange_snapshot" : "journal",
       observedAt: position.snapshot?.observedAt || null,
+      reconciliations: position.reconciliations,
     });
     for (const [assetId, amount] of position.positions) {
       assets[assetId] = assets[assetId] || assetDescriptorFromExchangeBalance(assetId);
@@ -3650,6 +3670,7 @@ function createBackup() {
 }
 
 function resetLocalData() {
+  void bsdexWebLogin.close();
   // Backups deliberately remain untouched: a reset must be reversible by a
   // conscious restore, even though the active local database starts empty.
   // Close local live sockets first so no previously authorized feed can write
@@ -3683,6 +3704,7 @@ function resetLocalData() {
     DELETE FROM wallet_metadata;
     DELETE FROM exchange_balance_snapshots;
     DELETE FROM exchange_balance_snapshot_meta;
+    DELETE FROM exchange_derivative_positions;
     DELETE FROM exchange_connections;
     DELETE FROM transactions;
     DELETE FROM wallets;
@@ -4614,6 +4636,7 @@ function exchangeHistoryView(connection) {
 }
 
 function exchangeBalanceView(connection) {
+  if (bsdexWebSession(connection)) return null;
   if (!["binance", "coinbase", "coinbase_advanced", "bsdex"].includes(connection.provider)) return null;
   const snapshot = exchangeBalanceSnapshot(connection.id);
   return {
@@ -4624,7 +4647,7 @@ function exchangeBalanceView(connection) {
 }
 
 function bsdexLiveView(connection) {
-  if (connection.provider !== "bsdex") return null;
+  if (connection.provider !== "bsdex" || bsdexWebSession(connection)) return null;
   return {
     enabled: Boolean(connection.live_updates_enabled),
     status: connection.live_updates_enabled ? (connection.live_status || "connecting") : "disabled",
@@ -4636,9 +4659,22 @@ function bsdexLiveView(connection) {
   };
 }
 
+function bsdexWebSession(connection) {
+  return connection.provider === "bsdex" ? db.prepare("SELECT * FROM bsdex_web_sessions WHERE connection_id = ?").get(connection.id) : null;
+}
+
+function bsdexWebView(connection) {
+  const stored = bsdexWebSession(connection);
+  if (!stored) return null;
+  const pending = bsdexWebLogin.status(connection.id);
+  return { status: pending !== "login_required" ? pending : stored.session_ciphertext ? "connected" : "login_required",
+    connectedAt: stored.connected_at, lastError: stored.last_error };
+}
+
 function exchangeConnectionView(connection) {
   const provider = EXCHANGE_PROVIDERS[connection.provider] || null;
   const tradeRepublic = tradeRepublicWebLoginView(connection);
+  const bsdexWeb = bsdexWebView(connection);
   return {
     id: connection.id,
     provider: connection.provider,
@@ -4647,8 +4683,10 @@ function exchangeConnectionView(connection) {
     etoroEnvironment: connection.provider === "etoro" ? (connection.etoro_environment || "real") : null,
     symbols: connection.symbols || "",
     importMode: connection.import_mode || provider?.importMode || "api",
-    syncAvailable: (connection.import_mode || provider?.importMode || "api") === "api" && (!tradeRepublic || tradeRepublic.status === "connected"),
-    csvProfile: provider?.csvProfile || null,
+    accessMode: bsdexWeb ? "web" : connection.import_mode,
+    bsdexWeb,
+    syncAvailable: (connection.import_mode || provider?.importMode || "api") === "api" && (!tradeRepublic || tradeRepublic.status === "connected") && (!bsdexWeb || bsdexWeb.status === "connected"),
+    csvProfile: bsdexWeb ? "bsdex" : provider?.csvProfile || null,
     lastSyncedAt: connection.last_synced_at,
     createdAt: connection.created_at,
     apiKeyConfigured: Boolean(connection.api_key),
@@ -4726,6 +4764,7 @@ async function exchangePortfolioResponse(id) {
     },
     assets,
     transactions,
+    derivativePositions: connection.provider === "etoro" ? etoroPositionsView(db, connection.id) : [],
     transactionCount: transactions.length,
     totalValueEur,
   };
@@ -4747,7 +4786,24 @@ async function syncExchangeConnection(connection) {
   let limited = false;
   let balanceSnapshotUpdated = false;
   let bsdexSubscription = null;
-  if (connection.provider === "bitvavo") {
+  let etoroResult = null;
+  let positionsImported = 0;
+  const bsdexSession = bsdexWebSession(connection);
+  if (bsdexSession) {
+    if (bsdexWebView(connection).status !== "connected") throw makeError("Bitte zuerst bei BSDEX anmelden.");
+    try {
+      const result = await fetchBsdexWebHistory({ storageState: decryptTradeRepublicSession(bsdexSession.session_ciphertext) });
+      // A logout, reset or deletion during the download cancels this import.
+      if (bsdexWebSession(connection)?.session_ciphertext !== bsdexSession.session_ciphertext) throw makeError("Die BSDEX-Sitzung wurde während des Imports geändert. Bitte erneut synchronisieren.");
+      rows = result.rows; warnings = result.warnings;
+      db.prepare("UPDATE bsdex_web_sessions SET session_ciphertext = ?, last_error = NULL WHERE connection_id = ?")
+        .run(encryptTradeRepublicSession(result.storageState), connection.id);
+    } catch (error) {
+      db.prepare(`UPDATE bsdex_web_sessions SET last_error = ?, session_ciphertext = CASE WHEN ? THEN '' ELSE session_ciphertext END WHERE connection_id = ?`)
+        .run(error.message, error.code === "BSDEX_LOGIN_REQUIRED" ? 1 : 0, connection.id);
+      throw error;
+    }
+  } else if (connection.provider === "bitvavo") {
     rows = await fetchBitvavoHistory({ apiBaseUrl: settings.bitvavoApiBaseUrl, apiKey: connection.api_key, apiSecret: connection.api_secret });
   } else if (connection.provider === "binance") {
     const result = await fetchBinanceHistory({
@@ -4781,6 +4837,7 @@ async function syncExchangeConnection(connection) {
     rows = result.rows;
     warnings = result.warnings;
     limited = result.limited;
+    etoroResult = result;
   } else if (connection.provider === "bsdex") {
     const result = await fetchBsdexHistory({
       apiBaseUrl: settings.bsdexApiBaseUrl, apiKey: connection.api_key, apiSecret: connection.api_secret,
@@ -4812,7 +4869,8 @@ async function syncExchangeConnection(connection) {
     warnings = result.warnings;
     limited = result.limited;
   } else throw makeError("Für diese Börse ist noch kein Read-only-Adapter eingerichtet.");
-  const imported = importExternalRows(wallet, rows, { source: `${connection.provider}-api`, purposeOrigin: "auto" });
+  const imported = importExternalRows(wallet, rows, { source: bsdexSession ? "bsdex-web" : `${connection.provider}-api`, purposeOrigin: "auto" });
+  if (etoroResult) positionsImported = saveEtoroPositions(db, connection.id, etoroResult.positions, etoroResult);
   db.prepare(`UPDATE exchange_connections
     SET last_synced_at = datetime('now'),
       live_last_reconciled_at = CASE WHEN provider = 'bsdex' THEN datetime('now') ELSE live_last_reconciled_at END
@@ -4832,6 +4890,7 @@ async function syncExchangeConnection(connection) {
     warnings,
     selectedSymbols,
     balanceSnapshotUpdated,
+    positionsImported,
   };
 }
 
@@ -4938,8 +4997,10 @@ app.get("/api/exchange-connections/:id/portfolio", async (request, response, nex
 
 app.post("/api/exchange-connections", async (request, response, next) => {
   try {
-    const provider = String(request.body?.provider || "").trim().toLowerCase();
-    const definition = EXCHANGE_PROVIDERS[provider];
+    const requestedProvider = String(request.body?.provider || "").trim().toLowerCase();
+    const bsdexWeb = requestedProvider === "bsdex_web";
+    const provider = bsdexWeb ? "bsdex" : requestedProvider;
+    const definition = EXCHANGE_PROVIDERS[requestedProvider];
     if (!definition) throw makeError("Bitte eine unterstützte Börse auswählen.");
     const label = cleanLabel(request.body?.label, 80) || definition.defaultLabel;
     let apiKey = String(request.body?.apiKey || "").trim();
@@ -4947,12 +5008,15 @@ app.post("/api/exchange-connections", async (request, response, next) => {
     const coinbasePassphrase = provider === "coinbase" ? String(request.body?.coinbasePassphrase || "").trim() : "";
     const etoroEnvironment = provider === "etoro" ? String(request.body?.etoroEnvironment || "real").trim().toLowerCase() : "real";
     const symbols = parseSymbols(request.body?.symbols).join(",");
-    const liveUpdatesEnabled = provider === "bsdex" && request.body?.liveUpdatesEnabled === true ? 1 : 0;
+    const liveUpdatesEnabled = !bsdexWeb && provider === "bsdex" && request.body?.liveUpdatesEnabled === true ? 1 : 0;
     if (provider === "coinbase" && apiKey.startsWith("organizations/")) throw makeError("Dies ist ein CDP-Schlüssel. Bitte Coinbase / Advanced Trade auswählen; dafür ist keine Passphrase nötig.");
     if (provider === "etoro" && !["real", "demo"].includes(etoroEnvironment)) {
       throw makeError("Für eToro bitte Realkonto oder Demokonto auswählen.");
     }
-    if (provider === "trade_republic") {
+    if (bsdexWeb) {
+      if (request.body?.bsdexWebConsent !== true) throw makeError("Bitte die Hinweise zum inoffiziellen BSDEX-Web-Import und zur verschlüsselten Sitzung bestätigen.");
+      apiKey = ""; apiSecret = "";
+    } else if (provider === "trade_republic") {
       if (request.body?.tradeRepublicConsent !== true) {
         throw makeError("Bitte bestätige ausdrücklich die Hinweise zur inoffiziellen Trade-Republic-Geräteanmeldung.");
       }
@@ -4985,6 +5049,7 @@ app.post("/api/exchange-connections", async (request, response, next) => {
         (provider, wallet_id, label, api_key, api_secret, coinbase_passphrase, etoro_environment, symbols, import_mode, live_updates_enabled, live_status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(provider, accountWalletId, label, apiKey, apiSecret, coinbasePassphrase, etoroEnvironment, symbols, definition.importMode, liveUpdatesEnabled, liveUpdatesEnabled ? "connecting" : "disabled");
+      if (bsdexWeb) db.prepare("INSERT INTO bsdex_web_sessions(connection_id) VALUES(?)").run(Number(result.lastInsertRowid));
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
@@ -4998,10 +5063,53 @@ app.post("/api/exchange-connections", async (request, response, next) => {
     const connection = exchangeConnectionView(getExchangeConnection(connectionId));
     // API sources start their serial import immediately. CSV-only sources are
     // deliberately left empty until the user selects a documented local file.
-    const job = definition.importMode === "api" && provider !== "trade_republic" ? enqueueJob("exchange_sync", { connectionId: connection.id }) : null;
+    const job = definition.importMode === "api" && provider !== "trade_republic" && !bsdexWeb ? enqueueJob("exchange_sync", { connectionId: connection.id }) : null;
     response.status(201).json({ ...connection, job });
   } catch (error) {
     if (String(error.message).includes("UNIQUE constraint failed")) return next(makeError("Diese Börsenverbindung ist bereits hinterlegt."));
+    next(error);
+  }
+});
+
+app.post("/api/exchange-connections/:id/bsdex/web-login/:action", async (request, response, next) => {
+  let id;
+  try {
+    id = asPositiveId(request.params.id);
+    if (!id) throw makeError("Ungültige Börsenverbindung.");
+    const connection = getExchangeConnection(id);
+    const stored = bsdexWebSession(connection);
+    if (!stored) throw makeError("Diese Verbindung verwendet keine BSDEX-Webanmeldung.");
+    const action = request.params.action;
+    if (action === "cancel" || action === "disconnect") {
+      await bsdexWebLogin.cancel(id);
+      if (action === "disconnect") db.prepare("UPDATE bsdex_web_sessions SET session_ciphertext = '', connected_at = NULL, last_error = NULL WHERE connection_id = ?").run(id);
+      return response.json(exchangeConnectionView(getExchangeConnection(id)));
+    }
+    requirePrivateLoginTransport(request);
+    let result;
+    if (action === "start") {
+      const email = String(request.body?.email || "").trim();
+      const identity = crypto.createHmac("sha256", TRADE_REPUBLIC_SESSION_KEY).update(email.toLowerCase()).digest("hex");
+      if (stored.account_identity && stored.account_identity !== identity) throw makeError("Diese Verbindung gehört zu einer anderen BSDEX-Anmeldung. Für ein anderes Konto bitte eine eigene Quelle anlegen.");
+      db.prepare("UPDATE bsdex_web_sessions SET session_ciphertext = '', connected_at = NULL, last_error = NULL WHERE connection_id = ?").run(id);
+      result = await bsdexWebLogin.start(id, { email, password: request.body?.password, identity });
+    } else if (action === "confirm") result = await bsdexWebLogin.confirm(id, request.body?.tan);
+    else if (action === "device") result = await bsdexWebLogin.confirmDevice(id, request.body?.link);
+    else if (action === "consent") result = await bsdexWebLogin.consent(id, { accepted: request.body?.accepted, digest: request.body?.digest });
+    else throw makeError("Unbekannter Anmeldeschritt.");
+    let job = null;
+    if (result.status === "connected") {
+      const saved = db.prepare("UPDATE bsdex_web_sessions SET session_ciphertext = ?, account_identity = ?, connected_at = datetime('now'), last_error = NULL WHERE connection_id = ?")
+        .run(encryptTradeRepublicSession(result.storageState), result.identity, id);
+      if (!saved.changes) throw makeError("Die Verbindung wurde während der Anmeldung entfernt.");
+      job = enqueueJob("exchange_sync", { connectionId: id });
+    }
+    response.json({ ...exchangeConnectionView(getExchangeConnection(id)), job,
+      ...(result.status === "device_consent_required" ? { consentText: result.consentText, consentDigest: result.consentDigest } : {}) });
+  } catch (error) {
+    // Only adapter-authored messages reach storage; browser errors may contain
+    // passwords, one-time links or cookies and are caught inside the adapter.
+    if (id && error.status) db.prepare("UPDATE bsdex_web_sessions SET last_error = ? WHERE connection_id = ?").run(error.message, id);
     next(error);
   }
 });
@@ -5064,7 +5172,7 @@ app.patch("/api/exchange-connections/:id/live-updates", (request, response, next
     const id = asPositiveId(request.params.id);
     if (!id) throw makeError("Ungültige Börsenverbindung.");
     const connection = getExchangeConnection(id);
-    if (connection.provider !== "bsdex" || connection.import_mode !== "api") {
+    if (connection.provider !== "bsdex" || connection.import_mode !== "api" || bsdexWebSession(connection)) {
       throw makeError("Live-Updates stehen nur für eine BSDEX-Read-only-Verbindung zur Verfügung.");
     }
     const enabled = request.body?.enabled === true;
@@ -5090,6 +5198,7 @@ app.post("/api/exchange-connections/:id/sync", (request, response, next) => {
     if (!id) throw makeError("Ungültige Börsenverbindung.");
     const connection = getExchangeConnection(id);
     if (connection.import_mode === "csv") throw makeError("Diese Quelle wird über den lokalen CSV-Import aktualisiert.");
+    if (bsdexWebSession(connection) && bsdexWebView(connection).status !== "connected") throw makeError("Bitte zuerst die BSDEX-Webanmeldung abschließen.");
     if (connection.provider === "trade_republic" && !isActiveTradeRepublicConnection(connection)) {
       throw makeError("Bitte die Trade-Republic-Webanmeldung in der App bestätigen.");
     }
@@ -5103,6 +5212,7 @@ app.delete("/api/exchange-connections/:id", (request, response, next) => {
     if (!id) throw makeError("Ungültige Börsenverbindung.");
     const connection = getExchangeConnection(id);
     if (connection.provider === "bsdex") stopBsdexLiveUpdates(connection.id, { persist: false });
+    void bsdexWebLogin.cancel(id);
     const deleted = db.prepare("DELETE FROM exchange_connections WHERE id = ?").run(id);
     if (!deleted.changes) throw makeError("Börsenverbindung nicht gefunden.", 404);
     response.status(204).end();
@@ -5118,6 +5228,7 @@ app.post("/api/import/csv", (request, response, next) => {
       const connection = getExchangeConnection(connectionId);
       const targetProviders = Array.isArray(profile.targetProviders) ? profile.targetProviders : [];
       if (!targetProviders.includes(connection.provider)) throw makeError("Dieses CSV-Profil passt nicht zu der ausgewählten Börsenquelle.");
+      if (profile.id === "bsdex" && !bsdexWebSession(connection)) throw makeError("BSDEX-CSV bitte einer BSDEX-Web-Quelle zuordnen. API- und CSV-IDs dürfen nicht in derselben Quelle vermischt werden.");
       const wallet = getWallet(connection.wallet_id);
       const imported = importExternalRows(wallet, rows, { source: `${connection.provider}-csv`, profile: profile.id, purposeOrigin: "manual" });
       db.prepare("UPDATE exchange_connections SET last_synced_at = datetime('now') WHERE id = ?").run(connection.id);

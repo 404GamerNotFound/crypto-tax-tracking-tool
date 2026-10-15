@@ -122,7 +122,7 @@ function importTargetOptions() {
     wallets.forEach((wallet) => group.append(new Option((wallet.label || wallet.address) + " · " + wallet.chain, `wallet:${wallet.id}`)));
     select.append(group);
   }
-  const exchanges = (state.exchange.connections || []).filter((connection) => allowedProviders.has(connection.provider));
+  const exchanges = (state.exchange.connections || []).filter((connection) => allowedProviders.has(connection.provider) && (profile.id !== "bsdex" || connection.accessMode === "web"));
   if (exchanges.length) {
     const group = document.createElement("optgroup");
     group.label = "Börsenkonten";
@@ -138,7 +138,8 @@ function importTargetOptions() {
 
 function updateExchangeProviderForm() {
   const provider = providerDefinition(el("exchange-provider").value);
-  const api = provider.importMode === "api";
+  const bsdexWeb = Boolean(provider.requiresBsdexWebLogin);
+  const api = provider.importMode === "api" && !bsdexWeb;
   const tradeRepublic = Boolean(provider.requiresWebLogin);
   const liveUpdates = Boolean(provider.supportsLiveUpdates);
   const etoro = Boolean(provider.supportsEnvironment);
@@ -169,9 +170,11 @@ function updateExchangeProviderForm() {
   el("exchange-api-key-label").textContent = provider.apiKeyLabel || "Read-only API-Key";
   el("exchange-api-secret-label").textContent = provider.apiSecretLabel || "API-Secret";
   el("exchange-provider-help").textContent = provider.help || "Wähle eine unterstützte Börsenquelle.";
+  el("exchange-bsdex-web-consent-field").hidden = !bsdexWeb;
+  el("exchange-bsdex-web-consent").required = bsdexWeb;
   el("exchange-trade-republic-consent-field").hidden = !tradeRepublic;
   el("exchange-trade-republic-consent").required = tradeRepublic;
-  el("exchange-security-copy").textContent = api
+  el("exchange-security-copy").textContent = bsdexWeb ? "Web-Import: Deine Anmeldung erfolgt über einen getrennten lokalen Browser. Die Sitzung wird verschlüsselt gespeichert und besitzt Kontorechte; der Adapter ruft nur Historien ab. Bestände werden aus Buchungen berechnet und sind kein bestätigter Börsensaldo." : api
     ? tradeRepublic
       ? "Inoffiziell & lokal: Die Web-Anmeldung wird in deiner Trade-Republic-App bestätigt. Deine PIN wird nicht gespeichert; nur die lokale Web-Sitzung wird verschlüsselt abgelegt. Es werden keine Handelsfunktionen aufgerufen."
       : etoro
@@ -190,7 +193,7 @@ function updateExchangeProviderForm() {
     el("exchange-live-updates").checked = false;
     el("exchange-trade-republic-consent").checked = false;
   }
-  el("exchange-connection-form").querySelector('button[type="submit"]').textContent = tradeRepublic ? "Web-Anmeldung starten" : api ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
+  el("exchange-connection-form").querySelector('button[type="submit"]').textContent = tradeRepublic || bsdexWeb ? "Web-Anmeldung einrichten" : api ? "Börse speichern & abgleichen" : "Börsenkonto anlegen";
 }
 
 function clearTradeRepublicWebLoginPoll() {
@@ -285,13 +288,14 @@ function connectionCard(connection) {
   const head = node("div", "exchange-connection-card-head");
   const mark = node("span", "exchange-provider-mark " + connection.provider, providerMark(connection.provider));
   const name = node("div", "exchange-connection-name");
-  const provider = providerDefinition(connection.provider);
+  const bsdexWeb = connection.bsdexWeb;
+  const provider = providerDefinition(bsdexWeb ? "bsdex_web" : connection.provider);
   const csv = connection.importMode === "csv";
   const tradeRepublic = connection.tradeRepublic;
   const activationPending = tradeRepublic?.status === "approval_pending";
   const activationNeeded = tradeRepublic && tradeRepublic.status !== "connected";
   name.append(node("strong", "", connection.label || provider.defaultLabel || connection.provider), node("span", "", `${provider.label || connection.provider} · ${csv ? "lokaler CSV-Import" : "Read-only"}`));
-  const historyStatus = activationPending ? "App-Freigabe offen" : tradeRepublic?.status === "login_error" ? "Anmeldung prüfen" : connection.history?.lastError || connection.history?.status === "attention" ? "Historie prüfen" : connection.history?.status === "running" ? "Historie läuft" : connection.history?.status === "pending" ? "Historie bereit" : connection.lastSyncedAt ? (csv ? "Importiert" : "Synchronisiert") : "Bereit";
+  const historyStatus = bsdexWeb && bsdexWeb.status !== "connected" ? "Web-Anmeldung erforderlich" : bsdexWeb?.lastError ? "Web-Import prüfen" : activationPending ? "App-Freigabe offen" : tradeRepublic?.status === "login_error" ? "Anmeldung prüfen" : connection.history?.lastError || connection.history?.status === "attention" ? "Historie prüfen" : connection.history?.status === "running" ? "Historie läuft" : connection.history?.status === "pending" ? "Historie bereit" : connection.lastSyncedAt ? (csv ? "Importiert" : "Synchronisiert") : "Bereit";
   const status = node("span", "sync-status" + (connection.lastSyncedAt ? " is-synced" : ""), historyStatus);
   head.append(mark, name, status);
   const details = node("dl", "exchange-connection-details");
@@ -341,12 +345,24 @@ function connectionCard(connection) {
     activation.append(node("dt", "", "Web-Anmeldung"), node("dd", tradeRepublic.lastError ? "history-error" : "", copy));
     details.append(activation);
   }
+  if (bsdexWeb) {
+    const login = node("div");
+    login.append(node("dt", "", "Web-Sitzung"), node("dd", bsdexWeb.lastError ? "history-error" : "", bsdexWeb.lastError || (bsdexWeb.status === "connected" ? "Lokal verschlüsselt gespeichert" : "Anmeldung erforderlich")));
+    details.append(login);
+  }
   const footer = node("div", "exchange-connection-card-footer");
-  footer.append(node("p", "", csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : activationNeeded ? "Vor dem ersten Import muss die inoffizielle Trade-Republic-Webanmeldung in der App bestätigt werden. Der Import ruft ausschließlich Timeline und Details ab." : connection.provider === "coinbase_advanced" ? "Coinbase liest Kontostände, Spot-Trades und die normale Kontohistorie mit Käufen, Transfers und Rewards seriell. Unklare Buchungsarten bleiben sichtbar und müssen geprüft werden." : connection.provider === "coinbase" ? "Coinbase Exchange wird ausschließlich mit dem API-Recht „View“ abgefragt. Konten, Ledgerbewegungen und Fills werden seriell importiert; Ein- und Auszahlungen werden danach als Transfer-Vorschläge mit lokalen Wallets verglichen." : connection.provider === "etoro" ? "eToro-Abfragen bleiben read-only und seriell. Eindeutige, ungehebelte Krypto-Longs werden als Kauf beim Öffnen und Verkauf beim Schließen übernommen; CFD- und Short-Positionen werden nicht als Coin-Bestand geschätzt." : connection.provider === "bsdex" && connection.live?.enabled ? `BSDEX-Live-Updates laufen nur lesend lokal. Krypto-Ein- und Auszahlungen kommen im seriellen REST-Abgleich alle ${connection.live.reconcileIntervalMinutes} Minuten mit und werden danach als Transfer-Vorschläge mit lokalen Wallets verglichen.` : connection.provider === "bsdex" ? "Abgeschlossene Krypto-Ein- und Auszahlungen werden read-only importiert und danach als Transfer-Vorschläge mit lokalen Wallets verglichen." : connection.history?.status === "attention" ? "Die API kann nicht alle historischen Märkte liefern. Ergänze die genannten Märkte oder den vollständigen Binance-CSV-Export; fehlende Buchungen werden nie als Kauf oder Verkauf erfunden." : connection.history && connection.history.status !== "complete" ? "Die Börsenhistorie wird automatisch in kleinen, seriellen Schritten nachgeladen. Der Transfer-Abgleich folgt nach Abschluss." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
+  footer.append(node("p", "", bsdexWeb ? "Experimenteller Web-Import der offiziellen Jahres-CSV. Erneute Abrufe werden anhand stabiler Buchungsmerkmale abgeglichen. Der Bestand wird aus der Historie berechnet; fehlende Buchungen bleiben eine Einschränkung. Bei abgelaufener Sitzung bitte erneut anmelden." : csv ? "CSV-Buchungen bleiben lokal und werden nach dem Import mit allen lokalen Wallets abgeglichen." : activationNeeded ? "Vor dem ersten Import muss die inoffizielle Trade-Republic-Webanmeldung in der App bestätigt werden. Der Import ruft ausschließlich Timeline und Details ab." : connection.provider === "coinbase_advanced" ? "Coinbase liest Kontostände, Spot-Trades und die normale Kontohistorie mit Käufen, Transfers und Rewards seriell. Unklare Buchungsarten bleiben sichtbar und müssen geprüft werden." : connection.provider === "coinbase" ? "Coinbase Exchange wird ausschließlich mit dem API-Recht „View“ abgefragt. Konten, Ledgerbewegungen und Fills werden seriell importiert; Ein- und Auszahlungen werden danach als Transfer-Vorschläge mit lokalen Wallets verglichen." : connection.provider === "etoro" ? "eToro importiert auch offene und geschlossene CFDs sowie Short-Positionen. In der Börsenansicht stehen dafür eigene Positionsnachweise mit Hebel und Ergebnis. Eindeutig bestätigte Krypto-Spot-Käufe bleiben im Coin-Journal; unklare Produktarten werden zur Prüfung separat erfasst. Alle Abrufe bleiben read-only und seriell." : connection.provider === "bsdex" && connection.live?.enabled ? `BSDEX-Live-Updates laufen nur lesend lokal. Krypto-Ein- und Auszahlungen kommen im seriellen REST-Abgleich alle ${connection.live.reconcileIntervalMinutes} Minuten mit und werden danach als Transfer-Vorschläge mit lokalen Wallets verglichen.` : connection.provider === "bsdex" ? "Abgeschlossene Krypto-Ein- und Auszahlungen werden read-only importiert und danach als Transfer-Vorschläge mit lokalen Wallets verglichen." : connection.history?.status === "attention" ? "Die API kann nicht alle historischen Märkte liefern. Ergänze die genannten Märkte oder den vollständigen Binance-CSV-Export; fehlende Buchungen werden nie als Kauf oder Verkauf erfunden." : connection.history && connection.history.status !== "complete" ? "Die Börsenhistorie wird automatisch in kleinen, seriellen Schritten nachgeladen. Der Transfer-Abgleich folgt nach Abschluss." : "Nach dem Sync wird automatisch mit allen lokalen Wallets abgeglichen."));
   const actions = node("div", "exchange-connection-actions");
-  const sync = node("button", "button button-secondary button-small", csv ? "CSV importieren" : activationPending ? "App-Bestätigung öffnen" : activationNeeded ? "Web-Anmeldung starten" : "Jetzt synchronisieren");
+  if (bsdexWeb) {
+    const csvImport = node("button", "text-button", "BSDEX-CSV importieren");
+    csvImport.type = "button";
+    csvImport.addEventListener("click", () => openExchangeCsvImport(connection));
+    actions.append(csvImport);
+  }
+  const sync = node("button", "button button-secondary button-small", bsdexWeb && bsdexWeb.status !== "connected" ? "Bei BSDEX anmelden" : csv ? "CSV importieren" : activationPending ? "App-Bestätigung öffnen" : activationNeeded ? "Web-Anmeldung starten" : "Jetzt synchronisieren");
   sync.type = "button";
   sync.addEventListener("click", async () => {
+    if (bsdexWeb && bsdexWeb.status !== "connected") return window.BsdexWeb.open(connection, load).catch(error => toast(error.message, "error"));
     if (csv) return openExchangeCsvImport(connection);
     if (activationPending) return openTradeRepublicWebLogin(connection);
     if (activationNeeded) {
@@ -364,6 +380,15 @@ function connectionCard(connection) {
       toast(error.message, "error");
     }
   });
+  if (bsdexWeb?.status === "connected") {
+    const disconnect = node("button", "text-button", "Web-Sitzung löschen");
+    disconnect.type = "button";
+    disconnect.addEventListener("click", async () => {
+      try { await api(`/api/exchange-connections/${connection.id}/bsdex/web-login/disconnect`, { method: "POST" }); await load(); }
+      catch (error) { toast(error.message, "error"); }
+    });
+    actions.append(disconnect);
+  }
   if (connection.provider === "binance" && !csv) {
     const markets = node("button", "text-button", "Historische Märkte ergänzen");
     markets.type = "button";
@@ -579,10 +604,13 @@ el("exchange-connection-form").addEventListener("submit", async (event) => {
       apiKey: el("exchange-api-key").value, apiSecret: providerId === "coinbase_advanced" ? el("exchange-advanced-secret").value : el("exchange-api-secret").value, coinbasePassphrase: el("exchange-coinbase-passphrase").value, symbols: el("exchange-symbols").value,
       etoroEnvironment: el("exchange-etoro-environment").value,
       tradeRepublicConsent: el("exchange-trade-republic-consent").checked,
+      bsdexWebConsent: el("exchange-bsdex-web-consent").checked,
       liveUpdatesEnabled: el("exchange-live-updates").checked,
     }) });
     form.reset();
-    if (result.tradeRepublic?.status === "approval_pending") {
+    if (result.bsdexWeb) {
+      await window.BsdexWeb.open(result, load);
+    } else if (result.tradeRepublic?.status === "approval_pending") {
       toast("Trade-Republic-Webanmeldung gestartet. Bitte in der App bestätigen.");
       openTradeRepublicWebLogin(result);
     } else if (result.tradeRepublic?.status === "login_error") {

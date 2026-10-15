@@ -64,10 +64,10 @@ function renderMetrics() {
   const priced = assets.filter((asset) => hasNumber(asset.currentValueEur)).length;
   const metrics = el("exchange-metrics");
   const entries = [
-    metric("Börsenwert", formatCurrency(data.totalValueEur), `${priced} von ${assets.length} Beständen aktuell bewertet${data.hiddenAssets?.length ? " · Ausgeblendete Coins ausgeschlossen (Auswahl im Dashboard)." : ""}`, "highlight"),
+    metric(data.connection.provider === "etoro" ? "Coin-Bestandswert" : "Börsenwert", formatCurrency(data.totalValueEur), `${priced} von ${assets.length} Coin-Beständen aktuell bewertet${data.hiddenAssets?.length ? " · Ausgeblendete Coins ausgeschlossen (Auswahl im Dashboard)." : ""}`, "highlight"),
     metric("Aktive Bestände", assets.length.toLocaleString("de-DE"), "Assets mit positivem Saldo"),
     metric("Buchungen gespeichert", data.transactionCount.toLocaleString("de-DE"), "Alle lokal importierten Ein- und Ausgänge"),
-    metric("Letzter Import", data.connection.lastSyncedAt ? dateTime.format(new Date(`${data.connection.lastSyncedAt}Z`)) : "Noch keiner", data.connection.importMode === "csv" ? "Lokaler CSV-/Beleg-Import" : "Read-only-API · keine Handelsrechte"),
+    metric("Letzter Import", data.connection.lastSyncedAt ? dateTime.format(new Date(`${data.connection.lastSyncedAt}Z`)) : "Noch keiner", data.connection.bsdexWeb ? "BSDEX-Web-Export · Bestand aus Buchungen" : data.connection.importMode === "csv" ? "Lokaler CSV-/Beleg-Import" : "Read-only-API · keine Handelsrechte"),
   ];
   if (hasAuthenticatedSnapshot(data.balance?.source)) {
     entries.splice(2, 0, metric("Kontostand", "Bestätigt", data.balance.observedAt ? `${providerLabel(data.connection.provider)} · ${dateTime.format(new Date(`${data.balance.observedAt}Z`))}` : `${providerLabel(data.connection.provider)} Read-only`, "success"));
@@ -76,6 +76,7 @@ function renderMetrics() {
   }
   const history = historyStatus(data.connection.history);
   if (history) entries.push(metric("Börsenhistorie", history.value, history.help, history.tone));
+  if (data.connection.provider === "etoro") entries.push(metric("Positionsnachweise", (data.derivativePositions?.length || 0).toLocaleString("de-DE"), "CFDs, Derivate und ungeklärte Produktarten · separate Liste unten"));
   if (data.connection.live?.enabled) {
     const live = data.connection.live;
     const copy = live.status === "connected" ? `Verbunden · REST-Abgleich alle ${live.reconcileIntervalMinutes} Min.`
@@ -84,6 +85,50 @@ function renderMetrics() {
     entries.push(metric("Live-Updates", live.status === "connected" ? "Aktiv" : "Prüfen", copy, live.status === "connected" ? "success" : "warning"));
   }
   metrics.replaceChildren(...entries);
+}
+
+function renderPositions() {
+  const positions = state.data.derivativePositions || [];
+  el("exchange-positions-panel").hidden = state.data.connection.provider !== "etoro";
+  const openCount = positions.filter(row => row.status === "open").length;
+  const closedCount = positions.filter(row => row.status === "closed").length;
+  const uncertain = positions.filter(row => row.status === "unconfirmed" || row.kind === "unknown").length;
+  el("exchange-positions-summary").textContent = `${openCount} offen · ${closedCount} Schließungsnachweise${uncertain ? ` · ${uncertain} prüfen` : ""}`;
+  const term = el("position-search").value.trim().toLocaleLowerCase("de-DE");
+  const status = el("position-status-filter").value;
+  const filtered = positions.filter(row => (!status || row.status === status) && (!term || [row.symbol,row.name,row.positionId].some(value => String(value || "").toLocaleLowerCase("de-DE").includes(term))));
+  const body = el("exchange-position-list");
+  body.replaceChildren();
+  const amount = (value, currency) => {
+    if (!hasNumber(value)) return "k. A.";
+    return currency ? new Intl.NumberFormat("de-DE", { style: "currency", currency, currencyDisplay: "code" }).format(Number(value))
+      : `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 4 }).format(Number(value))} · Währung unbestätigt`;
+  };
+  const cell = (title, detail) => {
+    const td = document.createElement("td");
+    const strong = document.createElement("strong"); strong.textContent = title; td.append(strong);
+    if (detail) { const small = document.createElement("small"); small.textContent = detail; td.append(small); }
+    return td;
+  };
+  for (const position of filtered) {
+    const row = document.createElement("tr");
+    const kind = position.kind === "cfd" ? "CFD" : position.kind === "derivative" ? "Derivat" : "Produktart prüfen";
+    const statusLabel = position.status === "open" ? "Offen" : position.status === "closed" ? "Geschlossen / Teilschließung" : "Nicht mehr als offen gemeldet";
+    const period = `${dateTime.format(new Date(position.openedAt))}${position.closedAt ? ` bis ${dateTime.format(new Date(position.closedAt))}` : ""}`;
+    const profit = cell(amount(position.profit, position.profitCurrency), `${position.profitKind === "realized" ? "Realisiert · Netto laut API" : "Unrealisiert · letzter Abruf"} · ${dateTime.format(new Date(position.observedAt))}`);
+    if (hasNumber(position.profit)) profit.className = Number(position.profit) < 0 ? "negative" : "positive";
+    row.append(
+      cell(`${position.symbol} · ${kind}`, `${position.name || "eToro"} · Position ${position.positionId}`),
+      cell(statusLabel, period),
+      cell(position.side === "long" ? "Long" : position.side === "short" ? "Short" : "Richtung unbekannt", hasNumber(position.leverage) ? `Hebel ×${position.leverage}` : "Hebel unbekannt"),
+      cell(hasNumber(position.units) ? new Intl.NumberFormat("de-DE", { maximumFractionDigits: 8 }).format(position.units) : "k. A."),
+      cell(amount(position.investment, position.investmentCurrency)),
+      cell(amount(position.fees, position.feesCurrency), position.status === "open" ? "Übernachtgebühren / Dividenden" : "Laut Historie"),
+      profit,
+    );
+    body.append(row);
+  }
+  el("exchange-positions-empty").hidden = filtered.length > 0;
 }
 
 function renderBalanceNotice() {
@@ -149,6 +194,9 @@ function renderHoldings() {
     grid.append(card);
   }
   el("exchange-holdings-empty").hidden = assets.length > 0;
+  el("exchange-holdings-empty").querySelector("p").textContent = hasAuthenticatedSnapshot(state.data.balance?.source)
+    ? "Der bestätigte Kontostand enthält derzeit keine positiven Assets."
+    : "Aus dem gespeicherten Coin-Journal lassen sich keine positiven Bestände ermitteln.";
 }
 
 function filteredTransactions() {
@@ -202,7 +250,7 @@ function renderTransactions() {
     if (Number(transaction.fee) > 0) { const fee = document.createElement("small"); fee.textContent = `Gebühr ${formatAmount(transaction.fee, transaction.fee_asset || transaction.asset)}`; amount.append(fee); }
     const now = document.createElement("td"); now.className = "price-cell"; now.textContent = formatPrice(transaction.price_now_eur);
     const historic = document.createElement("td"); historic.className = "price-cell"; historic.textContent = formatPrice(transaction.price_transaction_eur);
-    const historicDetail = document.createElement("small"); historicDetail.textContent = transaction.price_provider === "coinbase_advanced-api" ? "Coinbase-Belegwert (EUR)" : transaction.price_source === "manual" ? "Manuell festgelegt" : hasNumber(transaction.price_transaction_eur) ? "Automatische Preisquelle" : "Nicht verfügbar"; historic.append(historicDetail);
+    const historicDetail = document.createElement("small"); historicDetail.textContent = transaction.price_provider === "coinbase_advanced-api" ? "Coinbase-Belegwert (EUR)" : ["bsdex-web", "bsdex-csv"].includes(transaction.price_provider) ? "BSDEX-Belegwert (EUR)" : transaction.price_source === "manual" ? "Manuell festgelegt" : hasNumber(transaction.price_transaction_eur) ? "Automatische Preisquelle" : "Nicht verfügbar"; historic.append(historicDetail);
     row.append(operation, asset, amount, now, historic, renderPurpose(transaction));
     body.append(row);
   }
@@ -223,7 +271,7 @@ function render() {
   const csv = data.connection.importMode === "csv";
   const tradeRepublic = data.connection.tradeRepublic;
   const live = data.connection.live;
-  el("exchange-subtitle").textContent = `${providerLabel(data.connection.provider)} · ${csv ? "lokaler Beleg-/CSV-Import" : "Read-only-Bestände"} und alle ${data.transactionCount.toLocaleString("de-DE")} lokal gespeicherten Börsenbuchungen.`;
+  el("exchange-subtitle").textContent = `${providerLabel(data.connection.provider)} · ${data.connection.bsdexWeb ? "Web-Import · Bestand aus exportierter Historie" : csv ? "lokaler Beleg-/CSV-Import" : "Read-only-Bestände"} und alle ${data.transactionCount.toLocaleString("de-DE")} lokal gespeicherten Börsenbuchungen.${data.connection.bsdexWeb && !data.connection.syncAvailable ? " Erneute Web-Anmeldung unter Datenqualität → Börse verbinden erforderlich." : ""}`;
   const history = historyStatus(data.connection.history);
   el("exchange-status").textContent = tradeRepublic?.status === "approval_pending"
     ? "Trade-Republic-App-Bestätigung erforderlich"
@@ -243,6 +291,7 @@ function render() {
   renderMetrics();
   renderBalanceNotice();
   renderHoldings();
+  renderPositions();
   renderTransactions();
   clearTimeout(historyRefreshTimer);
   if ((data.connection.history && ["pending", "running"].includes(data.connection.history.status) && !data.connection.history.lastError) || data.connection.live?.enabled) {
@@ -284,7 +333,7 @@ async function syncExchange() {
     const queued = await api(`/api/exchange-connections/${exchangeId}/sync`, { method: "POST" });
     const result = await waitForJob(queued.job.id);
     await load({ quiet: true });
-    toast(`${(result.imported || 0).toLocaleString("de-DE")} Börsenbuchungen synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}${result.historyInProgress ? " Die Börsenhistorie läuft automatisch weiter." : "."}`);
+    toast(`${(result.imported || 0).toLocaleString("de-DE")} Coin-Buchungen${result.positionsImported ? ` und ${result.positionsImported.toLocaleString("de-DE")} Positionsnachweise` : ""} synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}${result.historyInProgress ? " Die Börsenhistorie läuft automatisch weiter." : "."}`);
   } catch (error) {
     toast(error.message, "error");
   } finally {
@@ -297,4 +346,6 @@ el("refresh-exchange").addEventListener("click", syncExchange);
 el("reload-exchange").addEventListener("click", () => load());
 el("transaction-search").addEventListener("input", (event) => { state.filters.search = event.target.value; renderTransactions(); });
 el("direction-filter").addEventListener("change", (event) => { state.filters.direction = event.target.value; renderTransactions(); });
+el("position-search").addEventListener("input", renderPositions);
+el("position-status-filter").addEventListener("change", renderPositions);
 load();

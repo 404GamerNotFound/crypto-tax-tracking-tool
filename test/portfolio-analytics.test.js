@@ -48,3 +48,12 @@ test('erhält kumulierte Rewards, kennzeichnet aber reine Teilbestände und sper
   assert.equal(report.staking.amount,100);
   assert.equal(report.staking.currentValueEur,20);
 });
+
+test('bestätigter Saldo allein bestätigt keine Kaufchargen bei abweichender Börsenhistorie', () => {
+  const rows = [{ asset:'ADA', timestamp:'2021-01-01', direction:'in', purpose:'Kauf', amount:291, price_transaction_eur:0.4 }];
+  const report = calculateAssetAnalytics(rows,{ADA:0.2},{ADA:890},{ADA:{id:'ADA'}},{ADA:[{incomplete:false,historyIncomplete:true}]}).ADA;
+  assert.equal(report.holdingIsPartial,false);
+  assert.equal(report.purchases.balanceMismatch,false);
+  assert.equal(report.purchases.balanceUncertain,true);
+  assert.equal(report.purchases.profitEur,null);
+});

@@ -34,6 +34,7 @@
     "etoro-api": "eToro-API",
     "etoro-csv": "eToro-CSV",
     "bsdex-api": "BSDEX-API",
+    "bsdex-web": "BSDEX-Web-Export",
     "bsdex-csv": "BSDEX-CSV",
     "trade_republic-api": "Trade-Republic-Import",
     "trade_republic-csv": "Trade-Republic-CSV",

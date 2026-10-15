@@ -42,6 +42,13 @@
           <div class="transactions-empty" id="exchange-holdings-empty" hidden><span class="empty-icon">◇</span><strong>Keine Bestände erkannt</strong><p>Der bestätigte Kontostand enthält derzeit keine positiven Assets.</p></div>
         </section>
 
+        <section id="exchange-positions-panel" class="transactions-panel asset-transactions-panel" aria-labelledby="exchange-positions-title" hidden>
+          <div class="section-heading transactions-title"><div><p class="eyebrow">ETORO · POSITIONSNACHWEISE</p><h2 id="exchange-positions-title">CFDs &amp; weitere Positionen</h2></div><p class="section-copy" id="exchange-positions-summary"></p></div>
+          <p class="data-note">CFDs, Shorts und Positionen mit unbestätigter Produktart werden separat erfasst. Sie fließen nicht in Coin-Guthaben, Coin-FIFO oder die bisherigen Steuer-Schätzungen ein. Ergebnisse stammen von eToro, ohne EUR-Umrechnung; Gebühren werden nicht nochmals vom gemeldeten Netto-Ergebnis abgezogen. Offene Ergebnisse sind Momentaufnahmen vom angegebenen Abruf.</p>
+          <div class="toolbar"><label class="search-control"><span class="visually-hidden">Positionen durchsuchen</span><input id="position-search" type="search" placeholder="Instrument oder Positions-ID suchen" /></label><label class="select-control"><span class="visually-hidden">Positionsstatus filtern</span><select id="position-status-filter"><option value="">Alle Positionen</option><option value="open">Offen</option><option value="closed">Geschlossen / Teilschließung</option><option value="unconfirmed">Status prüfen</option></select></label></div>
+          <div class="table-wrap"><table><thead><tr><th>Instrument / Produktart</th><th>Status / Zeitraum</th><th>Richtung / Hebel</th><th>Kontrakteinheiten</th><th>Einsatz</th><th>Gebühren</th><th>Ergebnis laut eToro</th></tr></thead><tbody id="exchange-position-list"></tbody></table><div class="transactions-empty" id="exchange-positions-empty" hidden><strong>Keine passenden Positionsnachweise</strong><p>Synchronisiere eToro oder passe die Filter an.</p></div></div>
+        </section>
+
         <section class="transactions-panel asset-transactions-panel" aria-labelledby="exchange-transactions-title">
           <div class="section-heading transactions-title"><div><p class="eyebrow">VOLLSTÄNDIGES BUCHUNGSJOURNAL</p><h2 id="exchange-transactions-title">Alle Börsenbuchungen</h2></div><button class="icon-button" id="reload-exchange" aria-label="Ansicht neu laden" title="Ansicht neu laden">↻</button></div>
           <div class="toolbar"><label class="search-control"><span class="visually-hidden">Börsenbuchungen durchsuchen</span><span aria-hidden="true">⌕</span><input id="transaction-search" type="search" placeholder="Asset, Hash oder Zweck suchen" autocomplete="off" /></label><label class="select-control"><span class="visually-hidden">Richtung filtern</span><select id="direction-filter"><option value="">Ein- &amp; Ausgänge</option><option value="in">Eingänge</option><option value="out">Ausgänge</option><option value="self">Eigene Transfers</option></select></label></div>
@@ -54,6 +61,6 @@
     <script src="/ui.js?v=20261004-auth-1" defer></script>
     <script src="/navigation.js?v=20261010-settings-1" defer></script>
     <script src="/notifications.js?v=20260925-1" defer></script>
-    <script src="/exchange.js?v=coinbase-history-20261010-2" defer></script>
+    <script src="/exchange.js?v=etoro-cfd-20261014-1" defer></script>
   </body>
 </html>

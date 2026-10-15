@@ -35,3 +35,17 @@ test('übernimmt Hinweise auf reine Reward-Teilbestände in die Quellenanzeige',
   assert.equal(sources.ADA[0].incomplete,true);
   assert.equal(sources.ADA[0].incompleteReason,'rewards_only');
 });
+
+test('erhält auf null begrenzte Börsendefizite und trennt bestätigten Saldo von lückenhafter Historie', () => {
+  const result = buildSourceBalances([
+    { walletId: 1, sourceType: 'exchange', basis: 'journal', positions: new Map(), reconciliations: [{ asset:'ADA', journalAmount:-271.58, balanceAmount:0 }] },
+    { walletId: 2, sourceType: 'exchange', basis: 'exchange_snapshot', positions: new Map(), reconciliations: [{ asset:'ADA', journalAmount:1.5, balanceAmount:0 }] },
+  ]);
+  const unknown = result.ADA.find(row=>row.walletId===1);
+  assert.equal(unknown.amount,0);
+  assert.equal(unknown.journalAmount,-271.58);
+  assert.equal(unknown.incomplete,true);
+  const confirmed = result.ADA.find(row=>row.walletId===2);
+  assert.equal(confirmed.incomplete,false);
+  assert.equal(confirmed.historyIncomplete,true);
+});

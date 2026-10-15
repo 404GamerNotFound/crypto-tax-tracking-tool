@@ -620,6 +620,11 @@ a.market-availability:hover { text-decoration: underline; }
 .exchange-holding-head strong { display: block; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .exchange-holding-head span:not(.exchange-asset-icon) { display: block; margin-top: 2px; color: var(--muted); font: 9px "DM Mono", monospace; }
 .exchange-holding-amount { overflow: hidden; color: var(--ink); font: 500 23px "Fraunces", Georgia, serif; letter-spacing: -.04em; text-overflow: ellipsis; white-space: nowrap; }
+#exchange-positions-panel table { min-width: 850px; table-layout: fixed; }
+#exchange-positions-panel th { white-space: normal; }
+#exchange-positions-panel td { vertical-align: top; }
+#exchange-positions-panel td > strong,
+#exchange-positions-panel td small { max-width: none; overflow: visible; white-space: normal; overflow-wrap: anywhere; }
 .exchange-holding-card dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; padding-top: 10px; border-top: 1px solid var(--line); }
 .exchange-holding-card dt { color: var(--muted); font: 500 8px "DM Mono", monospace; letter-spacing: .07em; text-transform: uppercase; }
 .exchange-holding-card dd { margin: 3px 0 0; color: var(--green-dark); font: 600 11px "DM Mono", monospace; }

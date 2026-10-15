@@ -54,9 +54,13 @@ test('erhält Mengen ausgeblendeter Coins und entfernt entleerte Snapshot-Konten
 test('verwendet Börsenjournal nur ohne Snapshot und zeigt negative Wallet-Journale als unvollständig', async () => {
   db.exec("DELETE FROM exchange_balance_snapshot_meta WHERE connection_id=1; UPDATE transactions SET direction='out' WHERE wallet_id=3");
   const result=await portfolio();
-  assert.equal(result.sourceBalances.ADA.length,1);
-  assert.equal(result.sourceBalances.ADA[0].amount,-120);
-  assert.equal(result.sourceBalances.ADA[0].incomplete,true);
+  assert.equal(result.sourceBalances.ADA.length,2);
+  assert.equal(result.sourceBalances.ADA.find(row=>row.walletId===3).amount,-120);
+  assert.equal(result.sourceBalances.ADA.find(row=>row.walletId===3).incomplete,true);
+  const unknown = result.sourceBalances.ADA.find(row=>row.walletId===1);
+  assert.equal(unknown.amount,0);
+  assert.equal(unknown.journalAmount,-5);
+  assert.equal(unknown.incompleteReason,'negative_journal');
   assert.equal(result.holdings.ADA,-120);
   db.exec("UPDATE transactions SET direction='in' WHERE wallet_id=1");
   const fallback=(await portfolio()).sourceBalances.ADA.find(row=>row.walletId===1);

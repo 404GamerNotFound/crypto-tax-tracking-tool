@@ -148,9 +148,13 @@ function appendSourceBalances(card) {
     name.title = `${source.sourceType === "exchange" ? "Börsenkonto" : "Wallet"} #${source.walletId}`;
     const balance = document.createElement("span");
     balance.className = "asset-source-amount";
-    balance.textContent = formatAmount(source.amount);
+    const unknownBalance = source.sourceType === "exchange" && source.incompleteReason === "negative_journal";
+    balance.textContent = unknownBalance ? "Unbekannt" : formatAmount(source.amount);
     const detail = document.createElement("small");
-    detail.textContent = source.incompleteReason === "rewards_only" ? "Unvollständig: nur Rewards importiert. Wallet erneut synchronisieren." : source.incomplete ? "Journaldefizit · Buchungen fehlen möglicherweise"
+    detail.textContent = source.incompleteReason === "rewards_only" ? "Unvollständig: nur Rewards importiert. Wallet erneut synchronisieren."
+      : unknownBalance ? `Journaldefizit ${formatAmount(source.journalAmount)} · kein bestätigter Börsensaldo. Fehlende Buchungen ergänzen.`
+      : source.incomplete ? "Journaldefizit · Buchungen fehlen möglicherweise"
+      : source.historyIncomplete ? `Börsensaldo bestätigt · Journal weicht ab (${formatAmount(source.journalAmount)}). Kaufdaten prüfen.`
       : source.basis === "exchange_snapshot" ? "Börsensaldo · inkl. gesperrter Beträge" : "Aus Buchungen berechnet";
     if (source.observedAt) detail.textContent += ` · ${source.basis === "exchange_snapshot" ? "Stand" : "Letzter Sync"} ${formatRecordedAt(source.observedAt)}`;
     item.append(name, balance, detail);
