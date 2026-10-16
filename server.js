@@ -2,6 +2,7 @@ const express = require("express");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { createAppServer } = require("./lib/local-https");
 const { DatabaseSync } = require("node:sqlite");
 const QRCode = require("qrcode");
 const { z } = require("zod");
@@ -5449,9 +5450,16 @@ const initialHistoricalPriceRetry = setTimeout(scheduleHistoricalPriceBackfill, 
 initialHistoricalPriceRetry.unref();
 
 if (require.main === module) {
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`CryptoBuch läuft auf http://0.0.0.0:${PORT}`);
-  });
+  try {
+    const { server, protocol } = createAppServer(app, { dataDir: DATA_DIR });
+    server.on("error", error => { console.error(`CryptoBuch konnte nicht starten: ${error.message}`); process.exit(1); });
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log(`CryptoBuch läuft auf ${protocol}://0.0.0.0:${PORT}`);
+    });
+  } catch (error) {
+    console.error(`CryptoBuch konnte nicht starten: ${error.message}`);
+    process.exit(1);
+  }
 }
 
 module.exports = {

@@ -7,6 +7,10 @@ services:
     environment:
       PORT: 3000
       DATA_DIR: /data
+      # HTTPS verwendet denselben Port; Zertifikat bleibt unter /data/tls erhalten.
+      CRYPTOBUCH_HTTPS: ${CRYPTOBUCH_HTTPS:-true}
+      # LAN-IP/DNS-Namen ergänzen, z. B. 192.168.1.154,cryptobuch.local.
+      CRYPTOBUCH_TLS_HOSTS: ${CRYPTOBUCH_TLS_HOSTS:-localhost,127.0.0.1,::1}
       # Optional: gemountete Secret-Datei zur einmaligen Passwort-Ersteinrichtung.
       CRYPTOBUCH_PASSWORD_FILE: ${CRYPTOBUCH_PASSWORD_FILE:-}
       CRYPTOBUCH_SECURE_COOKIE: ${CRYPTOBUCH_SECURE_COOKIE:-false}

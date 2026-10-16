@@ -34,6 +34,13 @@ test("BSDEX-Loginfehler werden bereinigt, Browser geschlossen, keine Geheimnisse
   await assert.rejects(login.confirm(1, '123456'), /abgelaufen/);
 });
 
+test("BSDEX meldet fehlendes Chromium ohne lokale Pfade oder Browser-Rohfehler", async () => {
+  const login = createBsdexWebLogin({ launch: async () => { throw new Error("Executable doesn't exist at /private/secret-path/chrome"); } });
+  await assert.rejects(login.start(1, { email: 'test@example.test', password: 'test' }), error => error.status === 503
+    && error.message.includes('npx playwright install chromium') && !error.message.includes('secret-path'));
+  assert.equal(login.status(1), 'login_required');
+});
+
 function loginBrowserFixture() {
   let state = 'landing', closed = 0, saved = 0;
   let currentUrl = 'https://app.bsdex.de/';

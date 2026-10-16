@@ -20,9 +20,11 @@ In der App liegt ein freiwillig gespeichertes Passwort gerätegebunden im Schlü
 
 ## HTTPS und Betrieb
 
-Passwortschutz verschlüsselt keine Netzwerkverbindung. HTTPS ist empfohlen und außerhalb des vertrauenswürdigen lokalen Netzes erforderlich. Die App erlaubt HTTP weiterhin nur für lokale Adressen. Ein Reverse Proxy muss den ursprünglichen Host erhalten; keine pauschale Vertrauensfreigabe von Forwarded-Headern wird eingerichtet. Bei HTTPS wird das Cookie als Secure gesetzt. Optional kann `CRYPTOBUCH_SECURE_COOKIE=true` Secure dauerhaft erzwingen (dann ist Browser-Anmeldung über HTTP nicht möglich).
+Passwortschutz verschlüsselt keine Netzwerkverbindung. Docker aktiviert zusätzlich standardmäßig lokales HTTPS auf Port 3000 (`CRYPTOBUCH_HTTPS=true`), mit einem dauerhaft im Daten-Volume gespeicherten, selbst signierten Zertifikat. LAN-IP/DNS-Namen über `CRYPTOBUCH_TLS_HOSTS` konfigurieren. Einrichtung, Zertifikatswarnung, Export und Erneuerung stehen unter [Lokales HTTPS und Portainer](../README.md#lokales-https-und-portainer). Native Clients können ein selbst signiertes Zertifikat ohne eingerichtetes Vertrauen ablehnen; deren Zertifikatsprüfung bleibt aktiv.
 
-Der Docker-Healthcheck verwendet `/healthz` und benötigt keine Zugangsdaten. Authentifizierung führt keine Benutzerkonten oder getrennten Rollen ein: das Passwort schützt die gesamte lokale Installation. Ohne Verlust der Daten lässt sich der Schutz mit dem bisherigen Passwort ausdrücklich in den Einstellungen ausschalten.
+Die App erlaubt HTTP weiterhin nur für lokale Adressen. Bei einem bestehenden TLS-Reverse-Proxy kann `CRYPTOBUCH_HTTPS=false` den internen Listener auf HTTP belassen. Ein Reverse Proxy muss den ursprünglichen Host erhalten; keine pauschale Vertrauensfreigabe von Forwarded-Headern wird eingerichtet. Bei HTTPS wird das Cookie als Secure gesetzt. Optional kann `CRYPTOBUCH_SECURE_COOKIE=true` Secure dauerhaft erzwingen (dann ist Browser-Anmeldung über HTTP nicht möglich).
+
+Der Docker-Healthcheck verwendet `/healthz` und benötigt keine Zugangsdaten. Er folgt der HTTPS-Einstellung und prüft bei HTTPS das lokale Zertifikat einschließlich Hostnamen. Authentifizierung führt keine Benutzerkonten oder getrennten Rollen ein: das Passwort schützt die gesamte lokale Installation. Ohne Verlust der Daten lässt sich der Schutz mit dem bisherigen Passwort ausdrücklich in den Einstellungen ausschalten.
 
 ## Passwort vergessen
 

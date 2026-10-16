@@ -218,6 +218,9 @@ dialog form { padding: 27px; }
 .source-explanation strong, .source-explanation small { display: block; }
 .source-explanation small { margin-top: 2px; color: #4e6e5b; }
 form > label, .form-grid label { display: grid; gap: 7px; margin-bottom: 16px; font-size: 12px; font-weight: 600; }
+.bsdex-login-fields label { display: grid; gap: 7px; margin-bottom: 16px; font-size: 12px; font-weight: 600; }
+#bsdex-consent-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; }
+#bsdex-consent-accepted { min-height: 14px; }
 form label span small, form label > small { color: var(--muted); font-weight: 400; }
 form input, form select { width: 100%; min-height: 42px; border: 1px solid var(--line); border-radius: 5px; outline-color: var(--green); padding: 0 11px; color: var(--ink); background: white; font-size: 13px; }
 form label > small { margin-top: -2px; font-size: 10px; line-height: 1.4; }

@@ -5,10 +5,10 @@ window.BsdexWeb = (() => {
   dialog.innerHTML = `<form id="bsdex-login-form">
     <div class="modal-head"><div><p class="eyebrow">BSDEX · WEB-IMPORT</p><h2>Bei BSDEX anmelden</h2></div><button class="modal-close" type="button" aria-label="Anmeldung schließen">×</button></div>
     <p class="modal-copy" id="bsdex-login-copy"></p>
-    <div id="bsdex-credentials"><label><span>BSDEX-E-Mail-Adresse</span><input id="bsdex-email" type="email" maxlength="254" autocomplete="username" /></label><label><span>Passwort · wird nicht gespeichert</span><input id="bsdex-password" type="password" maxlength="1024" autocomplete="current-password" /></label></div>
+    <div id="bsdex-credentials" class="bsdex-login-fields"><label><span>BSDEX-E-Mail-Adresse</span><input id="bsdex-email" type="email" maxlength="254" autocomplete="username" /></label><label><span>Passwort · wird nicht gespeichert</span><input id="bsdex-password" type="password" maxlength="1024" autocomplete="current-password" /></label></div>
     <label id="bsdex-tan-field" hidden><span>SMS-TAN · wird nicht gespeichert</span><input id="bsdex-tan" type="text" inputmode="numeric" pattern="[0-9]{4,10}" maxlength="10" autocomplete="one-time-code" /></label>
     <label id="bsdex-link-field" hidden><span>BSDEX-Bestätigungslink aus der E-Mail</span><input id="bsdex-link" type="password" maxlength="4096" autocomplete="off" /><small>Den Link hier einfügen, damit er im selben Import-Browser geöffnet wird. Er wird nicht gespeichert.</small></label>
-    <div id="bsdex-consent-field" hidden><p id="bsdex-consent-text" style="white-space:pre-wrap"></p><label><input id="bsdex-consent-accepted" type="checkbox" /><span>Ich habe die angezeigte BSDEX-Erklärung gelesen und stimme der darin beschriebenen Geräteprüfung und Datenübermittlung zu.</span></label></div>
+    <div id="bsdex-consent-field" hidden><p id="bsdex-consent-text"></p><label class="exchange-trade-republic-consent"><input id="bsdex-consent-accepted" type="checkbox" /><span>Ich habe die angezeigte BSDEX-Erklärung gelesen und stimme der darin beschriebenen Geräteprüfung und Datenübermittlung zu.</span></label></div>
     <p class="form-error" id="bsdex-login-error" hidden></p>
     <div class="modal-actions"><button class="button button-primary" id="bsdex-login-submit" type="submit">Anmelden</button></div>
   </form>`;

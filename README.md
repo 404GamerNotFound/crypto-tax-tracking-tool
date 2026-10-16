@@ -1,6 +1,6 @@
 # CryptoBuch
 
-Ein lokal installierbares Crypto-Portfolio für öffentliche Wallet-Adressen der unterstützten Top-30-Netzwerke. Die Anwendung speichert keine Private Keys und keine Seed-Phrases.
+Ein lokal installierbares Crypto-Portfolio für öffentliche Wallet-Adressen der unterstützten Top-30-Netzwerke. Die Anwendung speichert keine privaten Wallet-Schlüssel und keine Seed-Phrases.
 
 ## Start mit Docker
 
@@ -8,7 +8,36 @@ Ein lokal installierbares Crypto-Portfolio für öffentliche Wallet-Adressen der
 docker compose up -d --build
 ```
 
-Danach ist die Anwendung unter [http://localhost:3000](http://localhost:3000) erreichbar. Die SQLite-Datenbank liegt im Docker-Volume `cryptobuch_data` und bleibt bei Container-Neustarts erhalten.
+Danach ist die Anwendung unter [https://localhost:3000](https://localhost:3000) erreichbar. Docker verwendet standardmäßig HTTPS mit einem lokal erzeugten, selbst signierten Zertifikat auf dem bisherigen Port 3000. Datenbank und Zertifikat bleiben im Docker-Volume `cryptobuch_data` bei Container-Neustarts erhalten. Bestehende HTTP-Lesezeichen nach diesem Update auf **https://** umstellen.
+
+### Lokales HTTPS und Portainer
+
+Für den LAN-Zugriff diese Werte in `.env` beziehungsweise den Umgebungsvariablen des Portainer-Stacks setzen, zum Beispiel:
+
+```dotenv
+CRYPTOBUCH_HTTPS=true
+CRYPTOBUCH_TLS_HOSTS=192.168.1.154,cryptobuch.local
+```
+
+Danach das Image neu bauen und den Container mit dem bestehenden Daten-Volume neu erstellen. Die Portzuordnung bleibt `3000:3000`; im Beispiel lautet die Adresse **https://192.168.1.154:3000**. `CRYPTOBUCH_TLS_HOSTS` enthält kommagetrennte IP-Adressen/DNS-Namen ohne Protokoll und Port. `localhost`, `127.0.0.1` und `::1` sind immer enthalten. Eine öffentliche Domain oder Zertifizierungsstelle ist nicht nötig.
+
+Der Browser zeigt zunächst eine Zertifikatswarnung, weil er dem selbst signierten Zertifikat nicht vertraut. Die Verbindung verwendet TLS; die Serveridentität ist ohne eigenes Vertrauen jedoch nicht bestätigt. Eine Ausnahme muss der Nutzer selbst bestätigen. Für Funktionen, die einen sicheren Browserkontext verlangen (z. B. Ledger oder BSDEX-Anmeldung), kann zusätzlich ein Vertrauensimport erforderlich sein. Die Anwendung deaktiviert diese Prüfungen nicht.
+
+Das **öffentliche** Zertifikat für einen gezielten Vertrauensimport oder einen API-Client kopieren:
+
+```bash
+docker compose cp cryptobuch:/data/tls/server.crt ./cryptobuch-local.crt
+curl --cacert ./cryptobuch-local.crt https://localhost:3000/healthz
+```
+
+Den SHA-256-Fingerabdruck mit dem beim Erzeugen ausgegebenen Container-Log vergleichen. Nicht `server.pem` weitergeben: Diese Datei enthält zusätzlich den privaten **TLS-Serverschlüssel** (Dateirechte 0600, Verzeichnis 0700). Er dient ausschließlich HTTPS und hat keinen Bezug zu Wallet-Schlüsseln. Zertifikate werden pro Installation erzeugt, nicht ins Image eingebaut. TLS-Dateien sind nicht Teil der SQLite-Backups; beim Umzug das vollständige Daten-Volume erhalten.
+
+Das Zertifikat gilt ein Jahr. Beim Containerstart wird es wiederverwendet oder erneuert, wenn weniger als 30 Tage Restlaufzeit verbleiben oder ein konfigurierter Name fehlt. Eine Erneuerung ändert den Fingerabdruck und erfordert gegebenenfalls erneutes Vertrauen auf den Clients. Kein Zertifikatswechsel im laufenden Prozess: langfristig laufende Container vor Ablauf neu starten. Defekte Zertifikatsdateien oder fehlendes OpenSSL verhindern den HTTPS-Start; es gibt keinen automatischen Rückfall auf HTTP. Der Docker-Healthcheck validiert Zertifikat und Hostnamen gegen das lokale Zertifikat. Externe Kurs- und Börsenverbindungen behalten ihre normale TLS-Prüfung.
+
+Hinter einem bestehenden TLS-Reverse-Proxy kann `CRYPTOBUCH_HTTPS=false` den internen Listener und Healthcheck auf HTTP belassen. Ohne Docker bleibt `npm start` standardmäßig bei HTTP; für natives HTTPS dieselben Variablen setzen und OpenSSL installieren. HTTPS ist eine Betriebseinstellung, unabhängig von gespeicherten UI-Einstellungen. Keine Datenbankmigration erforderlich.
+
+Technische Grundlagen: [Node.js HTTPS-Server](https://nodejs.org/download/release/latest-jod/docs/api/https.html), [OpenSSL-Zertifikatserweiterungen und SANs](https://docs.openssl.org/3.3/man5/x509v3_config/), [sichere Browserkontexte](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Secure_Contexts).
+
 
 Zum Anhalten:
 
@@ -130,9 +159,9 @@ Mit `GET /api/v1` erhält eine App den Einstieg einschließlich Ressourcen und D
 Die v1-Ressourcen umfassen `wallets` (auch interne Börsenkonten), `transactions`, `wallet-addresses`, `exchange-connections`, `exchange-balances`, `transfers`, `documents`, `price-history`, `price-audit`, `price-retries`, `price-runs`, `price-fetch-events`, `sync-events`, `jobs`, `notifications` und `tax-snapshots`. Diese Lesezugriffe verwenden ausschließlich lokale Daten. Bestehende Auswertungen wie `/api/portfolio`, Steuerberichte, Marktübersicht und Datenqualitätsvorschläge sind im Einstieg verlinkt; Portfolio und Marktübersicht können externe Preisabfragen benötigen.
 
 ```bash
-curl http://localhost:3000/api/v1
-curl 'http://localhost:3000/api/v1/transactions?wallet_id=1&limit=100&offset=0'
-curl http://localhost:3000/api/v1/transactions/1
+curl --cacert ./cryptobuch-local.crt https://localhost:3000/api/v1
+curl --cacert ./cryptobuch-local.crt 'https://localhost:3000/api/v1/transactions?wallet_id=1&limit=100&offset=0'
+curl --cacert ./cryptobuch-local.crt https://localhost:3000/api/v1/transactions/1
 ```
 
 Listen liefern `{ data: [...], pagination: { limit, offset, total, hasMore }, links: { self, next } }`, Einzelabrufe `{ data: {...} }`. `links.next` bis `null` verfolgen. Standard sind 100, maximal 500 Datensätze je Seite, aufsteigend nach Primärschlüssel. Unbekannte oder mehrfach angegebene Filter werden mit HTTP 400 abgelehnt. Während paralleler Änderungen sind mehrere Seiten kein unveränderlicher Snapshot. Ressourcenfelder verwenden `snake_case`; bestehende Aktionen teilweise `camelCase`. Zeitstempel ohne explizite Zeitzone sind UTC. Fehlende Kurse bleiben `null`, manuelle Kurse und Zwecke unverändert.

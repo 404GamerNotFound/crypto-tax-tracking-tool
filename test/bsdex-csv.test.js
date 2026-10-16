@@ -44,6 +44,8 @@ test("BSDEX: unbekannte Typen, unvollständige Felder und widersprüchliche IDs 
   assert.throws(() => parseBsdexCsv(csv(buy + ',')), /Spalten/);
   assert.throws(() => parseBsdexCsv(csv(buy + 'abc"')), /Feldbegrenzung/);
   assert.throws(() => parseBsdexCsv(header + '\n"unfinished'), /geschlossenes Textfeld/);
+  assert.throws(() => parseBsdexCsv(csv(buy.replace('buy-1', 'a'.repeat(121)))), /zu lang/);
+  assert.throws(() => parseBsdexCsv(csv(buy.replace('0.04', '0.' + '0'.repeat(307) + '1'))), /EUR-Belegkurs/);
 });
 
 test("BSDEX: leere Jahre, BOM/CRLF und Hard-Limit einschließlich Fiat-Zeilen", () => {
