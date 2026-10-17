@@ -4,104 +4,107 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
-    <title>CryptoBuch · Einstellungen · Preis- &amp; API-Daten</title>
+    <title data-i18n="CryptoBuch · Einstellungen · Preis- &amp; API-Daten">CryptoBuch · Einstellungen · Preis- &amp; API-Daten</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/styles.css?v=20261004-auth-1" />
+    <script src="/locales/catalog.js" defer></script>
+    <script src="/i18n-core.js" defer></script>
+    <script src="/i18n.js" defer></script>
   </head>
   <body>
     <div class="shell settings-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="Zurück zum CryptoBuch Portfolio">
+        <a class="brand" href="/" aria-label="Zurück zum CryptoBuch Portfolio" data-i18n-aria-label="Zurück zum CryptoBuch Portfolio">
           <img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" />
           <span>CryptoBuch</span>
         </a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-i18n-aria-label="Hauptnavigation" data-primary-navigation></nav>
       </header>
 
       <main class="settings-main">
         <section class="settings-intro" aria-labelledby="settings-title">
-          <p class="eyebrow">LOKALE KONFIGURATION</p>
-          <h1 id="settings-title">Preis- &amp; API-Daten<br /><em>für deine Bewertungen.</em></h1>
-          <p>Konfiguriere die Preisquellen und Börsen-APIs. Hinterlegte API-Keys bleiben serverseitig; der Browser erhält ausschließlich ihren Speicherstatus.</p>
+          <p class="eyebrow"><span data-i18n="LOKALE KONFIGURATION">LOKALE KONFIGURATION</span></p>
+          <h1 id="settings-title"><span data-i18n="Preis- &amp; API-Daten">Preis- &amp; API-Daten</span><br /><em><span data-i18n="für deine Bewertungen.">für deine Bewertungen.</span></em></h1>
+          <p><span data-i18n="Konfiguriere die Preisquellen und Börsen-APIs. Hinterlegte API-Keys bleiben serverseitig; der Browser erhält ausschließlich ihren Speicherstatus.">Konfiguriere die Preisquellen und Börsen-APIs. Hinterlegte API-Keys bleiben serverseitig; der Browser erhält ausschließlich ihren Speicherstatus.</span></p>
         </section>
 
-        <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
+        <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-i18n-aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
         <form id="settings-form" class="settings-form">
           <section class="settings-card" aria-labelledby="market-data-title">
             <div class="settings-heading">
               <div>
-                <p class="eyebrow">MARKTDATEN</p>
-                <h2 id="market-data-title">Preisdaten</h2>
+                <p class="eyebrow"><span data-i18n="MARKTDATEN">MARKTDATEN</span></p>
+                <h2 id="market-data-title"><span data-i18n="Preisdaten">Preisdaten</span></h2>
               </div>
               <span class="settings-mark">01</span>
             </div>
             <label>
-              <span>CoinGecko-API-Basisadresse</span>
+              <span><span data-i18n="CoinGecko-API-Basisadresse">CoinGecko-API-Basisadresse</span></span>
               <input id="coingecko-api" name="coinGeckoBaseUrl" type="url" inputmode="url" required />
-              <small>Standard: öffentliche API für aktuelle Preise und bis zu 365 Tage Historie. Für verbleibende ältere Transaktionen: <code>https://pro-api.coingecko.com/api/v3</code> eintragen und einen Pro-Key hinterlegen.</small>
+              <small><span data-i18n="Standard: öffentliche API für aktuelle Preise und bis zu 365 Tage Historie. Für verbleibende ältere Transaktionen:">Standard: öffentliche API für aktuelle Preise und bis zu 365 Tage Historie. Für verbleibende ältere Transaktionen:</span> <code>https://pro-api.coingecko.com/api/v3</code> <span data-i18n="eintragen und einen Pro-Key hinterlegen.">eintragen und einen Pro-Key hinterlegen.</span></small>
             </label>
             <label>
-              <span>Bitvavo-Kerzen-API-Basisadresse</span>
+              <span><span data-i18n="Bitvavo-Kerzen-API-Basisadresse">Bitvavo-Kerzen-API-Basisadresse</span></span>
               <input id="bitvavo-api" name="bitvavoApiBaseUrl" type="url" inputmode="url" required />
-              <small>Zweite Quelle: kostenloser EUR-Tageskurs-Fallback für native Coins, wenn CoinGecko für ein altes Datum keinen Kurs liefert.</small>
+              <small><span data-i18n="Zweite Quelle: kostenloser EUR-Tageskurs-Fallback für native Coins, wenn CoinGecko für ein altes Datum keinen Kurs liefert.">Zweite Quelle: kostenloser EUR-Tageskurs-Fallback für native Coins, wenn CoinGecko für ein altes Datum keinen Kurs liefert.</span></small>
             </label>
             <label>
-              <span>Coinbase-Exchange-API-Basisadresse</span>
+              <span><span data-i18n="Coinbase-Exchange-API-Basisadresse">Coinbase-Exchange-API-Basisadresse</span></span>
               <input id="coinbase-exchange-api" name="coinbaseExchangeApiBaseUrl" type="url" inputmode="url" required />
-              <small>Dritte Quelle: öffentliche EUR-Tageskerzen. Pro Anfrage werden höchstens 300 Tage abgefragt.</small>
+              <small><span data-i18n="Dritte Quelle: öffentliche EUR-Tageskerzen. Pro Anfrage werden höchstens 300 Tage abgefragt.">Dritte Quelle: öffentliche EUR-Tageskerzen. Pro Anfrage werden höchstens 300 Tage abgefragt.</span></small>
             </label>
             <label>
-              <span>Kraken-API-Basisadresse</span>
+              <span><span data-i18n="Kraken-API-Basisadresse">Kraken-API-Basisadresse</span></span>
               <input id="kraken-api" name="krakenApiBaseUrl" type="url" inputmode="url" required />
-              <small>Vierte Quelle: öffentliche EUR-Tageskerzen der letzten etwa 720 Tage.</small>
+              <small><span data-i18n="Vierte Quelle: öffentliche EUR-Tageskerzen der letzten etwa 720 Tage.">Vierte Quelle: öffentliche EUR-Tageskerzen der letzten etwa 720 Tage.</span></small>
             </label>
             <label>
-              <span>CryptoCompare-API-Basisadresse</span>
+              <span><span data-i18n="CryptoCompare-API-Basisadresse">CryptoCompare-API-Basisadresse</span></span>
               <input id="cryptocompare-api" name="cryptoCompareApiBaseUrl" type="url" inputmode="url" required />
-              <small>Fünfte Quelle bei hinterlegtem API-Key; erweitert die Historie für native Coins und Börsenassets.</small>
+              <small><span data-i18n="Fünfte Quelle bei hinterlegtem API-Key; erweitert die Historie für native Coins und Börsenassets.">Fünfte Quelle bei hinterlegtem API-Key; erweitert die Historie für native Coins und Börsenassets.</span></small>
             </label>
             <label>
-              <span>Binance-API-Basisadresse</span>
+              <span><span data-i18n="Binance-API-Basisadresse">Binance-API-Basisadresse</span></span>
               <input id="binance-api" name="binanceApiBaseUrl" type="url" inputmode="url" required />
-              <small>Wird ausschließlich von der optionalen Binance-Spot-Read-only-Verbindung für Konto- und Historienabfragen verwendet.</small>
+              <small><span data-i18n="Wird ausschließlich von der optionalen Binance-Spot-Read-only-Verbindung für Konto- und Historienabfragen verwendet.">Wird ausschließlich von der optionalen Binance-Spot-Read-only-Verbindung für Konto- und Historienabfragen verwendet.</span></small>
             </label>
             <label>
               <span>eToro-Public-API-Basisadresse</span>
               <input id="etoro-api" name="etoroApiBaseUrl" type="url" inputmode="url" required />
-              <small>Wird ausschließlich von der optionalen eToro-Read-only-Verbindung für serielle Historienabfragen verwendet.</small>
+              <small><span data-i18n="Wird ausschließlich von der optionalen eToro-Read-only-Verbindung für serielle Historienabfragen verwendet.">Wird ausschließlich von der optionalen eToro-Read-only-Verbindung für serielle Historienabfragen verwendet.</span></small>
             </label>
             <label>
-              <span>CoinGecko-API-Key <small>optional</small></span>
-              <input id="coingecko-key" name="coinGeckoApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
-              <small id="coingecko-key-status">Key-Status wird geladen …</small>
+              <span><span data-i18n="CoinGecko-API-Key">CoinGecko-API-Key</span> <small>optional</small></span>
+              <input id="coingecko-key" name="coinGeckoApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
+              <small id="coingecko-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
             </label>
             <label class="check-setting">
               <input id="clear-coingecko-key" name="clearCoinGeckoApiKey" type="checkbox" />
-              <span>Gespeicherten CoinGecko-API-Key entfernen</span>
+              <span><span data-i18n="Gespeicherten CoinGecko-API-Key entfernen">Gespeicherten CoinGecko-API-Key entfernen</span></span>
             </label>
             <label>
-              <span>CryptoCompare-API-Key <small>optional</small></span>
-              <input id="cryptocompare-key" name="cryptoCompareApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
-              <small id="cryptocompare-key-status">Key-Status wird geladen …</small>
+              <span><span data-i18n="CryptoCompare-API-Key">CryptoCompare-API-Key</span> <small>optional</small></span>
+              <input id="cryptocompare-key" name="cryptoCompareApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
+              <small id="cryptocompare-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
             </label>
             <label class="check-setting">
               <input id="clear-cryptocompare-key" name="clearCryptoCompareApiKey" type="checkbox" />
-              <span>Gespeicherten CryptoCompare-API-Key entfernen</span>
+              <span><span data-i18n="Gespeicherten CryptoCompare-API-Key entfernen">Gespeicherten CryptoCompare-API-Key entfernen</span></span>
             </label>
-            <p class="settings-inline-note">Reihenfolge: CoinGecko, Bitvavo, Coinbase Exchange, Kraken, CryptoCompare (nur mit Key). Ein Treffer wird lokal mit Quelle gespeichert; fehlende Werte werden später seriell erneut versucht.</p>
+            <p class="settings-inline-note"><span data-i18n="Reihenfolge: CoinGecko, Bitvavo, Coinbase Exchange, Kraken, CryptoCompare (nur mit Key). Ein Treffer wird lokal mit Quelle gespeichert; fehlende Werte werden später seriell erneut versucht.">Reihenfolge: CoinGecko, Bitvavo, Coinbase Exchange, Kraken, CryptoCompare (nur mit Key). Ein Treffer wird lokal mit Quelle gespeichert; fehlende Werte werden später seriell erneut versucht.</span></p>
           </section>
 
           <p id="settings-error" class="form-error" role="alert" hidden></p>
           <div class="settings-actions">
-            <a class="button button-secondary" href="/">Abbrechen</a>
-            <button id="save-settings" class="button button-primary" type="submit">Einstellungen speichern</button>
+            <a class="button button-secondary" href="/"><span data-i18n="Abbrechen">Abbrechen</span></a>
+            <button id="save-settings" class="button button-primary" type="submit"><span data-i18n="Einstellungen speichern">Einstellungen speichern</span></button>
           </div>
         </form>
 
         <aside class="settings-note">
-          <strong>Docker &amp; Portainer</strong>
-          <p>Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.</p>
+          <strong><span data-i18n="Docker &amp; Portainer">Docker &amp; Portainer</span></strong>
+          <p><span data-i18n="Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.">Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.</span></p>
         </aside>
       </main>
     </div>

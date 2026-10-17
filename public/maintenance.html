@@ -3,82 +3,85 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CryptoBuch · Betrieb</title>
+    <title data-i18n="CryptoBuch · Betrieb">CryptoBuch · Betrieb</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/styles.css?v=20261004-brand-1" />
+    <script src="/locales/catalog.js" defer></script>
+    <script src="/i18n-core.js" defer></script>
+    <script src="/i18n.js" defer></script>
   </head>
   <body>
     <div class="shell report-shell">
       <header class="topbar">
         <a class="brand" href="/"><img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" /><span>CryptoBuch</span></a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-i18n-aria-label="Hauptnavigation" data-primary-navigation></nav>
       </header>
       <main class="report-main">
         <section class="page-hero compact-hero">
           <div>
-            <p class="eyebrow">BETRIEB &amp; SICHERUNG</p>
-            <h1>Status und <em>Backups.</em></h1>
-            <p>Überwache Wallet-Synchronisationen und sichere die lokale Datenbank im persistenten Docker-Volume.</p>
+            <p class="eyebrow"><span data-i18n="BETRIEB &amp; SICHERUNG">BETRIEB &amp; SICHERUNG</span></p>
+            <h1><span data-i18n="Status und">Status und</span> <em>Backups.</em></h1>
+            <p><span data-i18n="Überwache Wallet-Synchronisationen und sichere die lokale Datenbank im persistenten Docker-Volume.">Überwache Wallet-Synchronisationen und sichere die lokale Datenbank im persistenten Docker-Volume.</span></p>
           </div>
-          <div class="hero-actions"><a class="button button-secondary" href="#automatische-laeufe">Automatische Läufe</a><button class="button button-primary" id="create-backup">Backup erstellen</button><button class="button button-secondary" id="reload-status">Neu laden</button></div>
+          <div class="hero-actions"><a class="button button-secondary" href="#automatische-laeufe"><span data-i18n="Automatische Läufe">Automatische Läufe</span></a><button class="button button-primary" id="create-backup"><span data-i18n="Backup erstellen">Backup erstellen</span></button><button class="button button-secondary" id="reload-status"><span data-i18n="Neu laden">Neu laden</span></button></div>
         </section>
-        <nav class="section-subnav" aria-label="Betriebsbereiche" data-section-navigation="maintenance"></nav>
+        <nav class="section-subnav" aria-label="Betriebsbereiche" data-i18n-aria-label="Betriebsbereiche" data-section-navigation="maintenance"></nav>
         <section class="transactions-panel report-panel" id="updates" aria-labelledby="updates-title">
-          <div class="section-heading transactions-title"><div><p class="eyebrow">ANWENDUNG AKTUALISIEREN</p><h2 id="updates-title">Docker-Updates</h2></div><div class="hero-actions"><button class="button button-secondary button-small" id="check-update" type="button">Nach Updates suchen</button><button class="button button-primary button-small" id="install-update" type="button" disabled>Jetzt aktualisieren</button></div></div>
+          <div class="section-heading transactions-title"><div><p class="eyebrow"><span data-i18n="ANWENDUNG AKTUALISIEREN">ANWENDUNG AKTUALISIEREN</span></p><h2 id="updates-title"><span data-i18n="Docker-Updates">Docker-Updates</span></h2></div><div class="hero-actions"><button class="button button-secondary button-small" id="check-update" type="button"><span data-i18n="Nach Updates suchen">Nach Updates suchen</span></button><button class="button button-primary button-small" id="install-update" type="button" disabled><span data-i18n="Jetzt aktualisieren">Jetzt aktualisieren</span></button></div></div>
           <div class="update-content">
-          <p id="update-status" role="status" aria-live="polite">Update-Status wird geladen …</p>
+          <p id="update-status" role="status" aria-live="polite"><span data-i18n="Update-Status wird geladen …">Update-Status wird geladen …</span></p>
           <p class="data-note" id="update-configuration"></p>
           <p class="data-note" id="update-attempt"></p>
-          <a id="update-release" class="text-button" target="_blank" rel="noopener noreferrer" hidden>Release auf GitHub ansehen</a>
-          <details id="update-notes-section" hidden><summary>Änderungen dieser Version</summary><pre id="update-notes" style="white-space: pre-wrap; overflow-wrap: anywhere; font: inherit"></pre></details>
-          <p><button class="button button-secondary button-small" id="acknowledge-update" type="button" hidden>Deployment geprüft – Sperre aufheben</button></p>
-          <details><summary>Portainer-Anbindung einrichten</summary>
-            <p>Unterstützt werden dateibasierte Docker-Compose-Stacks in Portainer CE und BE mit einem versionierten CryptoBuch-Image. Git-Stacks und einzelne Container müssen zunächst in Portainer umgestellt werden. Das bestehende Daten-Volume weiterverwenden.</p>
-            <p>Im Container werden Portainer-HTTPS-Adresse, Stack-ID, Environment-ID und der Pfad zu einer schreibgeschützt eingebundenen API-Token-Datei konfiguriert. Der Token bleibt serverseitig. Der CryptoBuch-Passwortschutz muss aktiviert sein.</p>
-            <p>Die genaue Einrichtung mit Compose-Vorlage findest du in <a href="/update-setup.html">Docker-Updates einrichten</a>.</p>
+          <a id="update-release" class="text-button" target="_blank" rel="noopener noreferrer" hidden><span data-i18n="Release auf GitHub ansehen">Release auf GitHub ansehen</span></a>
+          <details id="update-notes-section" hidden><summary><span data-i18n="Änderungen dieser Version">Änderungen dieser Version</span></summary><pre id="update-notes" style="white-space: pre-wrap; overflow-wrap: anywhere; font: inherit"></pre></details>
+          <p><button class="button button-secondary button-small" id="acknowledge-update" type="button" hidden><span data-i18n="Deployment geprüft – Sperre aufheben">Deployment geprüft – Sperre aufheben</span></button></p>
+          <details><summary><span data-i18n="Portainer-Anbindung einrichten">Portainer-Anbindung einrichten</span></summary>
+            <p><span data-i18n="Unterstützt werden dateibasierte Docker-Compose-Stacks in Portainer CE und BE mit einem versionierten CryptoBuch-Image. Git-Stacks und einzelne Container müssen zunächst in Portainer umgestellt werden. Das bestehende Daten-Volume weiterverwenden.">Unterstützt werden dateibasierte Docker-Compose-Stacks in Portainer CE und BE mit einem versionierten CryptoBuch-Image. Git-Stacks und einzelne Container müssen zunächst in Portainer umgestellt werden. Das bestehende Daten-Volume weiterverwenden.</span></p>
+            <p><span data-i18n="Im Container werden Portainer-HTTPS-Adresse, Stack-ID, Environment-ID und der Pfad zu einer schreibgeschützt eingebundenen API-Token-Datei konfiguriert. Der Token bleibt serverseitig. Der CryptoBuch-Passwortschutz muss aktiviert sein.">Im Container werden Portainer-HTTPS-Adresse, Stack-ID, Environment-ID und der Pfad zu einer schreibgeschützt eingebundenen API-Token-Datei konfiguriert. Der Token bleibt serverseitig. Der CryptoBuch-Passwortschutz muss aktiviert sein.</span></p>
+            <p><span data-i18n="Die genaue Einrichtung mit Compose-Vorlage findest du in">Die genaue Einrichtung mit Compose-Vorlage findest du in</span> <a href="/update-setup.html"><span data-i18n="Docker-Updates einrichten">Docker-Updates einrichten</span></a>.</p>
           </details>
           </div>
         </section>
         <section class="summary-grid" id="betriebsstatus">
-          <article class="summary-card"><span class="card-label">Offene historische Kurse</span><strong id="pending-prices">—</strong><span class="muted" id="retry-status"></span></article>
-          <article class="summary-card"><span class="card-label">Wallets mit Fehler</span><strong id="sync-errors">—</strong><span class="muted">letzter Synchronisationsversuch</span></article>
-          <article class="summary-card"><span class="card-label">Backups</span><strong id="backup-count">—</strong><span class="muted">im Docker-Daten-Volume</span></article>
-          <article class="summary-card"><span class="card-label">Automatische Läufe</span><strong id="automation-active-count">—</strong><span class="muted" id="automation-queue-status">lokale Warteschlange</span></article>
+          <article class="summary-card"><span class="card-label"><span data-i18n="Offene historische Kurse">Offene historische Kurse</span></span><strong id="pending-prices">—</strong><span class="muted" id="retry-status"></span></article>
+          <article class="summary-card"><span class="card-label"><span data-i18n="Wallets mit Fehler">Wallets mit Fehler</span></span><strong id="sync-errors">—</strong><span class="muted"><span data-i18n="letzter Synchronisationsversuch">letzter Synchronisationsversuch</span></span></article>
+          <article class="summary-card"><span class="card-label"><span data-i18n="Backups">Backups</span></span><strong id="backup-count">—</strong><span class="muted"><span data-i18n="im Docker-Daten-Volume">im Docker-Daten-Volume</span></span></article>
+          <article class="summary-card"><span class="card-label"><span data-i18n="Automatische Läufe">Automatische Läufe</span></span><strong id="automation-active-count">—</strong><span class="muted" id="automation-queue-status"><span data-i18n="lokale Warteschlange">lokale Warteschlange</span></span></article>
         </section>
         <section class="transactions-panel report-panel automation-panel" id="automatische-laeufe" aria-labelledby="automation-title">
-          <div class="section-heading transactions-title"><div><p class="eyebrow">LOKALE ZEITSTEUERUNGEN</p><h2 id="automation-title">Automatische Läufe</h2></div><button class="button button-secondary button-small" id="reload-automations" type="button">Läufe aktualisieren</button></div>
-          <p class="data-note">Diese Übersicht zeigt lokale Zeitsteuerungen im CryptoBuch-Server – keine systemweiten Cronjobs. Abrufe bleiben seriell; Zugangsdaten, Job-Payloads und Anfrage-URLs werden nicht angezeigt.</p>
-          <div class="automation-schedule-grid" id="automation-schedule-list" aria-live="polite"><p class="muted">Automatische Läufe werden geladen …</p></div>
-          <div class="automation-queue-heading"><div><p class="eyebrow">HINTERGRUNDWARTESCHLANGE</p><h3>Letzte und laufende Jobs</h3></div><span class="muted" id="automation-queue-meta">—</span></div>
-          <div class="table-wrap"><table><thead><tr><th>Job</th><th>Status</th><th>Eingeplant</th><th>Gestartet</th><th>Abgeschlossen / Hinweis</th></tr></thead><tbody id="automation-job-list"></tbody></table></div>
-          <p class="data-note" id="automation-job-empty" hidden>Es liegen noch keine Hintergrundjobs vor.</p>
+          <div class="section-heading transactions-title"><div><p class="eyebrow"><span data-i18n="LOKALE ZEITSTEUERUNGEN">LOKALE ZEITSTEUERUNGEN</span></p><h2 id="automation-title"><span data-i18n="Automatische Läufe">Automatische Läufe</span></h2></div><button class="button button-secondary button-small" id="reload-automations" type="button"><span data-i18n="Läufe aktualisieren">Läufe aktualisieren</span></button></div>
+          <p class="data-note"><span data-i18n="Diese Übersicht zeigt lokale Zeitsteuerungen im CryptoBuch-Server – keine systemweiten Cronjobs. Abrufe bleiben seriell; Zugangsdaten, Job-Payloads und Anfrage-URLs werden nicht angezeigt.">Diese Übersicht zeigt lokale Zeitsteuerungen im CryptoBuch-Server – keine systemweiten Cronjobs. Abrufe bleiben seriell; Zugangsdaten, Job-Payloads und Anfrage-URLs werden nicht angezeigt.</span></p>
+          <div class="automation-schedule-grid" id="automation-schedule-list" aria-live="polite"><p class="muted"><span data-i18n="Automatische Läufe werden geladen …">Automatische Läufe werden geladen …</span></p></div>
+          <div class="automation-queue-heading"><div><p class="eyebrow"><span data-i18n="HINTERGRUNDWARTESCHLANGE">HINTERGRUNDWARTESCHLANGE</span></p><h3><span data-i18n="Letzte und laufende Jobs">Letzte und laufende Jobs</span></h3></div><span class="muted" id="automation-queue-meta">—</span></div>
+          <div class="table-wrap"><table><thead><tr><th><span data-i18n="Job">Job</span></th><th><span data-i18n="Status">Status</span></th><th><span data-i18n="Eingeplant">Eingeplant</span></th><th><span data-i18n="Gestartet">Gestartet</span></th><th><span data-i18n="Abgeschlossen / Hinweis">Abgeschlossen / Hinweis</span></th></tr></thead><tbody id="automation-job-list"></tbody></table></div>
+          <p class="data-note" id="automation-job-empty" hidden><span data-i18n="Es liegen noch keine Hintergrundjobs vor.">Es liegen noch keine Hintergrundjobs vor.</span></p>
         </section>
         <section class="transactions-panel report-panel">
-          <div class="section-heading transactions-title"><div><p class="eyebrow">SYNCHRONISATION</p><h2>Wallet-Status</h2></div></div>
-          <div class="table-wrap"><table><thead><tr><th>Wallet</th><th>Netzwerk</th><th>Letzter Sync</th><th>Status</th><th>Import</th><th>Hinweis</th></tr></thead><tbody id="wallet-status-list"></tbody></table></div>
+          <div class="section-heading transactions-title"><div><p class="eyebrow"><span data-i18n="SYNCHRONISATION">SYNCHRONISATION</span></p><h2><span data-i18n="Wallet-Status">Wallet-Status</span></h2></div></div>
+          <div class="table-wrap"><table><thead><tr><th><span data-i18n="Wallet">Wallet</span></th><th><span data-i18n="Netzwerk">Netzwerk</span></th><th><span data-i18n="Letzter Sync">Letzter Sync</span></th><th><span data-i18n="Status">Status</span></th><th><span data-i18n="Import">Import</span></th><th><span data-i18n="Hinweis">Hinweis</span></th></tr></thead><tbody id="wallet-status-list"></tbody></table></div>
         </section>
         <section class="transactions-panel report-panel">
-          <div class="section-heading transactions-title"><div><p class="eyebrow">SICHERUNGEN</p><h2>Wiederherstellbare Backups</h2></div></div>
-          <div class="table-wrap"><table><thead><tr><th>Datei</th><th>Erstellt</th><th>Größe</th><th>Aktion</th></tr></thead><tbody id="backup-list"></tbody></table></div>
-          <p class="data-note">Eine Wiederherstellung ersetzt die aktuelle Datenbank, beendet den Container und startet ihn über Docker neu.</p>
+          <div class="section-heading transactions-title"><div><p class="eyebrow"><span data-i18n="SICHERUNGEN">SICHERUNGEN</span></p><h2><span data-i18n="Wiederherstellbare Backups">Wiederherstellbare Backups</span></h2></div></div>
+          <div class="table-wrap"><table><thead><tr><th><span data-i18n="Datei">Datei</span></th><th><span data-i18n="Erstellt">Erstellt</span></th><th><span data-i18n="Größe">Größe</span></th><th><span data-i18n="Aktion">Aktion</span></th></tr></thead><tbody id="backup-list"></tbody></table></div>
+          <p class="data-note"><span data-i18n="Eine Wiederherstellung ersetzt die aktuelle Datenbank, beendet den Container und startet ihn über Docker neu.">Eine Wiederherstellung ersetzt die aktuelle Datenbank, beendet den Container und startet ihn über Docker neu.</span></p>
         </section>
         <section class="transactions-panel report-panel danger-panel" id="daten-reset">
           <div class="section-heading transactions-title">
-            <div><p class="eyebrow">GEFAHRENBEREICH</p><h2>Alle lokalen Daten zurücksetzen</h2></div>
-            <button class="button button-danger" id="open-data-reset" type="button">Alle Daten zurücksetzen</button>
+            <div><p class="eyebrow"><span data-i18n="GEFAHRENBEREICH">GEFAHRENBEREICH</span></p><h2><span data-i18n="Alle lokalen Daten zurücksetzen">Alle lokalen Daten zurücksetzen</span></h2></div>
+            <button class="button button-danger" id="open-data-reset" type="button"><span data-i18n="Alle Daten zurücksetzen">Alle Daten zurücksetzen</span></button>
           </div>
-          <p class="data-note">Löscht Wallets, Börsenverbindungen, Buchungen, Kurse, Steuer-Snapshots, Benachrichtigungen, lokale Nachweise, gespeicherte Einstellungen und lokale Trade-Republic-Sitzungen. Bestehende Backups bleiben erhalten; Umgebungsvariablen des Containers bleiben unverändert.</p>
+          <p class="data-note"><span data-i18n="Löscht Wallets, Börsenverbindungen, Buchungen, Kurse, Steuer-Snapshots, Benachrichtigungen, lokale Nachweise, gespeicherte Einstellungen und lokale Trade-Republic-Sitzungen. Bestehende Backups bleiben erhalten; Umgebungsvariablen des Containers bleiben unverändert.">Löscht Wallets, Börsenverbindungen, Buchungen, Kurse, Steuer-Snapshots, Benachrichtigungen, lokale Nachweise, gespeicherte Einstellungen und lokale Trade-Republic-Sitzungen. Bestehende Backups bleiben erhalten; Umgebungsvariablen des Containers bleiben unverändert.</span></p>
         </section>
       </main>
     </div>
     <dialog id="data-reset-dialog" aria-labelledby="data-reset-title">
       <form id="data-reset-form">
-        <div class="modal-head"><div><p class="eyebrow">NICHT RÜCKGÄNGIG ZU MACHEN</p><h2 id="data-reset-title">Alle Daten löschen?</h2></div><button class="modal-close" id="close-data-reset" type="button" aria-label="Dialog schließen">×</button></div>
-        <p class="modal-copy">Die aktive lokale Datenbank wird geleert und der Container neu gestartet. Backups werden nicht gelöscht. Gib zur Bestätigung <strong>ALLE DATEN LÖSCHEN</strong> ein.</p>
-        <label><span>Bestätigung</span><input id="data-reset-confirmation" autocomplete="off" spellcheck="false" required /></label>
+        <div class="modal-head"><div><p class="eyebrow"><span data-i18n="NICHT RÜCKGÄNGIG ZU MACHEN">NICHT RÜCKGÄNGIG ZU MACHEN</span></p><h2 id="data-reset-title"><span data-i18n="Alle Daten löschen?">Alle Daten löschen?</span></h2></div><button class="modal-close" id="close-data-reset" type="button" aria-label="Dialog schließen" data-i18n-aria-label="Dialog schließen">×</button></div>
+        <p class="modal-copy"><span data-i18n="Die aktive lokale Datenbank wird geleert und der Container neu gestartet. Backups werden nicht gelöscht. Gib zur Bestätigung">Die aktive lokale Datenbank wird geleert und der Container neu gestartet. Backups werden nicht gelöscht. Gib zur Bestätigung</span> <strong><span data-i18n="ALLE DATEN LÖSCHEN">ALLE DATEN LÖSCHEN</span></strong> ein.</p>
+        <label><span><span data-i18n="Bestätigung">Bestätigung</span></span><input id="data-reset-confirmation" autocomplete="off" spellcheck="false" required /></label>
         <p id="data-reset-error" class="form-error" role="alert" hidden></p>
-        <div class="modal-actions"><button id="cancel-data-reset" class="button button-secondary" type="button">Abbrechen</button><button id="submit-data-reset" class="button button-danger" type="submit" disabled>Endgültig zurücksetzen</button></div>
+        <div class="modal-actions"><button id="cancel-data-reset" class="button button-secondary" type="button"><span data-i18n="Abbrechen">Abbrechen</span></button><button id="submit-data-reset" class="button button-danger" type="submit" disabled><span data-i18n="Endgültig zurücksetzen">Endgültig zurücksetzen</span></button></div>
       </form>
     </dialog>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

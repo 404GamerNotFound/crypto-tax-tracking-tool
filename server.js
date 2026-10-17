@@ -821,6 +821,7 @@ CREATE TABLE IF NOT EXISTS price_provider_cooldowns (
 
 const app = express();
 app.disable("x-powered-by");
+require("./lib/i18n").registerI18n(app);
 app.use((_request, response, next) => { response.set("X-Frame-Options", "DENY"); response.set("Referrer-Policy", "no-referrer"); next(); });
 app.use("/api", (_request, response, next) => {
   response.set("Cache-Control", "no-store");

@@ -1,6 +1,6 @@
 const state = { portfolio: null, exchange: null };
 const { api, el, exchangeProviderLabel, toast } = window.CryptoBuchUI;
-const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
+const dateTime = new Intl.DateTimeFormat(window.CryptoBuchI18n.locale, { dateStyle: "medium", timeStyle: "short" });
 
 function chainInfo(chain) {
   return state.portfolio?.chains?.[chain] || { name: chain, asset: chain, icon: chain.slice(0, 1) };
@@ -28,8 +28,8 @@ function xpubAddressTypeFor(value) {
 
 function walletName(wallet) {
   if (wallet.label) return wallet.label;
-  if (wallet.source_type === "xpub") return "Bitcoin xPub";
-  if (wallet.source_type === "stake") return "Cardano Stake-Adresse";
+  if (wallet.source_type === "xpub") return window.CryptoBuchI18n.t("Bitcoin xPub");
+  if (wallet.source_type === "stake") return window.CryptoBuchI18n.t("Cardano Stake-Adresse");
   return `${chainInfo(wallet.chain).name}-Wallet`;
 }
 
@@ -47,9 +47,9 @@ function renderWallet(wallet) {
   title.textContent = walletName(wallet);
   const meta = document.createElement("p");
   meta.textContent = wallet.source_type === "xpub"
-    ? `Bitcoin-xPub · ${shorten(wallet.address)}`
+    ? window.CryptoBuchI18n.t("Bitcoin-xPub · {p0}", { p0: shorten(wallet.address) })
     : wallet.source_type === "stake"
-      ? `Cardano Stake-Adresse · ${shorten(wallet.address)}`
+      ? window.CryptoBuchI18n.t("Cardano Stake-Adresse · {p0}", { p0: shorten(wallet.address) })
       : `${chain.name} · ${shorten(wallet.address)}`;
   copy.append(title, meta);
   if (wallet.group_name || (wallet.tags || []).length) {
@@ -64,9 +64,9 @@ function renderWallet(wallet) {
   sync.className = "wallet-page-sync";
   const syncLabel = document.createElement("span");
   syncLabel.className = "card-label";
-  syncLabel.textContent = "LETZTE SYNCHRONISIERUNG";
+  syncLabel.textContent = window.CryptoBuchI18n.t("LETZTE SYNCHRONISIERUNG");
   const syncDate = document.createElement("strong");
-  syncDate.textContent = wallet.last_synced_at ? dateTime.format(new Date(`${wallet.last_synced_at}Z`)) : "Noch nicht synchronisiert";
+  syncDate.textContent = wallet.last_synced_at ? dateTime.format(new Date(`${wallet.last_synced_at}Z`)) : window.CryptoBuchI18n.t("Noch nicht synchronisiert");
   sync.append(syncLabel, syncDate);
 
   const actions = document.createElement("div");
@@ -74,19 +74,19 @@ function renderWallet(wallet) {
   const details = document.createElement("a");
   details.className = "button button-secondary button-small";
   details.href = `/asset.html?chain=${encodeURIComponent(wallet.chain)}`;
-  details.textContent = `${chain.asset} ansehen`;
+  details.textContent = window.CryptoBuchI18n.t("{p0} ansehen", { p0: chain.asset });
   const refresh = document.createElement("button");
   refresh.className = "button button-primary button-small";
-  refresh.textContent = "Synchronisieren";
+  refresh.textContent = window.CryptoBuchI18n.t("Synchronisieren");
   refresh.addEventListener("click", () => syncWallet(wallet, refresh));
   const qr = document.createElement("button");
   qr.className = "button button-secondary button-small";
-  qr.textContent = "QR";
-  qr.title = "Wallet-Adresse als QR-Code anzeigen";
+  qr.textContent = window.CryptoBuchI18n.t("QR");
+  qr.title = window.CryptoBuchI18n.t("Wallet-Adresse als QR-Code anzeigen");
   qr.addEventListener("click", () => openWalletQr(wallet));
   const remove = document.createElement("button");
   remove.className = "text-button wallet-remove";
-  remove.textContent = "Entfernen";
+  remove.textContent = window.CryptoBuchI18n.t("Entfernen");
   remove.addEventListener("click", () => deleteWallet(wallet));
   actions.append(details, refresh, qr, remove);
   item.append(identity, sync, actions);
@@ -94,12 +94,12 @@ function renderWallet(wallet) {
 }
 
 function exchangeName(connection) {
-  return connection.label || exchangeProviderLabel(connection.provider, "Börsenkonto");
+  return connection.label || exchangeProviderLabel(connection.provider, window.CryptoBuchI18n.t("Börsenkonto"));
 }
 
 function exchangeSourceLabel(connection) {
-  if (connection.provider === "trade_republic") return connection.importMode === "csv" ? "Trade Republic · lokaler CSV-Import" : "Trade Republic · inoffiziell · Read-only";
-  return `${exchangeProviderLabel(connection.provider)} · Read-only`;
+  if (connection.provider === "trade_republic") return connection.importMode === "csv" ? window.CryptoBuchI18n.t("Trade Republic · lokaler CSV-Import") : window.CryptoBuchI18n.t("Trade Republic · inoffiziell · Read-only");
+  return window.CryptoBuchI18n.t("{p0} · Read-only", { p0: exchangeProviderLabel(connection.provider) });
 }
 
 function renderExchange(connection) {
@@ -109,12 +109,12 @@ function renderExchange(connection) {
   identity.className = "wallet-page-identity";
   const icon = document.createElement("span");
   icon.className = `exchange-source-icon ${connection.provider || ""}`;
-  icon.textContent = connection.provider === "binance" ? "B" : ["coinbase", "coinbase_advanced"].includes(connection.provider) ? "CB" : connection.provider === "bitvavo" ? "V" : connection.provider === "etoro" ? "eT" : connection.provider === "bsdex" ? "BS" : "TR";
+  icon.textContent = connection.provider === "binance" ? "B" : ["coinbase", "coinbase_advanced"].includes(connection.provider) ? window.CryptoBuchI18n.t("CB") : connection.provider === "bitvavo" ? "V" : connection.provider === "etoro" ? "eT" : connection.provider === "bsdex" ? window.CryptoBuchI18n.t("BS") : window.CryptoBuchI18n.t("TR");
   const copy = document.createElement("div");
   const title = document.createElement("h3");
   title.textContent = exchangeName(connection);
   const meta = document.createElement("p");
-  meta.textContent = `${exchangeSourceLabel(connection)} · eigenes Börsenkonto`;
+  meta.textContent = window.CryptoBuchI18n.t("{p0} · eigenes Börsenkonto", { p0: exchangeSourceLabel(connection) });
   copy.append(title, meta);
   identity.append(icon, copy);
 
@@ -122,23 +122,23 @@ function renderExchange(connection) {
   sync.className = "wallet-page-sync";
   const syncLabel = document.createElement("span");
   syncLabel.className = "card-label";
-  syncLabel.textContent = "LETZTER IMPORT";
+  syncLabel.textContent = window.CryptoBuchI18n.t("LETZTER IMPORT");
   const syncDate = document.createElement("strong");
-  syncDate.textContent = connection.lastSyncedAt ? dateTime.format(new Date(`${connection.lastSyncedAt}Z`)) : connection.importMode === "csv" ? "Noch kein CSV-Import" : "Noch nicht synchronisiert";
+  syncDate.textContent = connection.lastSyncedAt ? dateTime.format(new Date(`${connection.lastSyncedAt}Z`)) : connection.importMode === "csv" ? window.CryptoBuchI18n.t("Noch kein CSV-Import") : window.CryptoBuchI18n.t("Noch nicht synchronisiert");
   sync.append(syncLabel, syncDate);
   if (connection.history) {
     const history = document.createElement("small");
-    if (connection.history.status === "complete") history.textContent = "Börsenhistorie vollständig importiert";
-    else if (connection.history.lastError) history.textContent = "Historie prüfen";
+    if (connection.history.status === "complete") history.textContent = window.CryptoBuchI18n.t("Börsenhistorie vollständig importiert");
+    else if (connection.history.lastError) history.textContent = window.CryptoBuchI18n.t("Historie prüfen");
     else {
       const percent = connection.history.progressTotal ? Math.round((connection.history.progressCurrent / connection.history.progressTotal) * 100) : 0;
-      history.textContent = `Historie lädt automatisch · ${percent} %`;
+      history.textContent = window.CryptoBuchI18n.t("Historie lädt automatisch · {p0} %", { p0: percent });
     }
     sync.append(history);
   }
   if (connection.live?.enabled) {
     const live = document.createElement("small");
-    live.textContent = connection.live.status === "connected" ? "BSDEX-Live-Abgleich verbunden" : connection.live.status === "reconnecting" ? "BSDEX-Live-Abgleich verbindet erneut" : "BSDEX-Live-Abgleich wird hergestellt";
+    live.textContent = connection.live.status === "connected" ? window.CryptoBuchI18n.t("BSDEX-Live-Abgleich verbunden") : connection.live.status === "reconnecting" ? window.CryptoBuchI18n.t("BSDEX-Live-Abgleich verbindet erneut") : window.CryptoBuchI18n.t("BSDEX-Live-Abgleich wird hergestellt");
     sync.append(live);
   }
 
@@ -147,18 +147,18 @@ function renderExchange(connection) {
   const details = document.createElement("a");
   details.className = "button button-secondary button-small";
   details.href = `/exchange.html?id=${encodeURIComponent(connection.id)}`;
-  details.textContent = "Börse öffnen";
+  details.textContent = window.CryptoBuchI18n.t("Börse öffnen");
   const needsLogin = connection.provider === "trade_republic" && connection.syncAvailable === false;
   const refresh = document.createElement(connection.importMode === "csv" || needsLogin ? "a" : "button");
   refresh.className = "button button-primary button-small";
-  refresh.textContent = connection.importMode === "csv" ? "CSV importieren" : needsLogin ? "Web-Anmeldung abschließen" : "Synchronisieren";
+  refresh.textContent = connection.importMode === "csv" ? window.CryptoBuchI18n.t("CSV importieren") : needsLogin ? window.CryptoBuchI18n.t("Web-Anmeldung abschließen") : window.CryptoBuchI18n.t("Synchronisieren");
   if (connection.importMode === "csv") refresh.href = "/quality.html#csv-import-form";
   else if (needsLogin) refresh.href = "/quality.html#exchange-connection-list";
   else refresh.addEventListener("click", () => syncExchange(connection, refresh));
   const manage = document.createElement("a");
   manage.className = "text-button";
   manage.href = "/quality.html#exchange-connection-form";
-  manage.textContent = "Verwalten";
+  manage.textContent = window.CryptoBuchI18n.t("Verwalten");
   actions.append(details, refresh, manage);
   item.append(identity, sync, actions);
   return item;
@@ -167,9 +167,9 @@ function renderExchange(connection) {
 function render() {
   const wallets = state.portfolio?.wallets || [];
   const exchanges = state.exchange?.connections || [];
-  el("wallet-count").textContent = wallets.length.toLocaleString("de-DE");
-  el("exchange-count").textContent = exchanges.length.toLocaleString("de-DE");
-  el("wallet-status").textContent = `${wallets.length.toLocaleString("de-DE")} Wallet${wallets.length === 1 ? "" : "s"} · ${exchanges.length.toLocaleString("de-DE")} Börse${exchanges.length === 1 ? "" : "n"}`;
+  el("wallet-count").textContent = wallets.length.toLocaleString(window.CryptoBuchI18n.locale);
+  el("exchange-count").textContent = exchanges.length.toLocaleString(window.CryptoBuchI18n.locale);
+  el("wallet-status").textContent = window.CryptoBuchI18n.t("{p0} Wallet{p1} · {p2} Börse{p3}", { p0: wallets.length.toLocaleString(window.CryptoBuchI18n.locale), p1: wallets.length === 1 ? "" : "s", p2: exchanges.length.toLocaleString(window.CryptoBuchI18n.locale), p3: exchanges.length === 1 ? "" : "n" });
   const list = el("wallet-list");
   list.replaceChildren();
   for (const wallet of wallets) list.append(renderWallet(wallet));
@@ -205,29 +205,29 @@ function updateWalletFields() {
   el("cardano-source-fields").hidden = !cardano;
   el("xpub-format-wrap").hidden = !xpub;
   el("xpub-notice").hidden = !xpub;
-  el("wallet-identifier-label").textContent = xpub ? "Bitcoin-xPub" : stake ? "Cardano Stake-Adresse" : "Öffentliche Wallet-Adresse";
-  el("wallet-address").placeholder = xpub ? "xpub6…" : stake ? "stake1…" : config.addressPlaceholder || "Öffentliche Adresse";
+  el("wallet-identifier-label").textContent = xpub ? window.CryptoBuchI18n.t("Bitcoin-xPub") : stake ? window.CryptoBuchI18n.t("Cardano Stake-Adresse") : window.CryptoBuchI18n.t("Öffentliche Wallet-Adresse");
+  el("wallet-address").placeholder = xpub ? "xpub6…" : stake ? "stake1…" : config.addressPlaceholder || window.CryptoBuchI18n.t("Öffentliche Adresse");
   el("address-hint").textContent = xpub
-    ? "xPub, yPub und zPub werden erkannt. Leerzeichen und Zeilenumbrüche aus dem Einfügen werden automatisch entfernt."
+    ? window.CryptoBuchI18n.t("xPub, yPub und zPub werden erkannt. Leerzeichen und Zeilenumbrüche aus dem Einfügen werden automatisch entfernt.")
     : stake
-      ? "Die Stake-Adresse fasst die zugehörigen Cardano-Zahlungsadressen zusammen. Deren gesamte über Blockfrost sichtbare Transaktionshistorie wird importiert."
-    : config.addressHint || `Öffentliche ${config.name}-Adresse eingeben.`;
+      ? window.CryptoBuchI18n.t("Die Stake-Adresse fasst die zugehörigen Cardano-Zahlungsadressen zusammen. Deren gesamte über Blockfrost sichtbare Transaktionshistorie wird importiert.")
+    : config.addressHint || window.CryptoBuchI18n.t("Öffentliche {p0}-Adresse eingeben.", { p0: config.name });
 }
 
 async function loadPortfolio({ quiet = false } = {}) {
   try {
-    if (!quiet) el("wallet-status").textContent = "Bestände werden geladen …";
+    if (!quiet) el("wallet-status").textContent = window.CryptoBuchI18n.t("Bestände werden geladen …");
     const [portfolio, exchange] = await Promise.all([api("/api/portfolio"), api("/api/exchange-connections")]);
     state.portfolio = portfolio;
     state.exchange = exchange;
     render();
   } catch (error) {
     toast(error.message, "error");
-    el("wallet-status").textContent = "Daten momentan nicht verfügbar";
+    el("wallet-status").textContent = window.CryptoBuchI18n.t("Daten momentan nicht verfügbar");
   }
 }
 
-function setBusy(button, busy, text = "Bitte warten …") {
+function setBusy(button, busy, text = window.CryptoBuchI18n.t("Bitte warten …")) {
   if (busy) {
     button.dataset.label = button.textContent;
     button.disabled = true;
@@ -240,12 +240,12 @@ function setBusy(button, busy, text = "Bitte warten …") {
 
 async function syncWallet(wallet, button) {
   try {
-    setBusy(button, true, "Synchronisiert …");
+    setBusy(button, true, window.CryptoBuchI18n.t("Synchronisiert …"));
     const queued = await api("/api/jobs/sync", { method: "POST", body: JSON.stringify({ walletId: wallet.id }) });
     const result = await waitForJob(queued.jobs[0].id);
     await loadPortfolio({ quiet: true });
-    const notice = result.xpubCapped ? " Die xPub-Suche erreichte die eingestellte Sicherheitsgrenze." : "";
-    toast(`${result.imported.toLocaleString("de-DE")} Transaktionen synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}.${notice}`);
+    const notice = result.xpubCapped ? window.CryptoBuchI18n.t(" Die xPub-Suche erreichte die eingestellte Sicherheitsgrenze.") : "";
+    toast(window.CryptoBuchI18n.t("{p0} Transaktionen synchronisiert{p1}.{p2}", { p0: result.imported.toLocaleString(window.CryptoBuchI18n.locale), p1: result.limited ? window.CryptoBuchI18n.t(" (Importlimit aktiv)") : "", p2: notice }));
   } catch (error) {
     toast(error.message, "error");
   } finally {
@@ -255,11 +255,11 @@ async function syncWallet(wallet, button) {
 
 async function syncExchange(connection, button) {
   try {
-    setBusy(button, true, "Synchronisiert …");
+    setBusy(button, true, window.CryptoBuchI18n.t("Synchronisiert …"));
     const queued = await api(`/api/exchange-connections/${connection.id}/sync`, { method: "POST" });
     const result = await waitForJob(queued.job.id);
     await loadPortfolio({ quiet: true });
-    toast(`${(result.imported || 0).toLocaleString("de-DE")} Börsenbuchungen synchronisiert${result.limited ? " (Importlimit aktiv)" : ""}${result.historyInProgress ? " Die Historie wird automatisch weiter nachgeladen." : "."}`);
+    toast(window.CryptoBuchI18n.t("{p0} Börsenbuchungen synchronisiert{p1}{p2}", { p0: (result.imported || 0).toLocaleString(window.CryptoBuchI18n.locale), p1: result.limited ? window.CryptoBuchI18n.t(" (Importlimit aktiv)") : "", p2: result.historyInProgress ? window.CryptoBuchI18n.t(" Die Historie wird automatisch weiter nachgeladen.") : "." }));
   } catch (error) {
     toast(error.message, "error");
   } finally {
@@ -271,10 +271,10 @@ async function waitForJob(id) {
   for (let attempt = 0; attempt < 240; attempt += 1) {
     const job = await api(`/api/jobs/${id}`);
     if (job.status === "success") return job.result || {};
-    if (job.status === "error") throw new Error(job.error_message || "Synchronisierung fehlgeschlagen.");
+    if (job.status === "error") throw new Error(job.error_message || window.CryptoBuchI18n.t("Synchronisierung fehlgeschlagen."));
     await new Promise((resolve) => setTimeout(resolve, 700));
   }
-  throw new Error("Synchronisierung benötigt länger als erwartet.");
+  throw new Error(window.CryptoBuchI18n.t("Synchronisierung benötigt länger als erwartet."));
 }
 
 async function syncAll() {
@@ -282,7 +282,7 @@ async function syncAll() {
   const exchanges = (state.exchange?.connections || []).filter((connection) => connection.syncAvailable !== false);
   if (!wallets.length && !exchanges.length) return openWalletModal();
   const button = el("refresh-all");
-  setBusy(button, true, "Synchronisiert …");
+  setBusy(button, true, window.CryptoBuchI18n.t("Synchronisiert …"));
   try {
     const jobs = [];
     if (wallets.length) {
@@ -293,7 +293,7 @@ async function syncAll() {
     jobs.push(...exchangeJobs.map((entry) => entry.job));
     const results = await Promise.all(jobs.map((job) => waitForJob(job.id)));
     await loadPortfolio({ quiet: true });
-    toast(`${results.reduce((sum, item) => sum + item.imported, 0).toLocaleString("de-DE")} Transaktionen aktualisiert.`);
+    toast(window.CryptoBuchI18n.t("{p0} Transaktionen aktualisiert.", { p0: results.reduce((sum, item) => sum + item.imported, 0).toLocaleString(window.CryptoBuchI18n.locale) }));
   } catch (error) {
     toast(error.message, "error");
   } finally {
@@ -302,11 +302,11 @@ async function syncAll() {
 }
 
 async function deleteWallet(wallet) {
-  if (!confirm(`„${walletName(wallet)}“ und alle zugehörigen Transaktionen wirklich entfernen?`)) return;
+  if (!confirm(window.CryptoBuchI18n.t("„{p0}“ und alle zugehörigen Transaktionen wirklich entfernen?", { p0: walletName(wallet) }))) return;
   try {
     await api(`/api/wallets/${wallet.id}`, { method: "DELETE" });
     await loadPortfolio({ quiet: true });
-    toast("Wallet und zugehörige Transaktionen wurden entfernt.");
+    toast(window.CryptoBuchI18n.t("Wallet und zugehörige Transaktionen wurden entfernt."));
   } catch (error) {
     toast(error.message, "error");
   }
@@ -331,7 +331,7 @@ async function openWalletQr(wallet) {
     const result = await api(`/api/wallets/${wallet.id}/qr`);
     el("wallet-qr-image").src = result.dataUrl;
     el("wallet-qr-address").textContent = result.address;
-    el("qr-modal-title").textContent = `${walletName(wallet)} · QR-Code`;
+    el("qr-modal-title").textContent = window.CryptoBuchI18n.t("{p0} · QR-Code", { p0: walletName(wallet) });
     el("qr-modal").showModal();
   } catch (error) { toast(error.message, "error"); }
 }
@@ -342,8 +342,8 @@ function updateLedgerFields() {
   if (bitcoin) {
     const wholeAccount = el("ledger-btc-source").value === "xpub";
     el("ledger-btc-source-help").textContent = wholeAccount
-      ? "Erfasst Empfangs- und Wechselgeldadressen bis zum konfigurierten Gap-Limit. Der xPub ist öffentlich, aber datenschutzsensibel."
-      : "Nur die auf dem Ledger angezeigte Empfangsadresse wird importiert.";
+      ? window.CryptoBuchI18n.t("Erfasst Empfangs- und Wechselgeldadressen bis zum konfigurierten Gap-Limit. Der xPub ist öffentlich, aber datenschutzsensibel.")
+      : window.CryptoBuchI18n.t("Nur die auf dem Ledger angezeigte Empfangsadresse wird importiert.");
   }
 }
 
@@ -353,8 +353,8 @@ async function loadLedgerBridge() {
   window.__cryptoBuchLedgerLoading = new Promise((resolve, reject) => {
     const script = document.createElement("script");
     script.src = "/ledger-connect.js?v=20260922-2";
-    script.onload = () => window.CryptoBuchLedger ? resolve(window.CryptoBuchLedger) : reject(new Error("Ledger-Modul konnte nicht geladen werden."));
-    script.onerror = () => reject(new Error("Ledger-Modul konnte nicht geladen werden."));
+    script.onload = () => window.CryptoBuchLedger ? resolve(window.CryptoBuchLedger) : reject(new Error(window.CryptoBuchI18n.t("Ledger-Modul konnte nicht geladen werden.")));
+    script.onerror = () => reject(new Error(window.CryptoBuchI18n.t("Ledger-Modul konnte nicht geladen werden.")));
     document.head.append(script);
   });
   return window.__cryptoBuchLedgerLoading;
@@ -376,10 +376,10 @@ function closeLedgerModal() {
 
 function ledgerSupportError() {
   if (!window.isSecureContext && !["localhost", "127.0.0.1"].includes(window.location.hostname)) {
-    return "Die direkte Ledger-Verbindung benötigt HTTPS. Öffne CryptoBuch über eine TLS-gesicherte Portainer-URL.";
+    return window.CryptoBuchI18n.t("Die direkte Ledger-Verbindung benötigt HTTPS. Öffne CryptoBuch über eine TLS-gesicherte Portainer-URL.");
   }
   if ((!navigator.hid && !navigator.usb)) {
-    return "Dieser Browser stellt weder WebHID noch WebUSB bereit. Bitte nutze eine aktuelle Chrome- oder Chromium-Version.";
+    return window.CryptoBuchI18n.t("Dieser Browser stellt weder WebHID noch WebUSB bereit. Bitte nutze eine aktuelle Chrome- oder Chromium-Version.");
   }
   return null;
 }
@@ -412,7 +412,7 @@ el("wallet-form").addEventListener("submit", async (event) => {
   const formError = el("wallet-form-error");
   formError.hidden = true;
   try {
-    setBusy(save, true, "Speichert …");
+    setBusy(save, true, window.CryptoBuchI18n.t("Speichert …"));
     const rawIdentifier = String(form.get("address") || "");
     const identifier = isExtendedPublicKey(rawIdentifier) ? normalizeExtendedPublicKey(rawIdentifier) : rawIdentifier.trim();
     const detectedXpub = isExtendedPublicKey(identifier);
@@ -434,9 +434,9 @@ el("wallet-form").addEventListener("submit", async (event) => {
     const result = await api(`/api/wallets/${wallet.id}/sync`, { method: "POST" });
     closeWalletModal();
     await loadPortfolio({ quiet: true });
-    toast(`Wallet gespeichert · ${result.imported.toLocaleString("de-DE")} Transaktionen importiert.`);
+    toast(window.CryptoBuchI18n.t("Wallet gespeichert · {p0} Transaktionen importiert.", { p0: result.imported.toLocaleString(window.CryptoBuchI18n.locale) }));
   } catch (error) {
-    formError.textContent = error.message;
+    formError.textContent = window.CryptoBuchI18n.message(error.message);
     formError.hidden = false;
   } finally {
     setBusy(save, false);
@@ -458,7 +458,7 @@ el("ledger-form").addEventListener("submit", async (event) => {
   }
   try {
     const form = new FormData(event.currentTarget);
-    setBusy(button, true, "Auf Ledger bestätigen …");
+    setBusy(button, true, window.CryptoBuchI18n.t("Auf Ledger bestätigen …"));
     const bridge = await loadLedgerBridge();
     const requestedChain = String(form.get("chain"));
     const account = await bridge.readPublicAccount({
@@ -468,27 +468,27 @@ el("ledger-form").addEventListener("submit", async (event) => {
       bitcoinSource: String(form.get("bitcoinSource")),
       transport: String(form.get("transport")),
     });
-    result.textContent = `Auf dem Ledger bestätigt: ${account.address} (${account.derivationPath})`;
+    result.textContent = window.CryptoBuchI18n.t("Auf dem Ledger bestätigt: {p0} ({p1})", { p0: account.address, p1: account.derivationPath });
     result.hidden = false;
-    setBusy(button, true, "Wallet wird importiert …");
+    setBusy(button, true, window.CryptoBuchI18n.t("Wallet wird importiert …"));
     const wallet = await api("/api/wallets", {
       method: "POST",
       body: JSON.stringify({
         chain: requestedChain,
-        label: `Ledger ${requestedChain} · Konto ${form.get("accountIndex")}`,
+        label: window.CryptoBuchI18n.t("Ledger {p0} · Konto {p1}", { p0: requestedChain, p1: form.get("accountIndex") }),
         address: account.address,
         sourceType: account.sourceType || "address",
         xpubAddressType: account.xpubAddressType,
-        groupName: "Ledger",
-        tags: ["Hardware-Wallet"],
+        groupName: window.CryptoBuchI18n.t("Ledger"),
+        tags: [window.CryptoBuchI18n.t("Hardware-Wallet")],
       }),
     });
     const syncResult = await api(`/api/wallets/${wallet.id}/sync`, { method: "POST" });
     closeLedgerModal();
     await loadPortfolio({ quiet: true });
-    toast(`Ledger-Adresse importiert · ${syncResult.imported.toLocaleString("de-DE")} Transaktionen synchronisiert.`);
+    toast(window.CryptoBuchI18n.t("Ledger-Adresse importiert · {p0} Transaktionen synchronisiert.", { p0: syncResult.imported.toLocaleString(window.CryptoBuchI18n.locale) }));
   } catch (requestError) {
-    error.textContent = requestError.message || "Ledger-Verbindung konnte nicht hergestellt werden.";
+    error.textContent = window.CryptoBuchI18n.message(requestError.message) || window.CryptoBuchI18n.t("Ledger-Verbindung konnte nicht hergestellt werden.");
     error.hidden = false;
   } finally {
     setBusy(button, false);

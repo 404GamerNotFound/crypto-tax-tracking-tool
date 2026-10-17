@@ -2,22 +2,25 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CryptoBuch · Anmelden</title>
+  <title data-i18n="CryptoBuch · Anmelden">CryptoBuch · Anmelden</title>
   <link rel="icon" href="/images/brand/favicon-32.png" />
   <link rel="stylesheet" href="/styles.css?v=20261004-auth-1" />
-</head>
+    <script src="/locales/catalog.js" defer></script>
+    <script src="/i18n-core.js" defer></script>
+    <script src="/i18n.js" defer></script>
+  </head>
 <body>
   <main class="login-main">
     <a class="brand" href="/"><img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" /><span>CryptoBuch</span></a>
     <section class="settings-card">
-      <p class="eyebrow">DEIN LOKALES PORTFOLIO</p><h1>Anmelden</h1>
-      <p>Gib das Passwort deines CryptoBuch-Servers ein.</p>
+      <p class="eyebrow"><span data-i18n="DEIN LOKALES PORTFOLIO">DEIN LOKALES PORTFOLIO</span></p><h1><span data-i18n="Anmelden">Anmelden</span></h1>
+      <p><span data-i18n="Gib das Passwort deines CryptoBuch-Servers ein.">Gib das Passwort deines CryptoBuch-Servers ein.</span></p>
       <form id="login-form">
-        <label>Passwort<input id="login-password" name="password" type="password" autocomplete="current-password" maxlength="1024" required autofocus /></label>
+        <label><span data-i18n="Passwort">Passwort</span><input id="login-password" name="password" type="password" autocomplete="current-password" maxlength="1024" required autofocus /></label>
         <p id="login-error" role="alert" hidden></p>
-        <button class="button button-primary" type="submit">Anmelden</button>
+        <button class="button button-primary" type="submit"><span data-i18n="Anmelden">Anmelden</span></button>
       </form>
-      <p id="auth-transport-note" class="muted" hidden>Diese Verbindung verwendet HTTP. Passwort und Daten werden unverschlüsselt übertragen. Verwende HTTPS oder ein vertrauenswürdiges privates Netz.</p>
+      <p id="auth-transport-note" class="muted" hidden><span data-i18n="Diese Verbindung verwendet HTTP. Passwort und Daten werden unverschlüsselt übertragen. Verwende HTTPS oder ein vertrauenswürdiges privates Netz.">Diese Verbindung verwendet HTTP. Passwort und Daten werden unverschlüsselt übertragen. Verwende HTTPS oder ein vertrauenswürdiges privates Netz.</span></p>
     </section>
   </main>
   <script src="/login.js?v=20261004-auth-1" defer></script>

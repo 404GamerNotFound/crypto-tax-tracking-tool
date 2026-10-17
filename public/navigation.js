@@ -6,13 +6,13 @@
   // active state stays meaningful while browsing a coin, an exchange, or a
   // data-quality subpage.
   const entries = Object.freeze([
-    { href: "/", label: "Dashboard" },
-    { href: "/wallets.html", label: "Crypto-Bestände" },
-    { href: "/quality.html", label: "Datenqualität" },
-    { href: "/tax.html", label: "Steuerzentrum" },
-    { href: "/maintenance.html", label: "Betrieb" },
-    { href: "/settings.html", label: "Einstellungen" },
-    { href: "/api-docs.html", label: "API" },
+    { href: "/", label: window.CryptoBuchI18n.t("Dashboard") },
+    { href: "/wallets.html", label: window.CryptoBuchI18n.t("Crypto-Bestände") },
+    { href: "/quality.html", label: window.CryptoBuchI18n.t("Datenqualität") },
+    { href: "/tax.html", label: window.CryptoBuchI18n.t("Steuerzentrum") },
+    { href: "/maintenance.html", label: window.CryptoBuchI18n.t("Betrieb") },
+    { href: "/settings.html", label: window.CryptoBuchI18n.t("Einstellungen") },
+    { href: "/api-docs.html", label: window.CryptoBuchI18n.t("API") },
   ]);
 
   const parentPage = Object.freeze({
@@ -32,36 +32,36 @@
   // application-wide header into a multi-level menu.
   const sectionEntries = Object.freeze({
     wallets: Object.freeze([
-      { href: "#wallets", label: "Wallets" },
-      { href: "#boersen", label: "Börsenkonten" },
-      { href: "/#coins", label: "Coins & Auswertung" },
+      { href: "#wallets", label: window.CryptoBuchI18n.t("Wallets") },
+      { href: "#boersen", label: window.CryptoBuchI18n.t("Börsenkonten") },
+      { href: "/#coins", label: window.CryptoBuchI18n.t("Coins & Auswertung") },
     ]),
     quality: Object.freeze([
-      { href: "#qualitaetsueberblick", label: "Überblick" },
-      { href: "/price-fetches.html", label: "Kursdaten" },
-      { href: "#transfers", label: "Transfers" },
-      { href: "#pruefungen", label: "Prüfungen" },
-      { href: "#importe", label: "Importe & Börsen" },
+      { href: "#qualitaetsueberblick", label: window.CryptoBuchI18n.t("Überblick") },
+      { href: "/price-fetches.html", label: window.CryptoBuchI18n.t("Kursdaten") },
+      { href: "#transfers", label: window.CryptoBuchI18n.t("Transfers") },
+      { href: "#pruefungen", label: window.CryptoBuchI18n.t("Prüfungen") },
+      { href: "#importe", label: window.CryptoBuchI18n.t("Importe & Börsen") },
     ]),
     tax: Object.freeze([
-      { href: "#profit-total", label: "Übersicht" },
-      { href: "#sale-simulator", label: "Planung" },
-      { href: "#sales-title", label: "Verkäufe" },
-      { href: "#income-type-filter", label: "Erträge" },
-      { href: "#snapshot-list", label: "Archiv & Exporte" },
+      { href: "#profit-total", label: window.CryptoBuchI18n.t("Übersicht") },
+      { href: "#sale-simulator", label: window.CryptoBuchI18n.t("Planung") },
+      { href: "#sales-title", label: window.CryptoBuchI18n.t("Verkäufe") },
+      { href: "#income-type-filter", label: window.CryptoBuchI18n.t("Erträge") },
+      { href: "#snapshot-list", label: window.CryptoBuchI18n.t("Archiv & Exporte") },
     ]),
     maintenance: Object.freeze([
-      { href: "#betriebsstatus", label: "Status & Backups" },
-      { href: "#updates", label: "Docker-Updates" },
-      { href: "#automatische-laeufe", label: "Automatische Läufe" },
-      { href: "#daten-reset", label: "Daten zurücksetzen" },
+      { href: "#betriebsstatus", label: window.CryptoBuchI18n.t("Status & Backups") },
+      { href: "#updates", label: window.CryptoBuchI18n.t("Docker-Updates") },
+      { href: "#automatische-laeufe", label: window.CryptoBuchI18n.t("Automatische Läufe") },
+      { href: "#daten-reset", label: window.CryptoBuchI18n.t("Daten zurücksetzen") },
     ]),
     settings: Object.freeze([
-      { href: "/settings.html", label: "Passwortschutz" },
-      { href: "/settings-sync.html", label: "Synchronisierung" },
-      { href: "/settings-tax.html", label: "Steuerprofil" },
-      { href: "/settings-prices.html", label: "Preis- & API-Daten" },
-      { href: "/settings-networks.html", label: "Netzwerke" },
+      { href: "/settings.html", label: window.CryptoBuchI18n.t("Passwortschutz") },
+      { href: "/settings-sync.html", label: window.CryptoBuchI18n.t("Synchronisierung") },
+      { href: "/settings-tax.html", label: window.CryptoBuchI18n.t("Steuerprofil") },
+      { href: "/settings-prices.html", label: window.CryptoBuchI18n.t("Preis- & API-Daten") },
+      { href: "/settings-networks.html", label: window.CryptoBuchI18n.t("Netzwerke") },
     ]),
   });
 
@@ -122,14 +122,14 @@ fetch("/api/auth/status", { cache: "no-store" }).then(response => response.json(
   const navigation = document.querySelector("[data-primary-navigation]");
   if (!navigation) return;
   const button = document.createElement("button");
-  button.className = "button button-secondary"; button.textContent = "Abmelden";
+  button.className = "button button-secondary"; button.textContent = window.CryptoBuchI18n.t("Abmelden");
   button.addEventListener("click", async () => {
     button.disabled = true;
     try {
       const response = await fetch("/api/auth/logout", { method: "POST", headers: { "X-CryptoBuch-Request": "1" } });
       if (!response.ok) throw new Error();
       location.replace("/login.html");
-    } catch { button.disabled = false; button.textContent = "Abmelden erneut versuchen"; }
+    } catch { button.disabled = false; button.textContent = window.CryptoBuchI18n.t("Abmelden erneut versuchen"); }
   });
   navigation.append(button);
 }).catch(() => {});

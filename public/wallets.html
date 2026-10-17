@@ -4,70 +4,73 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Crypto-Bestände, Wallets und Börsenverbindungen in CryptoBuch" />
-    <title>CryptoBuch · Crypto-Bestände</title>
+    <title data-i18n="CryptoBuch · Crypto-Bestände">CryptoBuch · Crypto-Bestände</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/styles.css?v=20261004-brand-1" />
+    <script src="/locales/catalog.js" defer></script>
+    <script src="/i18n-core.js" defer></script>
+    <script src="/i18n.js" defer></script>
   </head>
   <body>
     <div class="shell wallet-page-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="CryptoBuch Dashboard">
+        <a class="brand" href="/" aria-label="CryptoBuch Dashboard" data-i18n-aria-label="CryptoBuch Dashboard">
           <img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" />
           <span>CryptoBuch</span>
         </a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
-        <div class="topbar-status" id="wallet-status" aria-live="polite">Bestände werden geladen …</div>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-i18n-aria-label="Hauptnavigation" data-primary-navigation></nav>
+        <div class="topbar-status" id="wallet-status" aria-live="polite"><span data-i18n="Bestände werden geladen …">Bestände werden geladen …</span></div>
       </header>
 
       <main class="wallets-main">
         <section class="page-hero compact-hero" aria-labelledby="wallets-title">
           <div>
-            <p class="eyebrow">DATENQUELLEN</p>
-            <h1 id="wallets-title">Deine <em>Crypto-Bestände.</em></h1>
-            <p>Verwalte öffentliche Wallets und verbundene Börsen getrennt. Wallets bleiben On-Chain-Quellen; Börsen erhalten ein eigenes Buchungskonto.</p>
+            <p class="eyebrow"><span data-i18n="DATENQUELLEN">DATENQUELLEN</span></p>
+            <h1 id="wallets-title"><span data-i18n="Deine">Deine</span> <em><span data-i18n="Crypto-Bestände.">Crypto-Bestände.</span></em></h1>
+            <p><span data-i18n="Verwalte öffentliche Wallets und verbundene Börsen getrennt. Wallets bleiben On-Chain-Quellen; Börsen erhalten ein eigenes Buchungskonto.">Verwalte öffentliche Wallets und verbundene Börsen getrennt. Wallets bleiben On-Chain-Quellen; Börsen erhalten ein eigenes Buchungskonto.</span></p>
           </div>
           <div class="hero-actions">
-            <button class="button button-primary" id="open-wallet-modal">+ Wallet hinzufügen</button>
-            <a class="button button-secondary" href="/quality.html#exchange-connection-form">Börse verbinden</a>
-            <button class="button button-secondary" id="open-ledger-modal">Ledger verbinden</button>
-            <button class="button button-secondary" id="refresh-all">Alles aktualisieren</button>
+            <button class="button button-primary" id="open-wallet-modal"><span data-i18n="+ Wallet hinzufügen">+ Wallet hinzufügen</span></button>
+            <a class="button button-secondary" href="/quality.html#exchange-connection-form"><span data-i18n="Börse verbinden">Börse verbinden</span></a>
+            <button class="button button-secondary" id="open-ledger-modal"><span data-i18n="Ledger verbinden">Ledger verbinden</span></button>
+            <button class="button button-secondary" id="refresh-all"><span data-i18n="Alles aktualisieren">Alles aktualisieren</span></button>
           </div>
         </section>
-        <nav class="section-subnav" aria-label="Bereiche der Crypto-Bestände" data-section-navigation="wallets"></nav>
+        <nav class="section-subnav" aria-label="Bereiche der Crypto-Bestände" data-i18n-aria-label="Bereiche der Crypto-Bestände" data-section-navigation="wallets"></nav>
 
         <section class="wallets-page-panel" id="wallets" aria-labelledby="wallet-list-title">
           <div class="section-heading page-section-heading">
             <div>
-              <p class="eyebrow">ON-CHAIN-QUELLEN</p>
-              <h2 id="wallet-list-title">Deine Wallets</h2>
+              <p class="eyebrow"><span data-i18n="ON-CHAIN-QUELLEN">ON-CHAIN-QUELLEN</span></p>
+              <h2 id="wallet-list-title"><span data-i18n="Deine Wallets">Deine Wallets</span></h2>
             </div>
             <span class="count-badge" id="wallet-count">0</span>
           </div>
           <div class="wallets-page-list" id="wallet-list"></div>
           <div id="wallet-empty" class="wallet-empty wallet-page-empty" hidden>
             <img class="brand-illustration" src="/images/brand/cryptobuch-journal-480.jpg" srcset="/images/brand/cryptobuch-journal-480.jpg 480w, /images/brand/cryptobuch-journal-960.jpg 960w" sizes="(max-width: 440px) calc(100vw - 96px), 320px" alt="" width="960" height="640" loading="lazy" decoding="async" />
-            <strong>Noch keine Wallet</strong>
-            <p>Füge eine öffentliche Adresse, einen Bitcoin-xPub oder eine Cardano-Stake-Adresse hinzu.</p>
-            <button class="button button-primary" id="open-wallet-empty">Wallet anlegen</button>
+            <strong><span data-i18n="Noch keine Wallet">Noch keine Wallet</span></strong>
+            <p><span data-i18n="Füge eine öffentliche Adresse, einen Bitcoin-xPub oder eine Cardano-Stake-Adresse hinzu.">Füge eine öffentliche Adresse, einen Bitcoin-xPub oder eine Cardano-Stake-Adresse hinzu.</span></p>
+            <button class="button button-primary" id="open-wallet-empty"><span data-i18n="Wallet anlegen">Wallet anlegen</span></button>
           </div>
         </section>
 
         <section class="wallets-page-panel exchange-sources-panel" id="boersen" aria-labelledby="exchange-list-title">
           <div class="section-heading page-section-heading">
             <div>
-              <p class="eyebrow">VERBUNDENE BÖRSEN</p>
-              <h2 id="exchange-list-title">Deine Börsen</h2>
+              <p class="eyebrow"><span data-i18n="VERBUNDENE BÖRSEN">VERBUNDENE BÖRSEN</span></p>
+              <h2 id="exchange-list-title"><span data-i18n="Deine Börsen">Deine Börsen</span></h2>
             </div>
             <span class="count-badge" id="exchange-count">0</span>
           </div>
-          <p class="section-copy exchange-section-copy">Jede Verbindung besitzt ein separates Börsenkonto. Öffne eine Börse für ihre Bestände und das vollständige Buchungsjournal.</p>
+          <p class="section-copy exchange-section-copy"><span data-i18n="Jede Verbindung besitzt ein separates Börsenkonto. Öffne eine Börse für ihre Bestände und das vollständige Buchungsjournal.">Jede Verbindung besitzt ein separates Börsenkonto. Öffne eine Börse für ihre Bestände und das vollständige Buchungsjournal.</span></p>
           <div class="wallets-page-list exchange-sources-list" id="exchange-list"></div>
           <div id="exchange-empty" class="wallet-empty wallet-page-empty exchange-page-empty" hidden>
             <span class="empty-icon">⇄</span>
-            <strong>Noch keine Börse verbunden</strong>
-            <p>Verbinde Binance Spot oder Bitvavo mit einem separaten API-Key mit Leserecht.</p>
-            <a class="button button-primary" href="/quality.html#exchange-connection-form">Börse verbinden</a>
+            <strong><span data-i18n="Noch keine Börse verbunden">Noch keine Börse verbunden</span></strong>
+            <p><span data-i18n="Verbinde Binance Spot oder Bitvavo mit einem separaten API-Key mit Leserecht.">Verbinde Binance Spot oder Bitvavo mit einem separaten API-Key mit Leserecht.</span></p>
+            <a class="button button-primary" href="/quality.html#exchange-connection-form"><span data-i18n="Börse verbinden">Börse verbinden</span></a>
           </div>
         </section>
       </main>
@@ -77,91 +80,91 @@
       <form id="wallet-form">
         <div class="modal-head">
           <div>
-            <p class="eyebrow">PORTFOLIO ERWEITERN</p>
-            <h2 id="wallet-modal-title">Wallet hinzufügen</h2>
+            <p class="eyebrow"><span data-i18n="PORTFOLIO ERWEITERN">PORTFOLIO ERWEITERN</span></p>
+            <h2 id="wallet-modal-title"><span data-i18n="Wallet hinzufügen">Wallet hinzufügen</span></h2>
           </div>
-          <button class="modal-close" type="button" id="close-wallet-modal" aria-label="Dialog schließen">×</button>
+          <button class="modal-close" type="button" id="close-wallet-modal" aria-label="Dialog schließen" data-i18n-aria-label="Dialog schließen">×</button>
         </div>
-        <p class="modal-copy">Es werden ausschließlich öffentliche Adressen gespeichert. Private Keys oder Seed-Phrases gehören niemals hierher.</p>
+        <p class="modal-copy"><span data-i18n="Es werden ausschließlich öffentliche Adressen gespeichert. Private Keys oder Seed-Phrases gehören niemals hierher.">Es werden ausschließlich öffentliche Adressen gespeichert. Private Keys oder Seed-Phrases gehören niemals hierher.</span></p>
         <div class="form-grid">
           <label>
-            <span>Blockchain</span>
+            <span><span data-i18n="Blockchain">Blockchain</span></span>
             <select name="chain" id="wallet-chain" required></select>
           </label>
           <label>
-            <span>Name <small>optional</small></span>
-            <input name="label" maxlength="80" placeholder="z. B. Ledger" />
+            <span><span data-i18n="Name">Name</span> <small>optional</small></span>
+            <input name="label" maxlength="80" placeholder="z. B. Ledger" data-i18n-placeholder="z. B. Ledger" />
           </label>
         </div>
         <div class="form-grid">
-          <label><span>Gruppe <small>optional</small></span><input name="groupName" maxlength="48" placeholder="z. B. Hardware-Wallet" /></label>
-          <label><span>Tags <small>kommagetrennt</small></span><input name="tags" maxlength="160" placeholder="Langfristig, Privat" /></label>
+          <label><span><span data-i18n="Gruppe">Gruppe</span> <small>optional</small></span><input name="groupName" maxlength="48" placeholder="z. B. Hardware-Wallet" data-i18n-placeholder="z. B. Hardware-Wallet" /></label>
+          <label><span><span data-i18n="Tags">Tags</span> <small>kommagetrennt</small></span><input name="tags" maxlength="160" placeholder="Langfristig, Privat" data-i18n-placeholder="Langfristig, Privat" /></label>
         </div>
         <div class="form-grid" id="bitcoin-source-fields" hidden>
           <label>
-            <span>Bitcoin-Quelle</span>
+            <span><span data-i18n="Bitcoin-Quelle">Bitcoin-Quelle</span></span>
             <select name="btcSourceType" id="wallet-source-type">
-              <option value="address">Einzelne Adresse</option>
-              <option value="xpub">xPub, yPub oder zPub – alle Adressen</option>
+              <option value="address" data-i18n="Einzelne Adresse">Einzelne Adresse</option>
+              <option value="xpub" data-i18n="xPub, yPub oder zPub – alle Adressen">xPub, yPub oder zPub – alle Adressen</option>
             </select>
           </label>
           <label id="xpub-format-wrap" hidden>
-            <span>Adressformat</span>
+            <span><span data-i18n="Adressformat">Adressformat</span></span>
             <select name="xpubAddressType" id="xpub-address-type">
-              <option value="p2wpkh">Native SegWit · bc1…</option>
-              <option value="p2sh-p2wpkh">Nested SegWit · 3…</option>
-              <option value="p2pkh">Legacy · 1…</option>
+              <option value="p2wpkh" data-i18n="Native SegWit · bc1…">Native SegWit · bc1…</option>
+              <option value="p2sh-p2wpkh" data-i18n="Nested SegWit · 3…">Nested SegWit · 3…</option>
+              <option value="p2pkh" data-i18n="Legacy · 1…">Legacy · 1…</option>
             </select>
           </label>
         </div>
         <div class="form-grid" id="cardano-source-fields" hidden>
           <label>
-            <span>Cardano-Quelle</span>
+            <span><span data-i18n="Cardano-Quelle">Cardano-Quelle</span></span>
             <select name="cardanoSourceType" id="cardano-source-type">
-              <option value="address">Einzelne Zahlungsadresse</option>
-              <option value="stake">Stake-Adresse · alle verbundenen Adressen</option>
+              <option value="address" data-i18n="Einzelne Zahlungsadresse">Einzelne Zahlungsadresse</option>
+              <option value="stake" data-i18n="Stake-Adresse · alle verbundenen Adressen">Stake-Adresse · alle verbundenen Adressen</option>
             </select>
           </label>
           <div class="source-explanation">
-            <strong>Empfohlen: Stake-Adresse</strong>
-            <small>Ermittelt alle durch diese Stake-Adresse verbundenen Zahlungsadressen und importiert ihre gemeinsame Historie.</small>
+            <strong><span data-i18n="Empfohlen: Stake-Adresse">Empfohlen: Stake-Adresse</span></strong>
+            <small><span data-i18n="Ermittelt alle durch diese Stake-Adresse verbundenen Zahlungsadressen und importiert ihre gemeinsame Historie.">Ermittelt alle durch diese Stake-Adresse verbundenen Zahlungsadressen und importiert ihre gemeinsame Historie.</span></small>
           </div>
         </div>
         <label>
-          <span id="wallet-identifier-label">Öffentliche Wallet-Adresse</span>
-          <input name="address" id="wallet-address" maxlength="120" required spellcheck="false" autocomplete="off" placeholder="bc1… oder tz1…" />
-          <small id="address-hint">Bitcoin: Legacy-, SegWit- und Taproot-Adressen werden unterstützt.</small>
+          <span id="wallet-identifier-label"><span data-i18n="Öffentliche Wallet-Adresse">Öffentliche Wallet-Adresse</span></span>
+          <input name="address" id="wallet-address" maxlength="120" required spellcheck="false" autocomplete="off" placeholder="bc1… oder tz1…" data-i18n-placeholder="bc1… oder tz1…" />
+          <small id="address-hint"><span data-i18n="Bitcoin: Legacy-, SegWit- und Taproot-Adressen werden unterstützt.">Bitcoin: Legacy-, SegWit- und Taproot-Adressen werden unterstützt.</span></small>
         </label>
-        <p class="xpub-notice" id="xpub-notice" hidden><strong>Datenschutz-Hinweis:</strong> Ein xPub ist öffentlich, kann aber die gesamte Bitcoin-Adresshistorie dieser Wallet sichtbar machen. Füge niemals eine Seed-Phrase oder einen xPrv ein.</p>
+        <p class="xpub-notice" id="xpub-notice" hidden><strong>Datenschutz-Hinweis:</strong> <span data-i18n="Ein xPub ist öffentlich, kann aber die gesamte Bitcoin-Adresshistorie dieser Wallet sichtbar machen. Füge niemals eine Seed-Phrase oder einen xPrv ein.">Ein xPub ist öffentlich, kann aber die gesamte Bitcoin-Adresshistorie dieser Wallet sichtbar machen. Füge niemals eine Seed-Phrase oder einen xPrv ein.</span></p>
         <p class="form-error" id="wallet-form-error" role="alert" hidden></p>
         <div class="modal-actions">
-          <button type="button" class="button button-secondary" id="cancel-wallet">Abbrechen</button>
-          <button type="submit" class="button button-primary" id="save-wallet">Wallet speichern &amp; synchronisieren</button>
+          <button type="button" class="button button-secondary" id="cancel-wallet"><span data-i18n="Abbrechen">Abbrechen</span></button>
+          <button type="submit" class="button button-primary" id="save-wallet"><span data-i18n="Wallet speichern &amp; synchronisieren">Wallet speichern &amp; synchronisieren</span></button>
         </div>
       </form>
     </dialog>
 
-    <dialog id="qr-modal" aria-labelledby="qr-modal-title"><form method="dialog"><div class="modal-head"><div><p class="eyebrow">WALLET-ADRESSE</p><h2 id="qr-modal-title">QR-Code</h2></div><button class="modal-close" aria-label="Dialog schließen">×</button></div><img id="wallet-qr-image" class="wallet-qr-image" alt="QR-Code der Wallet-Adresse" /><p class="modal-copy" id="wallet-qr-address"></p></form></dialog>
+    <dialog id="qr-modal" aria-labelledby="qr-modal-title"><form method="dialog"><div class="modal-head"><div><p class="eyebrow"><span data-i18n="WALLET-ADRESSE">WALLET-ADRESSE</span></p><h2 id="qr-modal-title"><span data-i18n="QR-Code">QR-Code</span></h2></div><button class="modal-close" aria-label="Dialog schließen" data-i18n-aria-label="Dialog schließen">×</button></div><img id="wallet-qr-image" class="wallet-qr-image" alt="QR-Code der Wallet-Adresse" data-i18n-alt="QR-Code der Wallet-Adresse" /><p class="modal-copy" id="wallet-qr-address"></p></form></dialog>
     <dialog id="ledger-modal" aria-labelledby="ledger-modal-title">
       <form id="ledger-form">
         <div class="modal-head">
-          <div><p class="eyebrow">HARDWARE-WALLET · NUR LESEN</p><h2 id="ledger-modal-title">Ledger verbinden</h2></div>
-          <button class="modal-close" type="button" id="close-ledger-modal" aria-label="Dialog schließen">×</button>
+          <div><p class="eyebrow"><span data-i18n="HARDWARE-WALLET · NUR LESEN">HARDWARE-WALLET · NUR LESEN</span></p><h2 id="ledger-modal-title"><span data-i18n="Ledger verbinden">Ledger verbinden</span></h2></div>
+          <button class="modal-close" type="button" id="close-ledger-modal" aria-label="Dialog schließen" data-i18n-aria-label="Dialog schließen">×</button>
         </div>
-        <p class="modal-copy">CryptoBuch liest ausschließlich eine öffentliche Empfangsadresse direkt aus deinem Ledger. Die Adresse wird zur Kontrolle auf dem Gerät angezeigt. Es werden weder Seed-Phrase noch Private Keys gelesen, gespeichert oder zum Signieren verwendet.</p>
-        <p class="ledger-notice"><strong>Voraussetzungen:</strong> Chrome oder Chromium, eine aktuelle Ledger-Firmware sowie die geöffnete Bitcoin- bzw. Ethereum-App. Bei einer Portainer-Installation muss die Seite über HTTPS (oder lokal über <code>localhost</code>) geöffnet werden.</p>
+        <p class="modal-copy"><span data-i18n="CryptoBuch liest ausschließlich eine öffentliche Empfangsadresse direkt aus deinem Ledger. Die Adresse wird zur Kontrolle auf dem Gerät angezeigt. Es werden weder Seed-Phrase noch Private Keys gelesen, gespeichert oder zum Signieren verwendet.">CryptoBuch liest ausschließlich eine öffentliche Empfangsadresse direkt aus deinem Ledger. Die Adresse wird zur Kontrolle auf dem Gerät angezeigt. Es werden weder Seed-Phrase noch Private Keys gelesen, gespeichert oder zum Signieren verwendet.</span></p>
+        <p class="ledger-notice"><strong>Voraussetzungen:</strong> <span data-i18n="Chrome oder Chromium, eine aktuelle Ledger-Firmware sowie die geöffnete Bitcoin- bzw. Ethereum-App. Bei einer Portainer-Installation muss die Seite über HTTPS (oder lokal über">Chrome oder Chromium, eine aktuelle Ledger-Firmware sowie die geöffnete Bitcoin- bzw. Ethereum-App. Bei einer Portainer-Installation muss die Seite über HTTPS (oder lokal über</span> <code>localhost</code><span data-i18n=") geöffnet werden.">) geöffnet werden.</span></p>
         <div class="form-grid">
-          <label><span>Ledger-App / Zielnetzwerk</span><select id="ledger-chain" name="chain"><option value="BTC">Bitcoin</option><option value="ETH">Ethereum</option><option value="BNB">BNB Smart Chain · Ethereum-App</option><option value="AVAX">Avalanche C-Chain · Ethereum-App</option></select></label>
-          <label><span>Kontoindex</span><input id="ledger-account-index" name="accountIndex" type="number" min="0" max="99" value="0" required /><small>0 entspricht dem ersten Konto in Ledger Live.</small></label>
+          <label><span><span data-i18n="Ledger-App / Zielnetzwerk">Ledger-App / Zielnetzwerk</span></span><select id="ledger-chain" name="chain"><option value="BTC">Bitcoin</option><option value="ETH">Ethereum</option><option value="BNB" data-i18n="BNB Smart Chain · Ethereum-App">BNB Smart Chain · Ethereum-App</option><option value="AVAX" data-i18n="Avalanche C-Chain · Ethereum-App">Avalanche C-Chain · Ethereum-App</option></select></label>
+          <label><span><span data-i18n="Kontoindex">Kontoindex</span></span><input id="ledger-account-index" name="accountIndex" type="number" min="0" max="99" value="0" required /><small><span data-i18n="0 entspricht dem ersten Konto in Ledger Live.">0 entspricht dem ersten Konto in Ledger Live.</span></small></label>
         </div>
         <div class="form-grid" id="ledger-bitcoin-options">
-          <label><span>Bitcoin-Adressformat</span><select id="ledger-btc-format" name="bitcoinFormat"><option value="bech32">Native SegWit · bc1…</option><option value="p2sh">Nested SegWit · 3…</option><option value="legacy">Legacy · 1…</option></select></label>
-          <label><span>Bitcoin-Import</span><select id="ledger-btc-source" name="bitcoinSource"><option value="xpub">Gesamtes Konto · xPub</option><option value="address">Eine Empfangsadresse</option></select><small id="ledger-btc-source-help">Erfasst Empfangs- und Wechselgeldadressen bis zum konfigurierten Gap-Limit.</small></label>
+          <label><span><span data-i18n="Bitcoin-Adressformat">Bitcoin-Adressformat</span></span><select id="ledger-btc-format" name="bitcoinFormat"><option value="bech32" data-i18n="Native SegWit · bc1…">Native SegWit · bc1…</option><option value="p2sh" data-i18n="Nested SegWit · 3…">Nested SegWit · 3…</option><option value="legacy" data-i18n="Legacy · 1…">Legacy · 1…</option></select></label>
+          <label><span><span data-i18n="Bitcoin-Import">Bitcoin-Import</span></span><select id="ledger-btc-source" name="bitcoinSource"><option value="xpub" data-i18n="Gesamtes Konto · xPub">Gesamtes Konto · xPub</option><option value="address" data-i18n="Eine Empfangsadresse">Eine Empfangsadresse</option></select><small id="ledger-btc-source-help"><span data-i18n="Erfasst Empfangs- und Wechselgeldadressen bis zum konfigurierten Gap-Limit.">Erfasst Empfangs- und Wechselgeldadressen bis zum konfigurierten Gap-Limit.</span></small></label>
         </div>
-        <label><span>Verbindung</span><select id="ledger-transport" name="transport"><option value="hid">WebHID bevorzugt</option><option value="usb">WebUSB bevorzugt</option></select></label>
+        <label><span><span data-i18n="Verbindung">Verbindung</span></span><select id="ledger-transport" name="transport"><option value="hid" data-i18n="WebHID bevorzugt">WebHID bevorzugt</option><option value="usb" data-i18n="WebUSB bevorzugt">WebUSB bevorzugt</option></select></label>
         <p class="form-error" id="ledger-error" role="alert" hidden></p>
         <p class="ledger-result" id="ledger-result" hidden></p>
-        <div class="modal-actions"><button type="button" class="button button-secondary" id="cancel-ledger">Abbrechen</button><button type="submit" class="button button-primary" id="connect-ledger">Adresse prüfen &amp; importieren</button></div>
+        <div class="modal-actions"><button type="button" class="button button-secondary" id="cancel-ledger"><span data-i18n="Abbrechen">Abbrechen</span></button><button type="submit" class="button button-primary" id="connect-ledger"><span data-i18n="Adresse prüfen &amp; importieren">Adresse prüfen &amp; importieren</span></button></div>
       </form>
     </dialog>
 

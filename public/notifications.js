@@ -3,7 +3,7 @@
   if (!topbar) return;
   const menu = document.createElement("div");
   menu.className = "notification-menu";
-  menu.innerHTML = `<button class="notification-bell" type="button" aria-label="Benachrichtigungen öffnen" aria-expanded="false" aria-controls="notification-popover"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg><i hidden>0</i></button><section class="notification-popover" id="notification-popover" aria-label="Benachrichtigungen" hidden><div class="notification-popover-head"><div><p class="eyebrow">HINWEISE</p><strong>Benachrichtigungen</strong></div><button class="text-button" type="button" data-mark-read>Alle gelesen</button></div><div class="notification-popover-list"></div><p class="data-note" data-empty hidden>Keine offenen Hinweise.</p></section>`;
+  menu.innerHTML = `<button class="notification-bell" type="button" aria-label="${window.CryptoBuchI18n.html("Benachrichtigungen öffnen")}" aria-expanded="false" aria-controls="notification-popover"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg><i hidden>0</i></button><section class="notification-popover" id="notification-popover" aria-label="${window.CryptoBuchI18n.html("Benachrichtigungen")}" hidden><div class="notification-popover-head"><div><p class="eyebrow">${window.CryptoBuchI18n.html("HINWEISE")}</p><strong>${window.CryptoBuchI18n.html("Benachrichtigungen")}</strong></div><button class="text-button" type="button" data-mark-read>${window.CryptoBuchI18n.html("Alle gelesen")}</button></div><div class="notification-popover-list"></div><p class="data-note" data-empty hidden>${window.CryptoBuchI18n.html("Keine offenen Hinweise.")}</p></section>`;
   const bell = menu.querySelector(".notification-bell");
   const badge = menu.querySelector("i");
   const popover = menu.querySelector(".notification-popover");
@@ -26,8 +26,8 @@
     for (const item of items.slice(0, 10)) {
       const row = document.createElement("article");
       row.className = `notification-item ${item.level}${item.is_read ? " is-read" : ""}`;
-      const title = document.createElement("strong"); title.textContent = item.title;
-      const message = document.createElement("p"); message.textContent = item.message;
+      const title = document.createElement("strong"); title.textContent = window.CryptoBuchI18n.message(item.title);
+      const message = document.createElement("p"); message.textContent = window.CryptoBuchI18n.message(item.message);
       row.append(title, message); list.append(row);
     }
     empty.hidden = items.length > 0;

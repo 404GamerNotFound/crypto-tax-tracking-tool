@@ -49,7 +49,7 @@ for (const page of ["settings-sync.html", "settings-tax.html", "settings-prices.
     const messages = [];
     const context = vm.createContext({
       FormData,
-      window: { CryptoBuchUI: {
+      window: { CryptoBuchI18n: require('../public/i18n-core')(), CryptoBuchUI: {
         el: id => elements.get(id) || null,
         toast: text => messages.push(text),
         api: async (url, options) => {

@@ -3,21 +3,21 @@ const requestedChain = String(params.get("chain") || "BTC").toUpperCase();
 const requestedAsset = String(params.get("asset") || "");
 const state = { portfolio: null, selected: new Set(), editingHistoricPriceTransaction: null, priceFetchJobs: new Map(), documentTransaction: null, chart: null, filters: { search: "", direction: "" } };
 const { api, el, formatCurrency, priceProviderLabel, purposeInfo, toast } = window.CryptoBuchUI;
-const price = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 4 });
-const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
-const dateOnly = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" });
+const price = new Intl.NumberFormat(window.CryptoBuchI18n.locale, { style: "currency", currency: "EUR", maximumFractionDigits: 4 });
+const dateTime = new Intl.DateTimeFormat(window.CryptoBuchI18n.locale, { dateStyle: "medium", timeStyle: "short" });
+const dateOnly = new Intl.DateTimeFormat(window.CryptoBuchI18n.locale, { dateStyle: "medium" });
 
 function hasPrice(value) {
   return Number.isFinite(Number(value)) && Number(value) > 0;
 }
 
 function formatPrice(value) {
-  return hasPrice(value) ? price.format(Number(value)) : "k. A.";
+  return hasPrice(value) ? price.format(Number(value)) : window.CryptoBuchI18n.t("k. A.");
 }
 
 function formatRecordedAt(value) {
   const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? dateTime.format(new Date(timestamp)) : "nicht dokumentiert";
+  return Number.isFinite(timestamp) ? dateTime.format(new Date(timestamp)) : window.CryptoBuchI18n.t("nicht dokumentiert");
 }
 
 function historicPriceProvenance(transaction) {
@@ -25,13 +25,13 @@ function historicPriceProvenance(transaction) {
   const provider = String(transaction.price_provider || "");
   const isImportedPrice = transaction.price_source === "manual" && provider && provider !== "manual" && provider !== "legacy";
   const priceDate = transaction.timestamp && Number.isFinite(Date.parse(transaction.timestamp))
-    ? dateOnly.format(new Date(transaction.timestamp)) : "nicht dokumentiert";
+    ? dateOnly.format(new Date(transaction.timestamp)) : window.CryptoBuchI18n.t("nicht dokumentiert");
   const recordedAt = formatRecordedAt(transaction.price_recorded_at);
   if (!hasHistoricPrice) {
     return {
       tone: "missing",
-      quality: "offen · kein historischer Kurs",
-      provider: "noch nicht ermittelt",
+      quality: window.CryptoBuchI18n.t("offen · kein historischer Kurs"),
+      provider: window.CryptoBuchI18n.t("noch nicht ermittelt"),
       priceDate,
       recordedAt: null,
       recordedLabel: "",
@@ -40,46 +40,46 @@ function historicPriceProvenance(transaction) {
   if (isImportedPrice) {
     return {
       tone: "imported",
-      quality: "Direktimport · geschützt",
+      quality: window.CryptoBuchI18n.t("Direktimport · geschützt"),
       provider: priceProviderLabel(provider),
       priceDate,
       recordedAt,
-      recordedLabel: "Importiert",
+      recordedLabel: window.CryptoBuchI18n.t("Importiert"),
     };
   }
   if (transaction.price_source === "manual") {
     return {
       tone: "manual",
-      quality: "manuell festgelegt",
+      quality: window.CryptoBuchI18n.t("manuell festgelegt"),
       provider: priceProviderLabel(provider || "manual"),
       priceDate,
       recordedAt,
-      recordedLabel: "Erfasst",
+      recordedLabel: window.CryptoBuchI18n.t("Erfasst"),
     };
   }
   if (!provider || provider === "legacy") {
     return {
       tone: "limited",
-      quality: "eingeschränkt · alte Herkunft fehlt",
+      quality: window.CryptoBuchI18n.t("eingeschränkt · alte Herkunft fehlt"),
       provider: priceProviderLabel("legacy"),
       priceDate,
       recordedAt,
-      recordedLabel: "Zuletzt gespeichert",
+      recordedLabel: window.CryptoBuchI18n.t("Zuletzt gespeichert"),
     };
   }
   return {
     tone: "automatic",
-    quality: ({ daily_reference: "UTC-Tagesreferenz · Schätzung", daily_close: "UTC-Tagesschluss · Schätzung", block_quote: "Blockzeitpunkt · Schätzung" })[transaction.price_method] || "automatisch · Bewertungsmethode nicht dokumentiert",
+    quality: ({ daily_reference: window.CryptoBuchI18n.t("UTC-Tagesreferenz · Schätzung"), daily_close: window.CryptoBuchI18n.t("UTC-Tagesschluss · Schätzung"), block_quote: window.CryptoBuchI18n.t("Blockzeitpunkt · Schätzung") })[transaction.price_method] || window.CryptoBuchI18n.t("automatisch · Bewertungsmethode nicht dokumentiert"),
     provider: priceProviderLabel(provider),
     priceDate,
     recordedAt,
-    recordedLabel: "Abgerufen",
+    recordedLabel: window.CryptoBuchI18n.t("Abgerufen"),
   };
 }
 
 function chainInfo() {
   return state.portfolio?.chains?.[requestedChain]
-    || (requestedChain === "EXCHANGE" ? { name: "Börse", asset: "", decimals: 8, icon: "⇄", explorer: {} } : null)
+    || (requestedChain === "EXCHANGE" ? { name: window.CryptoBuchI18n.t("Börse"), asset: "", decimals: 8, icon: "⇄", explorer: {} } : null)
     || { name: requestedChain, asset: requestedChain, decimals: 6, icon: requestedChain.slice(0, 1) };
 }
 
@@ -97,7 +97,7 @@ function formatAmount(value, assetId = activeAssetId()) {
   const decimals = asset.decimals ?? 6;
   const options = amount !== 0 && Math.abs(amount) < 10 ** -decimals
     ? { maximumSignificantDigits: 3 } : { maximumFractionDigits: decimals };
-  return `${new Intl.NumberFormat("de-DE", options).format(amount)} ${asset.symbol}`;
+  return `${new Intl.NumberFormat(window.CryptoBuchI18n.locale, options).format(amount)} ${asset.symbol}`;
 }
 
 function shorten(value, start = 10, end = 7) {
@@ -105,7 +105,7 @@ function shorten(value, start = 10, end = 7) {
 }
 
 function directionLabel(direction) {
-  return { in: "Zugang", out: "Abgang", self: "Eigener Transfer" }[direction] || "Unbekannt";
+  return { in: window.CryptoBuchI18n.t("Zugang"), out: window.CryptoBuchI18n.t("Abgang"), self: window.CryptoBuchI18n.t("Eigener Transfer") }[direction] || window.CryptoBuchI18n.t("Unbekannt");
 }
 
 function explorerUrl(type, value) {
@@ -136,7 +136,7 @@ function appendSourceBalances(card) {
   section.className = "asset-source-balances";
   const heading = document.createElement("span");
   heading.className = "card-label";
-  heading.textContent = "Guthaben pro Quelle";
+  heading.textContent = window.CryptoBuchI18n.t("Guthaben pro Quelle");
   section.append(heading);
   const list = document.createElement("ul");
   list.setAttribute("aria-label", "Guthaben pro Quelle");
@@ -145,25 +145,25 @@ function appendSourceBalances(card) {
     const name = document.createElement("span");
     name.className = "asset-source-name";
     name.textContent = source.label;
-    name.title = `${source.sourceType === "exchange" ? "Börsenkonto" : "Wallet"} #${source.walletId}`;
+    name.title = `${source.sourceType === "exchange" ? window.CryptoBuchI18n.t("Börsenkonto") : window.CryptoBuchI18n.t("Wallet")} #${source.walletId}`;
     const balance = document.createElement("span");
     balance.className = "asset-source-amount";
     const unknownBalance = source.sourceType === "exchange" && source.incompleteReason === "negative_journal";
-    balance.textContent = unknownBalance ? "Unbekannt" : formatAmount(source.amount);
+    balance.textContent = unknownBalance ? window.CryptoBuchI18n.t("Unbekannt") : formatAmount(source.amount);
     const detail = document.createElement("small");
-    detail.textContent = source.incompleteReason === "rewards_only" ? "Unvollständig: nur Rewards importiert. Wallet erneut synchronisieren."
-      : unknownBalance ? `Journaldefizit ${formatAmount(source.journalAmount)} · kein bestätigter Börsensaldo. Fehlende Buchungen ergänzen.`
-      : source.incomplete ? "Journaldefizit · Buchungen fehlen möglicherweise"
-      : source.historyIncomplete ? `Börsensaldo bestätigt · Journal weicht ab (${formatAmount(source.journalAmount)}). Kaufdaten prüfen.`
-      : source.basis === "exchange_snapshot" ? "Börsensaldo · inkl. gesperrter Beträge" : "Aus Buchungen berechnet";
-    if (source.observedAt) detail.textContent += ` · ${source.basis === "exchange_snapshot" ? "Stand" : "Letzter Sync"} ${formatRecordedAt(source.observedAt)}`;
+    detail.textContent = source.incompleteReason === "rewards_only" ? window.CryptoBuchI18n.t("Unvollständig: nur Rewards importiert. Wallet erneut synchronisieren.")
+      : unknownBalance ? window.CryptoBuchI18n.t("Journaldefizit {p0} · kein bestätigter Börsensaldo. Fehlende Buchungen ergänzen.", { p0: formatAmount(source.journalAmount) })
+      : source.incomplete ? window.CryptoBuchI18n.t("Journaldefizit · Buchungen fehlen möglicherweise")
+      : source.historyIncomplete ? window.CryptoBuchI18n.t("Börsensaldo bestätigt · Journal weicht ab ({p0}). Kaufdaten prüfen.", { p0: formatAmount(source.journalAmount) })
+      : source.basis === "exchange_snapshot" ? window.CryptoBuchI18n.t("Börsensaldo · inkl. gesperrter Beträge") : window.CryptoBuchI18n.t("Aus Buchungen berechnet");
+    if (source.observedAt) detail.textContent += ` · ${source.basis === "exchange_snapshot" ? window.CryptoBuchI18n.t("Stand") : window.CryptoBuchI18n.t("Letzter Sync")} ${formatRecordedAt(source.observedAt)}`;
     item.append(name, balance, detail);
     list.append(item);
   }
   if (sources.length) section.append(list);
   else {
     const empty = document.createElement("small");
-    empty.textContent = "Keine Bestände je Quelle vorhanden.";
+    empty.textContent = window.CryptoBuchI18n.t("Keine Bestände je Quelle vorhanden.");
     section.append(empty);
   }
   card.append(section);
@@ -175,19 +175,19 @@ function renderMetrics() {
   const partialProfit = Boolean(purchases.profitIsPartial);
   const hidden = (state.portfolio.hiddenAssets || []).includes(activeAssetId());
   const missingLotHint = purchases.unknownCostLotCount
-    ? `Unvollständig · ${purchases.unknownCostLotCount} verbleibende Kaufcharge${purchases.unknownCostLotCount === 1 ? "" : "n"} ohne Kurs`
-    : "Historischer Kaufkurs fehlt";
+    ? window.CryptoBuchI18n.t("Unvollständig · {p0} verbleibende Kaufcharge{p1} ohne Kurs", { p0: purchases.unknownCostLotCount, p1: purchases.unknownCostLotCount === 1 ? "" : "n" })
+    : window.CryptoBuchI18n.t("Historischer Kaufkurs fehlt");
   const metrics = el("asset-metrics");
   metrics.replaceChildren();
-  const holdingCard = metric(report?.holdingIsPartial ? "Erfasster Teilbestand" : "Aktueller Bestand", formatAmount(report?.holdingAmount || 0), `${report?.holdingIsPartial ? "Teilwert" : "Marktwert"} ${formatCurrency(report?.holdingValueEur)}`, "highlight");
-  const balanceHint = purchases.balanceUncertain ? "Bestand und Buchungshistorie unvollständig oder widersprüchlich. Quellen synchronisieren und Transfers prüfen." : null;
+  const holdingCard = metric(report?.holdingIsPartial ? window.CryptoBuchI18n.t("Erfasster Teilbestand") : window.CryptoBuchI18n.t("Aktueller Bestand"), formatAmount(report?.holdingAmount || 0), `${report?.holdingIsPartial ? window.CryptoBuchI18n.t("Teilwert") : window.CryptoBuchI18n.t("Marktwert")} ${formatCurrency(report?.holdingValueEur)}`, "highlight");
+  const balanceHint = purchases.balanceUncertain ? window.CryptoBuchI18n.t("Bestand und Buchungshistorie unvollständig oder widersprüchlich. Quellen synchronisieren und Transfers prüfen.") : null;
   appendSourceBalances(holdingCard);
   metrics.append(
     holdingCard,
-    metric("Als Kauf erfasst", formatAmount(purchases.acquiredAmount || 0), `${purchases.count || 0} Kauf-Transaktionen`),
-    metric("Noch aus Käufen gehalten", purchases.balanceUncertain ? "Nicht bestimmbar" : formatAmount(purchases.remainingAmount || 0), balanceHint || (purchases.hasUnknownCost ? missingLotHint : `Kosten ${formatCurrency(purchases.remainingCostEur)}`)),
-    metric(partialProfit ? "Gewinn ggü. Kauf · teilweise" : "Gewinn ggü. Kauf", formatCurrency(purchases.profitEur), balanceHint || (hidden ? "Coin ausgeblendet · keine aktuelle Bewertung" : purchases.profitEur === null ? missingLotHint : partialProfit ? `Berechnet aus ${formatAmount(purchases.knownRemainingAmount || 0)} mit Kaufkurs` : "Aktueller Wert minus FIFO-Kaufkosten"), Number(purchases.profitEur) >= 0 ? "positive" : "negative"),
-    metric("Staking-Ertrag · kumuliert", formatAmount(report?.staking?.amount || 0), `${report?.staking?.count || 0} Ertrags-Transaktionen · kein aktueller Bestand`, "staking"),
+    metric(window.CryptoBuchI18n.t("Als Kauf erfasst"), formatAmount(purchases.acquiredAmount || 0), window.CryptoBuchI18n.t("{p0} Kauf-Transaktionen", { p0: purchases.count || 0 })),
+    metric(window.CryptoBuchI18n.t("Noch aus Käufen gehalten"), purchases.balanceUncertain ? window.CryptoBuchI18n.t("Nicht bestimmbar") : formatAmount(purchases.remainingAmount || 0), balanceHint || (purchases.hasUnknownCost ? missingLotHint : window.CryptoBuchI18n.t("Kosten {p0}", { p0: formatCurrency(purchases.remainingCostEur) }))),
+    metric(partialProfit ? window.CryptoBuchI18n.t("Gewinn ggü. Kauf · teilweise") : window.CryptoBuchI18n.t("Gewinn ggü. Kauf"), formatCurrency(purchases.profitEur), balanceHint || (hidden ? window.CryptoBuchI18n.t("Coin ausgeblendet · keine aktuelle Bewertung") : purchases.profitEur === null ? missingLotHint : partialProfit ? window.CryptoBuchI18n.t("Berechnet aus {p0} mit Kaufkurs", { p0: formatAmount(purchases.knownRemainingAmount || 0) }) : window.CryptoBuchI18n.t("Aktueller Wert minus FIFO-Kaufkosten")), Number(purchases.profitEur) >= 0 ? "positive" : "negative"),
+    metric(window.CryptoBuchI18n.t("Staking-Ertrag · kumuliert"), formatAmount(report?.staking?.amount || 0), window.CryptoBuchI18n.t("{p0} Ertrags-Transaktionen · kein aktueller Bestand", { p0: report?.staking?.count || 0 }), "staking"),
   );
 }
 
@@ -198,8 +198,8 @@ function renderChart() {
   const history = report?.valueHistory;
   const points = history?.points || [];
   const validPoints = points.filter(point => Number.isFinite(point.value));
-  const limitations = [history?.missingBalanceCount ? "Lücken wegen fehlender Buchungen" : "", history?.missingPriceCount ? "fehlende Kurse" : "", history?.holdingMismatch ? "Journal und aktueller Bestand weichen ab" : ""].filter(Boolean);
-  const chartCopy = `${validPoints.length} bewertete Zeitpunkte · historische Schätzung${limitations.length ? " · " + limitations.join(" · ") : ""}.`;
+  const limitations = [history?.missingBalanceCount ? window.CryptoBuchI18n.t("Lücken wegen fehlender Buchungen") : "", history?.missingPriceCount ? window.CryptoBuchI18n.t("fehlende Kurse") : "", history?.holdingMismatch ? window.CryptoBuchI18n.t("Journal und aktueller Bestand weichen ab") : ""].filter(Boolean);
+  const chartCopy = window.CryptoBuchI18n.t("{p0} bewertete Zeitpunkte · historische Schätzung{p1}.", { p0: validPoints.length, p1: limitations.length ? " · " + limitations.join(" · ") : "" });
   container.setAttribute("aria-label", chartCopy);
   state.chart?.destroy();
   state.chart = null;
@@ -207,7 +207,7 @@ function renderChart() {
   if (validPoints.length < 2) {
     const empty = document.createElement("p");
     empty.className = "chart-empty";
-    empty.textContent = "Für einen verlässlichen Verlauf fehlen bewertbare Bestände. Bitte Quellen synchronisieren und Kurslücken prüfen.";
+    empty.textContent = window.CryptoBuchI18n.t("Für einen verlässlichen Verlauf fehlen bewertbare Bestände. Bitte Quellen synchronisieren und Kurslücken prüfen.");
     container.append(empty);
     copy.textContent = chartCopy;
     return;
@@ -221,10 +221,10 @@ function renderChart() {
       legend: { show: false },
       scales: { x: { time: true }, y: { time: false, auto: true } },
       axes: [
-        { stroke: "#768178", grid: { stroke: "#dce4dc", width: 1, dash: [3, 5] }, values: (_u, ticks) => ticks.map((tick) => new Intl.DateTimeFormat("de-DE", { month: "short", year: "2-digit" }).format(new Date(tick * 1000))) },
+        { stroke: "#768178", grid: { stroke: "#dce4dc", width: 1, dash: [3, 5] }, values: (_u, ticks) => ticks.map((tick) => new Intl.DateTimeFormat(window.CryptoBuchI18n.locale, { month: "short", year: "2-digit" }).format(new Date(tick * 1000))) },
         { scale: "y", size: 90, stroke: "#768178", grid: { stroke: "#dce4dc", width: 1, dash: [3, 5] }, values: (_u, ticks) => ticks.map((tick) => tick === null ? "" : formatCurrency(tick)) },
       ],
-      series: [{}, { label: "Bestandswert", scale: "y", spanGaps: false, stroke: "#0b704a", width: 2.5, fill: "rgba(11,112,74,.16)", points: { show: true, size: 3 } }],
+      series: [{}, { label: window.CryptoBuchI18n.t("Bestandswert"), scale: "y", spanGaps: false, stroke: "#0b704a", width: 2.5, fill: "rgba(11,112,74,.16)", points: { show: true, size: 3 } }],
     }, [points.map((point) => point.timestamp / 1000), values], container);
     copy.textContent = chartCopy;
     return;
@@ -282,7 +282,7 @@ function renderChart() {
   }
   for (const [alignment, point] of [["start", points[0]], ["end", points.at(-1)]]) {
     const label = svgNode("text", { x: x(point), y: height - 12, class: "chart-axis-label", "text-anchor": alignment });
-    label.textContent = new Intl.DateTimeFormat("de-DE", { month: "short", year: "numeric" }).format(new Date(point.timestamp));
+    label.textContent = new Intl.DateTimeFormat(window.CryptoBuchI18n.locale, { month: "short", year: "numeric" }).format(new Date(point.timestamp));
     svg.append(label);
   }
   container.append(svg);
@@ -290,20 +290,20 @@ function renderChart() {
 }
 
 function getTransactions() {
-  const search = state.filters.search.toLocaleLowerCase("de-DE").trim();
+  const search = state.filters.search.toLocaleLowerCase(window.CryptoBuchI18n.locale).trim();
   return (state.portfolio?.transactions || []).filter((transaction) => {
     if (transaction.asset !== activeAssetId()) return false;
     if (state.filters.direction && transaction.direction !== state.filters.direction) return false;
     if (!search) return true;
     return [transaction.hash, transaction.wallet_label, transaction.address, transaction.purpose, transaction.counterparty]
-      .filter(Boolean).join(" ").toLocaleLowerCase("de-DE").includes(search);
+      .filter(Boolean).join(" ").toLocaleLowerCase(window.CryptoBuchI18n.locale).includes(search);
   });
 }
 
 function purposeOptions(select, selected = "") {
-  select.replaceChildren(new Option("Kein Zweck", ""));
-  for (const preset of state.portfolio?.purposePresets || []) select.add(new Option(preset, preset));
-  select.add(new Option("Eigener Zweck …", "__custom__"));
+  select.replaceChildren(new Option(window.CryptoBuchI18n.t("Kein Zweck"), ""));
+  for (const preset of state.portfolio?.purposePresets || []) select.add(new Option(window.CryptoBuchI18n.t(preset), preset));
+  select.add(new Option(window.CryptoBuchI18n.t("Eigener Zweck …"), "__custom__"));
   if (selected && ![...select.options].some((option) => option.value === selected)) select.add(new Option(selected, selected));
   select.value = selected || "";
 }
@@ -326,18 +326,18 @@ function renderPurpose(transaction) {
   card.append(icon, copy);
   const select = document.createElement("select");
   select.className = "purpose-select";
-  select.ariaLabel = `Zweck für Transaktion ${shorten(transaction.hash)}`;
+  select.ariaLabel = window.CryptoBuchI18n.t("Zweck für Transaktion {p0}", { p0: shorten(transaction.hash) });
   purposeOptions(select, transaction.purpose || "");
   select.addEventListener("change", () => {
     if (select.value !== "__custom__") return setTransactionPurpose(transaction.id, select.value);
-    const value = prompt("Eigenen Zweck für diese Transaktion eingeben:", transaction.purpose || "");
+    const value = prompt(window.CryptoBuchI18n.t("Eigenen Zweck für diese Transaktion eingeben:"), transaction.purpose || "");
     if (value === null) return (select.value = transaction.purpose || "");
     return setTransactionPurpose(transaction.id, value.trim());
   });
   const documents = document.createElement("button");
   documents.type = "button";
   documents.className = "text-button historic-price-edit";
-  documents.textContent = "Nachweise";
+  documents.textContent = window.CryptoBuchI18n.t("Nachweise");
   documents.addEventListener("click", () => openDocumentModal(transaction));
   cell.append(card, select);
   if (transaction.transferLink) {
@@ -345,7 +345,7 @@ function renderPurpose(transaction) {
     const link = document.createElement("button");
     link.type = "button";
     link.className = "text-button historic-price-edit";
-    link.textContent = `Verknüpft: ${counterpart.walletLabel} · Gegenbuchung #${counterpart.transactionId}`;
+    link.textContent = window.CryptoBuchI18n.t("Verknüpft: {p0} · Gegenbuchung #{p1}", { p0: counterpart.walletLabel, p1: counterpart.transactionId });
     link.addEventListener("click", () => {
       state.filters = { search: "", direction: "" };
       el("transaction-search").value = "";
@@ -360,7 +360,7 @@ function renderPurpose(transaction) {
     const review = document.createElement("a");
     review.className = "text-button historic-price-edit";
     review.href = "/quality.html#transfers";
-    review.textContent = "Noch nicht verknüpft · Transfer prüfen";
+    review.textContent = window.CryptoBuchI18n.t("Noch nicht verknüpft · Transfer prüfen");
     cell.append(review);
   }
   cell.append(documents);
@@ -404,9 +404,9 @@ function renderTransactions() {
       hash.target = "_blank";
       hash.rel = "noreferrer";
     }
-    hash.textContent = isCardanoReward ? "Cardano Staking Reward" : shorten(transaction.hash);
+    hash.textContent = isCardanoReward ? window.CryptoBuchI18n.t("Cardano Staking Reward") : shorten(transaction.hash);
     const when = document.createElement("small");
-    when.textContent = transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : isCardanoReward ? `Cardano-Epoche ${String(transaction.hash).split(":")[1]}` : "Unbestätigt";
+    when.textContent = transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : isCardanoReward ? window.CryptoBuchI18n.t("Cardano-Epoche {p0}", { p0: String(transaction.hash).split(":")[1] }) : window.CryptoBuchI18n.t("Unbestätigt");
     operationCopy.append(hash, when);
     operationLayout.append(direction, operationCopy);
     operation.append(operationLayout);
@@ -416,15 +416,15 @@ function renderTransactions() {
     walletTitle.textContent = transaction.wallet_label || `${chainInfo().name}-Wallet`;
     const address = document.createElement("small");
     address.textContent = transaction.source_type === "xpub"
-      ? "Bitcoin-xPub"
-      : transaction.source_type === "stake" ? "Cardano Stake-Adresse" : shorten(transaction.address, 7, 6);
+      ? window.CryptoBuchI18n.t("Bitcoin-xPub")
+      : transaction.source_type === "stake" ? window.CryptoBuchI18n.t("Cardano Stake-Adresse") : shorten(transaction.address, 7, 6);
     wallet.append(walletTitle, address);
 
     const amount = document.createElement("td");
     amount.className = `amount ${transaction.direction}`;
     amount.textContent = `${transaction.direction === "in" ? "+" : transaction.direction === "out" ? "−" : ""}${formatAmount(transaction.amount, transaction.asset)}`;
     const fee = document.createElement("small");
-    fee.textContent = Number(transaction.fee) > 0 ? `Gebühr ${formatAmount(transaction.fee, transaction.fee_asset || transaction.asset)}` : "";
+    fee.textContent = Number(transaction.fee) > 0 ? window.CryptoBuchI18n.t("Gebühr {p0}", { p0: formatAmount(transaction.fee, transaction.fee_asset || transaction.asset) }) : "";
     amount.append(fee);
 
     const now = document.createElement("td");
@@ -432,7 +432,7 @@ function renderTransactions() {
     now.textContent = formatPrice(transaction.price_now_eur);
     const nowValue = hasPrice(transaction.price_now_eur) ? Number(transaction.price_now_eur) * Number(transaction.amount) : null;
     const nowDetail = document.createElement("small");
-    nowDetail.textContent = nowValue === null ? "" : `Wert: ${formatCurrency(nowValue)}`;
+    nowDetail.textContent = nowValue === null ? "" : window.CryptoBuchI18n.t("Wert: {p0}", { p0: formatCurrency(nowValue) });
     now.append(nowDetail);
 
     const historic = document.createElement("td");
@@ -440,17 +440,17 @@ function renderTransactions() {
     historic.textContent = formatPrice(transaction.price_transaction_eur);
     const historicValue = hasPrice(transaction.price_transaction_eur) ? Number(transaction.price_transaction_eur) * Number(transaction.amount) : null;
     const historicDetail = document.createElement("small");
-    historicDetail.textContent = historicValue === null ? "Nicht verfügbar" : `Wert: ${formatCurrency(historicValue)}`;
+    historicDetail.textContent = historicValue === null ? window.CryptoBuchI18n.t("Nicht verfügbar") : window.CryptoBuchI18n.t("Wert: {p0}", { p0: formatCurrency(historicValue) });
     const provenance = historicPriceProvenance(transaction);
     const historicProvenance = document.createElement("div");
     historicProvenance.className = "price-provenance";
     const quality = document.createElement("small");
     quality.className = `price-provenance-status ${provenance.tone}`;
-    quality.textContent = `Datenqualität: ${provenance.quality}`;
+    quality.textContent = window.CryptoBuchI18n.t("Datenqualität: {p0}", { p0: provenance.quality });
     const historicSource = document.createElement("small");
-    historicSource.textContent = `Quelle: ${provenance.provider}`;
+    historicSource.textContent = window.CryptoBuchI18n.t("Quelle: {p0}", { p0: provenance.provider });
     const historicDate = document.createElement("small");
-    historicDate.textContent = `Kursdatum: ${provenance.priceDate}`;
+    historicDate.textContent = window.CryptoBuchI18n.t("Kursdatum: {p0}", { p0: provenance.priceDate });
     historicProvenance.append(quality, historicSource, historicDate);
     if (provenance.recordedAt) {
       const historicRecordedAt = document.createElement("small");
@@ -460,7 +460,7 @@ function renderTransactions() {
     const editHistoricPrice = document.createElement("button");
     editHistoricPrice.type = "button";
     editHistoricPrice.className = "text-button historic-price-edit";
-    editHistoricPrice.textContent = "Transaktion öffnen";
+    editHistoricPrice.textContent = window.CryptoBuchI18n.t("Transaktion öffnen");
     editHistoricPrice.addEventListener("click", () => openHistoricPriceModal(transaction));
     historic.append(historicDetail, historicProvenance, editHistoricPrice);
     row.append(selectCell, operation, wallet, amount, now, historic, renderPurpose(transaction));
@@ -489,7 +489,7 @@ async function setTransactionPurpose(id, purpose) {
     transaction.purpose_origin = result.purpose_origin;
     renderMetrics();
     renderTransactions();
-    toast(purpose ? `Zweck „${purpose}“ gespeichert.` : "Zweck entfernt.");
+    toast(purpose ? window.CryptoBuchI18n.t("Zweck „{p0}“ gespeichert.", { p0: purpose }) : window.CryptoBuchI18n.t("Zweck entfernt."));
   } catch (error) {
     toast(error.message, "error");
   }
@@ -500,13 +500,13 @@ async function applyBulkPurpose() {
   if (!ids.length) return;
   let purpose = el("bulk-purpose").value;
   if (purpose === "__custom__") {
-    const value = prompt("Eigenen Zweck für die ausgewählten Transaktionen eingeben:", "");
+    const value = prompt(window.CryptoBuchI18n.t("Eigenen Zweck für die ausgewählten Transaktionen eingeben:"), "");
     if (value === null) return;
     purpose = value.trim();
   }
   const button = el("apply-bulk-purpose");
   button.disabled = true;
-  button.textContent = "Speichert …";
+  button.textContent = window.CryptoBuchI18n.t("Speichert …");
   try {
     const result = await api("/api/transactions/bulk", { method: "PATCH", body: JSON.stringify({ ids, purpose }) });
     for (const transaction of state.portfolio.transactions) {
@@ -518,36 +518,36 @@ async function applyBulkPurpose() {
     state.selected.clear();
     renderMetrics();
     renderTransactions();
-    toast(`${result.updated.toLocaleString("de-DE")} Zwecke gespeichert.`);
+    toast(window.CryptoBuchI18n.t("{p0} Zwecke gespeichert.", { p0: result.updated.toLocaleString(window.CryptoBuchI18n.locale) }));
   } catch (error) {
     toast(error.message, "error");
   } finally {
     button.disabled = false;
-    button.textContent = "Zweck übernehmen";
+    button.textContent = window.CryptoBuchI18n.t("Zweck übernehmen");
   }
 }
 
 function renderPage() {
   const chain = chainInfo();
   const asset = assetInfo();
-  document.title = `CryptoBuch · ${asset.name}`;
+  document.title = window.CryptoBuchI18n.t("CryptoBuch · {p0}", { p0: asset.name });
   el("asset-icon").textContent = asset.icon;
   el("asset-icon").className = `asset-hero-icon ${requestedChain.toLowerCase()}`;
   el("asset-title").textContent = asset.name;
   el("asset-subtitle").textContent = asset.kind === "erc20"
-    ? `Ethereum ERC-20 · ${asset.symbol} · Transaktionen und Auswertung dieses Tokens.`
-    : asset.kind === "exchange" ? `Börsenbestand · ${asset.symbol} · Synchronisierung und Mapping erfolgen unter Datenqualität.`
-    : `Käufe, Erträge und alle ${asset.symbol}-Bewegungen in deinem Portfolio.`;
+    ? window.CryptoBuchI18n.t("Ethereum ERC-20 · {p0} · Transaktionen und Auswertung dieses Tokens.", { p0: asset.symbol })
+    : asset.kind === "exchange" ? window.CryptoBuchI18n.t("Börsenbestand · {p0} · Synchronisierung und Mapping erfolgen unter Datenqualität.", { p0: asset.symbol })
+    : window.CryptoBuchI18n.t("Käufe, Erträge und alle {p0}-Bewegungen in deinem Portfolio.", { p0: asset.symbol });
   const hidden = (state.portfolio.hiddenAssets || []).includes(activeAssetId());
   el("toggle-asset-visibility").disabled = false;
-  el("toggle-asset-visibility").textContent = hidden ? "Coin wieder einblenden" : "Coin ausblenden";
+  el("toggle-asset-visibility").textContent = hidden ? window.CryptoBuchI18n.t("Coin wieder einblenden") : window.CryptoBuchI18n.t("Coin ausblenden");
   el("asset-visibility-note").textContent = hidden
-    ? "Dieser Coin ist ausgeblendet: Er zählt nicht zu Portfolio-Summen und Wertentwicklung. Buchungen und Steuerberichte bleiben vollständig; aktuelle Kurse werden hier nicht bewertet."
-    : "Ausblenden entfernt diesen Coin aus Portfolio-Summen und Wertentwicklung. Buchungen und Steuerberichte bleiben erhalten.";
+    ? window.CryptoBuchI18n.t("Dieser Coin ist ausgeblendet: Er zählt nicht zu Portfolio-Summen und Wertentwicklung. Buchungen und Steuerberichte bleiben vollständig; aktuelle Kurse werden hier nicht bewertet.")
+    : window.CryptoBuchI18n.t("Ausblenden entfernt diesen Coin aus Portfolio-Summen und Wertentwicklung. Buchungen und Steuerberichte bleiben erhalten.");
   el("refresh-chain").hidden = asset.kind === "exchange";
   const report = state.portfolio.assetAnalytics?.[activeAssetId()];
   const prices = state.portfolio.currentPrices || {};
-  el("price-status").textContent = hidden ? "Coin ausgeblendet · keine aktuelle Bewertung" : prices.warning ? "Preisabfrage momentan nicht verfügbar" : hasPrice(report?.currentPriceEur) ? `1 ${asset.symbol} · ${formatPrice(report.currentPriceEur)}` : "Aktueller Preis nicht verfügbar";
+  el("price-status").textContent = hidden ? window.CryptoBuchI18n.t("Coin ausgeblendet · keine aktuelle Bewertung") : prices.warning ? window.CryptoBuchI18n.t("Preisabfrage momentan nicht verfügbar") : hasPrice(report?.currentPriceEur) ? `1 ${asset.symbol} · ${formatPrice(report.currentPriceEur)}` : window.CryptoBuchI18n.t("Aktueller Preis nicht verfügbar");
   renderMetrics();
   renderChart();
   renderTransactions();
@@ -555,7 +555,7 @@ function renderPage() {
 
 async function loadPortfolio({ quiet = false } = {}) {
   try {
-    if (!quiet) el("price-status").textContent = "Ansicht wird geladen …";
+    if (!quiet) el("price-status").textContent = window.CryptoBuchI18n.t("Ansicht wird geladen …");
     state.portfolio = await api("/api/portfolio");
     if (state.editingHistoricPriceTransaction) {
       state.editingHistoricPriceTransaction = state.portfolio.transactions.find((entry) => entry.id === state.editingHistoricPriceTransaction.id) || state.editingHistoricPriceTransaction;
@@ -564,7 +564,7 @@ async function loadPortfolio({ quiet = false } = {}) {
     renderPage();
   } catch (error) {
     toast(error.message, "error");
-    el("price-status").textContent = "Daten momentan nicht verfügbar";
+    el("price-status").textContent = window.CryptoBuchI18n.t("Daten momentan nicht verfügbar");
   }
 }
 
@@ -573,17 +573,17 @@ async function syncChain() {
   if (!wallets.length) return window.location.assign("/wallets.html");
   const button = el("refresh-chain");
   button.disabled = true;
-  button.textContent = "Synchronisiert …";
+  button.textContent = window.CryptoBuchI18n.t("Synchronisiert …");
   try {
     const results = [];
     for (const wallet of wallets) results.push(await api(`/api/wallets/${wallet.id}/sync`, { method: "POST" }));
     await loadPortfolio({ quiet: true });
-    toast(`${results.reduce((sum, result) => sum + result.imported, 0).toLocaleString("de-DE")} ${assetInfo().symbol}-Transaktionen aktualisiert.`);
+    toast(window.CryptoBuchI18n.t("{p0} {p1}-Transaktionen aktualisiert.", { p0: results.reduce((sum, result) => sum + result.imported, 0).toLocaleString(window.CryptoBuchI18n.locale), p1: assetInfo().symbol }));
   } catch (error) {
     toast(error.message, "error");
   } finally {
     button.disabled = false;
-    button.textContent = "Coin aktualisieren";
+    button.textContent = window.CryptoBuchI18n.t("Coin aktualisieren");
   }
 }
 
@@ -593,8 +593,8 @@ async function openHistoricPriceModal(transaction) {
   el("historic-price-input").value = hasPrice(transaction.price_transaction_eur) ? String(transaction.price_transaction_eur) : "";
   el("historic-price-note").value = "";
   el("historic-price-history").hidden = true;
-  el("historic-price-modal-title").textContent = `Transaktion #${transaction.id}`;
-  el("historic-price-modal-copy").textContent = `${formatAmount(transaction.amount, transaction.asset)} · ${transaction.direction === "in" ? "Eingang" : transaction.direction === "out" ? "Ausgang" : "Intern"} · ${transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : "ohne Zeitstempel"}. Ein manueller EUR-Kurs wird nicht automatisch überschrieben.`;
+  el("historic-price-modal-title").textContent = window.CryptoBuchI18n.t("Transaktion #{p0}", { p0: transaction.id });
+  el("historic-price-modal-copy").textContent = window.CryptoBuchI18n.t("{p0} · {p1} · {p2}. Ein manueller EUR-Kurs wird nicht automatisch überschrieben.", { p0: formatAmount(transaction.amount, transaction.asset), p1: transaction.direction === "in" ? window.CryptoBuchI18n.t("Eingang") : transaction.direction === "out" ? window.CryptoBuchI18n.t("Ausgang") : window.CryptoBuchI18n.t("Intern"), p2: transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : window.CryptoBuchI18n.t("ohne Zeitstempel") });
   el("historic-price-fetch-status").textContent = "";
   updatePriceFetchControls();
   el("historic-price-modal").showModal();
@@ -613,12 +613,12 @@ async function loadHistoricPriceHistory(transaction) {
       el("historic-price-input").value = hasPrice(transaction.price_transaction_eur) ? String(transaction.price_transaction_eur) : "";
     }
     const provenance = historicPriceProvenance({ ...transaction, ...history.transaction });
-    const observation = history.transaction.price_observed_at ? ` Kurszeitpunkt: ${formatRecordedAt(history.transaction.price_observed_at)}.` : " Kurszeitpunkt nicht dokumentiert.";
+    const observation = history.transaction.price_observed_at ? window.CryptoBuchI18n.t(" Kurszeitpunkt: {p0}.", { p0: formatRecordedAt(history.transaction.price_observed_at) }) : window.CryptoBuchI18n.t(" Kurszeitpunkt nicht dokumentiert.");
     const latest = history.changes[0];
     const audit = latest
-      ? ` Letzte Änderung: ${latest.source === "manual" ? "manuell" : "automatisch"} · ${formatRecordedAt(latest.changed_at)}${latest.note ? ` · ${latest.note}` : ""}`
+      ? window.CryptoBuchI18n.t(" Letzte Änderung: {p0} · {p1}{p2}", { p0: latest.source === "manual" ? "manuell" : "automatisch", p1: formatRecordedAt(latest.changed_at), p2: latest.note ? ` · ${latest.note}` : "" })
       : "";
-    el("historic-price-history").textContent = `Kursherkunft: ${provenance.provider} · Datenqualität: ${provenance.quality}.${observation}${audit}`;
+    el("historic-price-history").textContent = window.CryptoBuchI18n.t("Kursherkunft: {p0} · Datenqualität: {p1}.{p2}{p3}", { p0: provenance.provider, p1: provenance.quality, p2: observation, p3: audit });
     el("historic-price-history").hidden = false;
     updatePriceFetchControls();
   } catch (_) {
@@ -630,13 +630,13 @@ function updatePriceFetchControls() {
   const transaction = state.editingHistoricPriceTransaction;
   if (!transaction) return;
   const job = state.priceFetchJobs.get(transaction.id);
-  const unavailable = transaction.price_source === "manual" ? "Dieser Kurs ist geschützt. Für einen neuen Abruf zuerst ausdrücklich Automatik verwenden wählen."
-    : !transaction.timestamp || !Number.isFinite(Date.parse(transaction.timestamp)) ? "Für den Kursabruf fehlt ein gültiges Buchungsdatum."
-      : transaction.asset_type === "nft" ? "Für NFTs ist kein automatischer historischer Kurs verfügbar." : null;
+  const unavailable = transaction.price_source === "manual" ? window.CryptoBuchI18n.t("Dieser Kurs ist geschützt. Für einen neuen Abruf zuerst ausdrücklich Automatik verwenden wählen.")
+    : !transaction.timestamp || !Number.isFinite(Date.parse(transaction.timestamp)) ? window.CryptoBuchI18n.t("Für den Kursabruf fehlt ein gültiges Buchungsdatum.")
+      : transaction.asset_type === "nft" ? window.CryptoBuchI18n.t("Für NFTs ist kein automatischer historischer Kurs verfügbar.") : null;
   const button = el("fetch-historic-price");
   button.disabled = Boolean(unavailable || job?.polling || job?.submitting);
-  button.textContent = job ? "Kursabruf läuft …" : "Jetzt Kursdaten abrufen";
-  if (job && !job.polling && !job.submitting) button.textContent = "Status aktualisieren";
+  button.textContent = job ? window.CryptoBuchI18n.t("Kursabruf läuft …") : window.CryptoBuchI18n.t("Jetzt Kursdaten abrufen");
+  if (job && !job.polling && !job.submitting) button.textContent = window.CryptoBuchI18n.t("Status aktualisieren");
   for (const id of ["save-historic-price", "restore-historic-price", "historic-price-input", "historic-price-note"]) el(id).disabled = Boolean(job);
   if (unavailable) el("historic-price-fetch-status").textContent = unavailable;
 }
@@ -655,7 +655,7 @@ async function fetchTransactionPrice() {
   } catch (error) {
     state.priceFetchJobs.delete(transaction.id);
     if (state.editingHistoricPriceTransaction?.id === transaction.id) {
-      el("historic-price-error").textContent = error.message;
+      el("historic-price-error").textContent = window.CryptoBuchI18n.message(error.message);
       el("historic-price-error").hidden = false;
     }
   } finally { updatePriceFetchControls(); }
@@ -672,17 +672,17 @@ async function pollTransactionPrice(transaction) {
     for (let attempt = 0; attempt < 90 && visible(); attempt += 1) {
       const job = await api(`/api/jobs/${entry.id}`);
       if (!visible()) return;
-      el("historic-price-fetch-status").textContent = `Kursabruf #${entry.id}: ${job.status === "queued" ? "wartet auf einen freien Platz" : "wird ausgeführt"}.`;
+      el("historic-price-fetch-status").textContent = window.CryptoBuchI18n.t("Kursabruf #{p0}: {p1}.", { p0: entry.id, p1: job.status === "queued" ? window.CryptoBuchI18n.t("wartet auf einen freien Platz") : window.CryptoBuchI18n.t("wird ausgeführt") });
       if (job.status === "error") {
         state.priceFetchJobs.delete(transaction.id);
-        throw new Error(job.error_message || "Kursabruf fehlgeschlagen.");
+        throw new Error(job.error_message || window.CryptoBuchI18n.t("Kursabruf fehlgeschlagen."));
       }
       if (job.status === "success") {
         const fresh = await api(`/api/v1/transactions/${transaction.id}`);
         if (!visible()) return;
         Object.assign(transaction, fresh.data);
         el("historic-price-input").value = hasPrice(transaction.price_transaction_eur) ? String(transaction.price_transaction_eur) : "";
-        el("historic-price-fetch-status").textContent = job.result?.hint || "Kursabruf abgeschlossen.";
+        el("historic-price-fetch-status").textContent = job.result?.hint || window.CryptoBuchI18n.t("Kursabruf abgeschlossen.");
         state.priceFetchJobs.delete(transaction.id);
         await loadHistoricPriceHistory(transaction);
         await loadPortfolio({ quiet: true });
@@ -690,10 +690,10 @@ async function pollTransactionPrice(transaction) {
       }
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
-    if (visible()) el("historic-price-fetch-status").textContent = "Der Auftrag läuft auf dem Server weiter. Du kannst den Status erneut aktualisieren.";
+    if (visible()) el("historic-price-fetch-status").textContent = window.CryptoBuchI18n.t("Der Auftrag läuft auf dem Server weiter. Du kannst den Status erneut aktualisieren.");
   } catch (error) {
     if (visible()) {
-      el("historic-price-error").textContent = error.message;
+      el("historic-price-error").textContent = window.CryptoBuchI18n.message(error.message);
       el("historic-price-error").hidden = false;
     }
   } finally {
@@ -728,21 +728,21 @@ async function saveHistoricPrice(useAutomatic = false) {
     }
     closeHistoricPriceModal();
     await loadPortfolio({ quiet: true });
-    toast(result.price_source === "manual" ? "Historischer Kurs manuell gespeichert." : result.priceHint || "Automatische Preisergänzung wieder aktiviert.");
+    toast(result.price_source === "manual" ? window.CryptoBuchI18n.t("Historischer Kurs manuell gespeichert.") : result.priceHint || window.CryptoBuchI18n.t("Automatische Preisergänzung wieder aktiviert."));
   } catch (requestError) {
-    error.textContent = requestError.message;
+    error.textContent = window.CryptoBuchI18n.message(requestError.message);
     error.hidden = false;
   }
 }
 
 function formatDocumentSize(value) {
-  return value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  return value < 1024 * 1024 ? window.CryptoBuchI18n.t("{p0} KB", { p0: Math.ceil(value / 1024) }) : window.CryptoBuchI18n.t("{p0} MB", { p0: (value / (1024 * 1024)).toFixed(1) });
 }
 
 function renderDocuments(documents) {
   const list = el("transaction-document-list");
   if (!documents.length) {
-    list.replaceChildren(Object.assign(document.createElement("li"), { className: "muted", textContent: "Noch kein lokaler Nachweis angehängt." }));
+    list.replaceChildren(Object.assign(document.createElement("li"), { className: "muted", textContent: window.CryptoBuchI18n.t("Noch kein lokaler Nachweis angehängt.") }));
     return;
   }
   list.replaceChildren(...documents.map((entry) => {
@@ -755,15 +755,15 @@ function renderDocuments(documents) {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "text-button";
-    remove.textContent = "Entfernen";
+    remove.textContent = window.CryptoBuchI18n.t("Entfernen");
     remove.addEventListener("click", async () => {
-      if (!confirm(`Nachweis „${entry.originalName}“ wirklich lokal löschen?`)) return;
+      if (!confirm(window.CryptoBuchI18n.t("Nachweis „{p0}“ wirklich lokal löschen?", { p0: entry.originalName }))) return;
       try {
         await api(`/api/transaction-documents/${entry.id}`, { method: "DELETE" });
         await loadDocuments();
       } catch (error) { toast(error.message, "error"); }
     });
-    item.append(download, ` · ${formatDocumentSize(entry.byteSize)} · SHA-256 ${entry.sha256.slice(0, 12)}… · `, remove);
+    item.append(download, window.CryptoBuchI18n.t(" · {p0} · SHA-256 {p1}… · ", { p0: formatDocumentSize(entry.byteSize), p1: entry.sha256.slice(0, 12) }), remove);
     return item;
   }));
 }
@@ -778,7 +778,7 @@ async function openDocumentModal(transaction) {
   state.documentTransaction = transaction;
   el("transaction-document-form").reset();
   el("transaction-document-error").hidden = true;
-  el("transaction-document-modal-copy").textContent = `${assetInfo(transaction.asset).symbol} · ${transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : "ohne Zeitstempel"}`;
+  el("transaction-document-modal-copy").textContent = `${assetInfo(transaction.asset).symbol} · ${transaction.timestamp ? dateTime.format(new Date(transaction.timestamp)) : window.CryptoBuchI18n.t("ohne Zeitstempel")}`;
   el("transaction-document-modal").showModal();
   try { await loadDocuments(); } catch (error) { toast(error.message, "error"); }
 }
@@ -789,20 +789,20 @@ async function uploadDocument(event) {
   const error = el("transaction-document-error");
   error.hidden = true;
   try {
-    if (!state.documentTransaction || !file) throw new Error("Bitte zuerst einen Nachweis auswählen.");
-    if (file.size > 5 * 1024 * 1024) throw new Error("Ein Nachweis darf maximal 5 MB groß sein.");
+    if (!state.documentTransaction || !file) throw new Error(window.CryptoBuchI18n.t("Bitte zuerst einen Nachweis auswählen."));
+    if (file.size > 5 * 1024 * 1024) throw new Error(window.CryptoBuchI18n.t("Ein Nachweis darf maximal 5 MB groß sein."));
     const response = await fetch(`/api/transactions/${state.documentTransaction.id}/documents`, {
       method: "POST",
       headers: { "Content-Type": file.type || "application/octet-stream", "X-Document-Name": encodeURIComponent(file.name) },
       body: file,
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || "Nachweis konnte nicht gespeichert werden.");
+    if (!response.ok) throw new Error(payload.error || window.CryptoBuchI18n.t("Nachweis konnte nicht gespeichert werden."));
     event.currentTarget.reset();
     await loadDocuments();
-    toast("Nachweis lokal gespeichert.");
+    toast(window.CryptoBuchI18n.t("Nachweis lokal gespeichert."));
   } catch (requestError) {
-    error.textContent = requestError.message;
+    error.textContent = window.CryptoBuchI18n.message(requestError.message);
     error.hidden = false;
   }
 }
@@ -835,7 +835,7 @@ el("toggle-asset-visibility").addEventListener("click", async () => {
     const hidden = !(state.portfolio.hiddenAssets || []).includes(activeAssetId());
     await api("/api/asset-visibility", { method: "PATCH", body: JSON.stringify({ asset: activeAssetId(), hidden }) });
     await loadPortfolio({ quiet: true });
-    toast(hidden ? "Coin ausgeblendet. Buchungen bleiben erhalten." : "Coin wieder eingeblendet.");
+    toast(hidden ? window.CryptoBuchI18n.t("Coin ausgeblendet. Buchungen bleiben erhalten.") : window.CryptoBuchI18n.t("Coin wieder eingeblendet."));
   } catch (error) { toast(error.message, "error"); }
   finally { button.disabled = false; }
 });

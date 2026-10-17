@@ -1,6 +1,6 @@
 const { api, el, node, priceProviderLabel: sourceLabel, toast } = window.CryptoBuchUI;
-const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" });
-const dateTime = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
+const date = new Intl.DateTimeFormat(window.CryptoBuchI18n.locale, { dateStyle: "medium" });
+const dateTime = new Intl.DateTimeFormat(window.CryptoBuchI18n.locale, { dateStyle: "medium", timeStyle: "short" });
 const state = { page: 1, data: null };
 
 function readableDate(value) {
@@ -16,38 +16,38 @@ function readableDateTime(value) {
 }
 
 function triggerLabel(trigger) {
-  return ({ automatisch: "Automatisch", manuell: "Manuell", wallet_sync: "Wallet-Sync", import: "Import", automatik: "Automatik aktiviert", zuordnung: "Preiszuordnung" })[trigger] || trigger;
+  return ({ automatisch: window.CryptoBuchI18n.t("Automatisch"), manuell: window.CryptoBuchI18n.t("Manuell"), wallet_sync: window.CryptoBuchI18n.t("Wallet-Sync"), import: window.CryptoBuchI18n.t("Import"), automatik: window.CryptoBuchI18n.t("Automatik aktiviert"), zuordnung: window.CryptoBuchI18n.t("Preiszuordnung") })[trigger] || trigger;
 }
 
 function runState(run) {
-  if (run.status === "running") return { label: "Läuft", className: "running" };
-  if (run.status === "error" || run.status === "interrupted") return { label: run.status === "interrupted" ? "Unterbrochen" : "Fehler", className: "error" };
-  if (run.result?.blocked > 0) return { label: "Klärung nötig", className: "partial" };
-  if (run.unresolvedCount > 0) return { label: "Teilweise offen", className: "partial" };
-  return { label: "Erfolgreich", className: "success" };
+  if (run.status === "running") return { label: window.CryptoBuchI18n.t("Läuft"), className: "running" };
+  if (run.status === "error" || run.status === "interrupted") return { label: run.status === "interrupted" ? window.CryptoBuchI18n.t("Unterbrochen") : window.CryptoBuchI18n.t("Fehler"), className: "error" };
+  if (run.result?.blocked > 0) return { label: window.CryptoBuchI18n.t("Klärung nötig"), className: "partial" };
+  if (run.unresolvedCount > 0) return { label: window.CryptoBuchI18n.t("Teilweise offen"), className: "partial" };
+  return { label: window.CryptoBuchI18n.t("Erfolgreich"), className: "success" };
 }
 
 function renderPipeline(pipeline) {
-  const status = ({ running: "Abruf läuft", queued: "Abruf wartet", waiting: "Bereit", blocked: "Zuordnung fehlt" })[pipeline.status] || "Bereit";
+  const status = ({ running: window.CryptoBuchI18n.t("Abruf läuft"), queued: window.CryptoBuchI18n.t("Abruf wartet"), waiting: window.CryptoBuchI18n.t("Bereit"), blocked: window.CryptoBuchI18n.t("Zuordnung fehlt") })[pipeline.status] || window.CryptoBuchI18n.t("Bereit");
   el("price-pipeline-status").textContent = status;
   el("price-pipeline-status").className = "price-pipeline-status " + pipeline.status;
-  el("pipeline-blocked").textContent = pipeline.blocked ? `${pipeline.blocked.toLocaleString("de-DE")} Buchungen pausieren wegen fehlender Zuordnung oder ungültigem Datum. Diese belegen keinen Abrufplatz.` : "Alle offenen Buchungen sind grundsätzlich zugeordnet.";
-  el("pipeline-pending").textContent = pipeline.pending.toLocaleString("de-DE");
-  el("pipeline-due").textContent = pipeline.due.toLocaleString("de-DE");
-  el("pipeline-scheduled").textContent = pipeline.scheduled.toLocaleString("de-DE");
-  el("pipeline-batch-size").textContent = pipeline.batchSize.toLocaleString("de-DE");
-  const copy = pipeline.status === "blocked" ? "Die offenen Buchungen benötigen zuerst eine Preiszuordnung oder ein gültiges Datum." : pipeline.status === "running"
-    ? "Ein lokaler Preisabruf verarbeitet die aktuelle Warteschlange seriell."
+  el("pipeline-blocked").textContent = pipeline.blocked ? window.CryptoBuchI18n.t("{p0} Buchungen pausieren wegen fehlender Zuordnung oder ungültigem Datum. Diese belegen keinen Abrufplatz.", { p0: pipeline.blocked.toLocaleString(window.CryptoBuchI18n.locale) }) : window.CryptoBuchI18n.t("Alle offenen Buchungen sind grundsätzlich zugeordnet.");
+  el("pipeline-pending").textContent = pipeline.pending.toLocaleString(window.CryptoBuchI18n.locale);
+  el("pipeline-due").textContent = pipeline.due.toLocaleString(window.CryptoBuchI18n.locale);
+  el("pipeline-scheduled").textContent = pipeline.scheduled.toLocaleString(window.CryptoBuchI18n.locale);
+  el("pipeline-batch-size").textContent = pipeline.batchSize.toLocaleString(window.CryptoBuchI18n.locale);
+  const copy = pipeline.status === "blocked" ? window.CryptoBuchI18n.t("Die offenen Buchungen benötigen zuerst eine Preiszuordnung oder ein gültiges Datum.") : pipeline.status === "running"
+    ? window.CryptoBuchI18n.t("Ein lokaler Preisabruf verarbeitet die aktuelle Warteschlange seriell.")
     : pipeline.status === "queued"
-      ? pipeline.jobs.length + " Kursabruf(e) warten in der lokalen Job-Warteschlange."
+      ? window.CryptoBuchI18n.t("Wartende Kursabrufe: {count}.", { count: pipeline.jobs.length })
       : pipeline.pending
-        ? "Die nächste automatische Prüfung startet " + readableDateTime(pipeline.nextAutomaticAt) + "."
-        : "Aktuell sind keine fehlenden historischen Kurse vorgemerkt.";
+        ? window.CryptoBuchI18n.t("Die nächste automatische Prüfung startet {time}.", { time: readableDateTime(pipeline.nextAutomaticAt) })
+        : window.CryptoBuchI18n.t("Aktuell sind keine fehlenden historischen Kurse vorgemerkt.");
   el("price-pipeline-copy").textContent = copy;
   const stages = pipeline.sources.map((source, index) => {
     const item = node("li", "price-pipeline-stage" + (source.active ? "" : " inactive"));
-    item.append(node("span", "price-pipeline-index", String(index + 1)), node("strong", "", source.label));
-    item.append(node("small", "", source.active ? "bei fehlendem Tageskurs" : "optional · API-Key fehlt"));
+    item.append(node("span", "price-pipeline-index", String(index + 1)), node("strong", "", window.CryptoBuchI18n.message(source.label)));
+    item.append(node("small", "", source.active ? window.CryptoBuchI18n.t("bei fehlendem Tageskurs") : window.CryptoBuchI18n.t("optional · API-Key fehlt")));
     return item;
   });
   el("price-pipeline-stages").replaceChildren(...stages);
@@ -55,22 +55,22 @@ function renderPipeline(pipeline) {
 
 function renderUpcoming(data) {
   const items = data.upcoming || [];
-  el("price-fetch-upcoming-count").textContent = data.pipeline.pending.toLocaleString("de-DE");
-  el("price-fetch-upcoming-count").setAttribute("aria-label", data.pipeline.pending.toLocaleString("de-DE") + " offene Kurse");
-  el("price-fetch-next-at").textContent = data.pipeline.status === "blocked" ? "Automatische Abrufe pausieren für diese Buchungen bis zur Klärung." : data.pipeline.status === "running"
-    ? "Die Pipeline läuft gerade. Neue Abrufe bleiben hinter der laufenden seriellen Anfrage eingeordnet."
+  el("price-fetch-upcoming-count").textContent = data.pipeline.pending.toLocaleString(window.CryptoBuchI18n.locale);
+  el("price-fetch-upcoming-count").setAttribute("aria-label", window.CryptoBuchI18n.t("Offene Kurse: {count}", { count: data.pipeline.pending.toLocaleString(window.CryptoBuchI18n.locale) }));
+  el("price-fetch-next-at").textContent = data.pipeline.status === "blocked" ? window.CryptoBuchI18n.t("Automatische Abrufe pausieren für diese Buchungen bis zur Klärung.") : data.pipeline.status === "running"
+    ? window.CryptoBuchI18n.t("Die Pipeline läuft gerade. Neue Abrufe bleiben hinter der laufenden seriellen Anfrage eingeordnet.")
     : data.pipeline.pending
-      ? "Nächste automatische Prüfung: " + readableDateTime(data.pipeline.nextAutomaticAt) + " · Wiederholung im Abstand von mindestens " + data.pipeline.retryIntervalMinutes + " Minuten nach Fehlschlägen. Fällige Folge-Batches laufen seriell weiter."
-      : "Die Pipeline prüft weiterhin lokal, sobald neue Buchungen ohne historischen Kurs eintreffen.";
+      ? window.CryptoBuchI18n.t("Nächste automatische Prüfung: {time} · Wiederholung frühestens nach {minutes} Minuten bei Fehlschlägen. Fällige Folge-Batches laufen seriell weiter.", { time: readableDateTime(data.pipeline.nextAutomaticAt), minutes: data.pipeline.retryIntervalMinutes })
+      : window.CryptoBuchI18n.t("Die Pipeline prüft weiterhin lokal, sobald neue Buchungen ohne historischen Kurs eintreffen.");
   const rows = items.map((entry) => {
     const tr = node("tr");
     [
       readableDate(entry.timestamp),
       entry.assetSymbol || entry.asset,
       entry.sourceLabel,
-      entry.blocked ? "Pausiert" : entry.due ? "Fällig" : readableDateTime(entry.nextAttemptAt),
-      entry.attempts ? entry.attempts.toLocaleString("de-DE") : "neu",
-      entry.reasonLabel || "—",
+      entry.blocked ? window.CryptoBuchI18n.t("Pausiert") : entry.due ? window.CryptoBuchI18n.t("Fällig") : readableDateTime(entry.nextAttemptAt),
+      entry.attempts ? entry.attempts.toLocaleString(window.CryptoBuchI18n.locale) : window.CryptoBuchI18n.t("neu"),
+      window.CryptoBuchI18n.message(entry.reasonLabel) || "—",
     ].forEach((value) => tr.append(node("td", "", value)));
     return tr;
   });
@@ -86,7 +86,7 @@ function detailMetric(label, value) {
 
 function eventRow(event) {
   const tr = node("tr");
-  const status = event.status === "success" ? (event.returnedPrices ? "Treffer" : "Kein Tageskurs") : "Fehler";
+  const status = event.status === "success" ? (event.returnedPrices ? window.CryptoBuchI18n.t("Treffer") : window.CryptoBuchI18n.t("Kein Tageskurs")) : window.CryptoBuchI18n.t("Fehler");
   const range = event.dateFrom && event.dateTo && event.dateFrom !== event.dateTo
     ? readableDate(event.dateFrom) + " – " + readableDate(event.dateTo)
     : readableDate(event.dateFrom);
@@ -96,7 +96,7 @@ function eventRow(event) {
     event.asset,
     range,
     status,
-    event.status === "success" ? event.returnedPrices.toLocaleString("de-DE") : (event.errorMessage || "—"),
+    event.status === "success" ? event.returnedPrices.toLocaleString(window.CryptoBuchI18n.locale) : (window.CryptoBuchI18n.message(event.errorMessage) || "—"),
   ].forEach((value) => tr.append(node("td", "", value)));
   return tr;
 }
@@ -112,30 +112,30 @@ function runCard(run) {
     node("span", "muted", "#" + run.id + " · " + readableDateTime(run.startedAt)),
   );
   const compact = node("div", "price-fetch-run-compact");
-  compact.append(node("span", "", run.attemptedCount.toLocaleString("de-DE") + " geprüft"), node("span", "", run.updatedCount.toLocaleString("de-DE") + " ergänzt"));
-  if (run.unresolvedCount) compact.append(node("span", "", run.unresolvedCount.toLocaleString("de-DE") + " offen"));
+  compact.append(node("span", "", window.CryptoBuchI18n.t("{count} geprüft", { count: run.attemptedCount.toLocaleString(window.CryptoBuchI18n.locale) })), node("span", "", window.CryptoBuchI18n.t("{count} ergänzt", { count: run.updatedCount.toLocaleString(window.CryptoBuchI18n.locale) })));
+  if (run.unresolvedCount) compact.append(node("span", "", window.CryptoBuchI18n.t("{count} offen", { count: run.unresolvedCount.toLocaleString(window.CryptoBuchI18n.locale) })));
   summary.append(headline, compact);
   card.append(summary);
   const body = node("div", "price-fetch-run-body");
   const metrics = node("div", "price-fetch-run-metrics");
   metrics.append(
-    detailMetric("Offen beim Start", run.pendingCount === null ? "—" : run.pendingCount.toLocaleString("de-DE")),
-    detailMetric("Geprüft", run.attemptedCount.toLocaleString("de-DE")),
-    detailMetric("Ergänzt", run.updatedCount.toLocaleString("de-DE")),
-    detailMetric("Noch offen", run.unresolvedCount.toLocaleString("de-DE")),
-    detailMetric("Klärung nötig", Number(run.result?.blocked || 0).toLocaleString("de-DE")),
+    detailMetric(window.CryptoBuchI18n.t("Offen beim Start"), run.pendingCount === null ? "—" : run.pendingCount.toLocaleString(window.CryptoBuchI18n.locale)),
+    detailMetric(window.CryptoBuchI18n.t("Geprüft"), run.attemptedCount.toLocaleString(window.CryptoBuchI18n.locale)),
+    detailMetric(window.CryptoBuchI18n.t("Ergänzt"), run.updatedCount.toLocaleString(window.CryptoBuchI18n.locale)),
+    detailMetric(window.CryptoBuchI18n.t("Noch offen"), run.unresolvedCount.toLocaleString(window.CryptoBuchI18n.locale)),
+    detailMetric(window.CryptoBuchI18n.t("Klärung nötig"), Number(run.result?.blocked || 0).toLocaleString(window.CryptoBuchI18n.locale)),
   );
   body.append(metrics);
-  if (run.errorMessage) body.append(node("p", "price-fetch-run-error", run.errorMessage));
-  if (run.result?.hint) body.append(node("p", "data-note", run.result.hint));
+  if (run.errorMessage) body.append(node("p", "price-fetch-run-error", window.CryptoBuchI18n.message(run.errorMessage)));
+  if (run.result?.hint) body.append(node("p", "data-note", window.CryptoBuchI18n.message(run.result.hint)));
   if (!run.events.length) {
-    body.append(node("p", "data-note", "Kein externer HTTP-Abruf in diesem Durchlauf. Gründe können Cache-Treffer, Tarifgrenzen, ein noch offener UTC-Tag oder fehlende Preiszuordnungen sein. Beachte das Ergebnis oben."));
+    body.append(node("p", "data-note", window.CryptoBuchI18n.t("Kein externer HTTP-Abruf in diesem Durchlauf. Gründe können Cache-Treffer, Tarifgrenzen, ein noch offener UTC-Tag oder fehlende Preiszuordnungen sein. Beachte das Ergebnis oben.")));
   } else {
     const wrap = node("div", "table-wrap price-fetch-event-table");
     const table = node("table");
     const head = node("thead");
     const row = node("tr");
-    ["Zeitpunkt", "Quelle", "Asset", "Zeitraum", "Ergebnis", "Wert / Hinweis"].forEach((label) => row.append(node("th", "", label)));
+    [window.CryptoBuchI18n.t("Zeitpunkt"), window.CryptoBuchI18n.t("Quelle"), window.CryptoBuchI18n.t("Asset"), window.CryptoBuchI18n.t("Zeitraum"), window.CryptoBuchI18n.t("Ergebnis"), window.CryptoBuchI18n.t("Wert / Hinweis")].forEach((label) => row.append(node("th", "", label)));
     head.append(row);
     const bodyRows = node("tbody");
     bodyRows.append(...run.events.map(eventRow));
@@ -155,9 +155,9 @@ function renderRuns(data) {
   const visible = pagination.total > 0;
   el("price-fetch-pagination").hidden = !visible;
   el("price-fetch-log-meta").textContent = visible
-    ? pagination.total.toLocaleString("de-DE") + " lokale Durchläufe"
-    : "Noch kein Abruf";
-  el("price-fetch-page-label").textContent = "Seite " + pagination.page + " von " + pagination.totalPages;
+    ? window.CryptoBuchI18n.t("{count} lokale Durchläufe", { count: pagination.total.toLocaleString(window.CryptoBuchI18n.locale) })
+    : window.CryptoBuchI18n.t("Noch kein Abruf");
+  el("price-fetch-page-label").textContent = window.CryptoBuchI18n.t("Seite {page} von {total}", { page: pagination.page, total: pagination.totalPages });
   el("price-fetch-previous").disabled = pagination.page <= 1;
   el("price-fetch-next").disabled = pagination.page >= pagination.totalPages;
 }
@@ -172,14 +172,14 @@ function renderMappings(mappings) {
   el("price-mapping-empty").hidden = mappings.length > 0;
   el("price-mapping-list").replaceChildren(...mappings.map((mapping) => {
     const form = node("form", "price-mapping-form");
-    form.append(node("strong", "", `${mapping.asset} · ${mapping.sourceLabel} · ${mapping.missing} ${mapping.missing === 1 ? "Kurs" : "Kurse"} offen`));
+    form.append(node("strong", "", window.CryptoBuchI18n.t("{p0} · {p1} · {p2} {p3} offen", { p0: mapping.asset, p1: mapping.sourceLabel, p2: mapping.missing, p3: mapping.missing === 1 ? window.CryptoBuchI18n.t("Kurs") : window.CryptoBuchI18n.t("Kurse") })));
     const label = node("label");
-    label.append(node("span", "", "CoinGecko-ID"));
+    label.append(node("span", "", window.CryptoBuchI18n.t("CoinGecko-ID")));
     const input = node("input");
     input.required = true;
     input.maxLength = 100;
     input.pattern = "[a-z0-9][a-z0-9_-]{0,99}";
-    input.placeholder = "API-ID des Coins";
+    input.placeholder = window.CryptoBuchI18n.t("API-ID des Coins");
     input.value = mapping.coinGeckoId || "";
     label.append(input);
     form.append(label);
@@ -187,9 +187,9 @@ function renderMappings(mappings) {
     const confirmation = node("input");
     confirmation.type = "checkbox";
     confirmation.required = true;
-    confirmLabel.append(confirmation, document.createTextNode("Coin-Identität geprüft; Zuordnung für diese Quelle bestätigen."));
+    confirmLabel.append(confirmation, document.createTextNode(window.CryptoBuchI18n.t("Coin-Identität geprüft; Zuordnung für diese Quelle bestätigen.")));
     form.append(confirmLabel);
-    const button = node("button", "button button-secondary", "Zuordnung speichern & Kurse abrufen");
+    const button = node("button", "button button-secondary", window.CryptoBuchI18n.t("Zuordnung speichern & Kurse abrufen"));
     button.type = "submit";
     form.append(button);
     form.addEventListener("submit", async (event) => {
@@ -199,7 +199,7 @@ function renderMappings(mappings) {
         const result = await api("/api/price-asset-mappings", { method: "PUT", body: JSON.stringify({
           walletId: mapping.walletId, asset: mapping.asset, coinGeckoId: input.value.trim(), confirmed: confirmation.checked,
         }) });
-        toast(`Zuordnung gespeichert. Kursabruf #${result.job.id} eingeplant.`);
+        toast(window.CryptoBuchI18n.t("Zuordnung gespeichert. Kursabruf #{p0} eingeplant.", { p0: result.job.id }));
         confirmation.checked = false;
         mappingSignature = "";
         await load();
@@ -231,7 +231,7 @@ el("start-price-fetch").addEventListener("click", async () => {
   const button = el("start-price-fetch");
   try {
     button.disabled = true;
-    button.textContent = "Wird eingeplant …";
+    button.textContent = window.CryptoBuchI18n.t("Wird eingeplant …");
     const result = await api("/api/jobs/price-backfill", { method: "POST", body: JSON.stringify({ force: true }) });
     toast("Kursabruf #" + result.job.id + " wurde lokal eingeplant.");
     state.page = 1;
@@ -240,7 +240,7 @@ el("start-price-fetch").addEventListener("click", async () => {
     toast(error.message, "error");
   } finally {
     button.disabled = false;
-    button.textContent = "Jetzt prüfen";
+    button.textContent = window.CryptoBuchI18n.t("Jetzt prüfen");
   }
 });
 el("reload-price-fetches").addEventListener("click", load);

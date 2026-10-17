@@ -53,27 +53,27 @@ function render(settings) {
   assign("xpub-maximum", "value", settings.xpubMaxDerivationsPerBranch);
   assign("staking-aliases", "value", settings.xtzStakingPayoutAliases);
   assign("trongrid-key-status", "textContent", settings.tronGridApiKeyConfigured
-    ? "Ein API-Key ist gespeichert. Leer lassen, um ihn beizubehalten."
-    : "Kein API-Key gespeichert. Ohne Key gelten die öffentlichen Rate Limits.");
+    ? window.CryptoBuchI18n.t("Ein API-Key ist gespeichert. Leer lassen, um ihn beizubehalten.")
+    : window.CryptoBuchI18n.t("Kein API-Key gespeichert. Ohne Key gelten die öffentlichen Rate Limits."));
   assign("blockfrost-project-id-status", "textContent", settings.blockfrostProjectIdConfigured
-    ? "Eine Project-ID ist gespeichert. Leer lassen, um sie beizubehalten."
-    : "Keine Project-ID gespeichert. Cardano-Wallets können noch nicht synchronisiert werden.");
+    ? window.CryptoBuchI18n.t("Eine Project-ID ist gespeichert. Leer lassen, um sie beizubehalten.")
+    : window.CryptoBuchI18n.t("Keine Project-ID gespeichert. Cardano-Wallets können noch nicht synchronisiert werden."));
   assign("etherscan-key-status", "textContent", settings.etherscanApiKeyConfigured
-    ? "Ein API-Key ist gespeichert. Leer lassen, um ihn beizubehalten."
-    : "Kein API-Key gespeichert. Ethereum-Wallets können noch nicht synchronisiert werden.");
-  assign("bscscan-key-status", "textContent", settings.bscScanApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. BNB-Wallets können noch nicht synchronisiert werden.");
-  assign("snowtrace-key-status", "textContent", settings.snowtraceApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. AVAX-Wallets können noch nicht synchronisiert werden.");
-  assign("solscan-key-status", "textContent", settings.solscanApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. Solana-Wallets können noch nicht synchronisiert werden.");
-  assign("nearblocks-key-status", "textContent", settings.nearBlocksApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein API-Key gespeichert. NEAR-Wallets können noch nicht synchronisiert werden.");
-  assign("tonapi-key-status", "textContent", settings.tonApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche TonAPI-Rate kann begrenzt sein.");
-  assign("blockchair-key-status", "textContent", settings.blockchairApiKeyConfigured ? "Ein API-Key ist gespeichert." : "Kein Key gespeichert; die öffentliche Blockchair-Rate für Zcash kann begrenzt sein.");
-  assign("blockcypher-token-status", "textContent", settings.blockCypherApiTokenConfigured ? "Ein Token ist gespeichert." : "Kein Token gespeichert; die öffentliche BlockCypher-Rate kann begrenzt sein.");
+    ? window.CryptoBuchI18n.t("Ein API-Key ist gespeichert. Leer lassen, um ihn beizubehalten.")
+    : window.CryptoBuchI18n.t("Kein API-Key gespeichert. Ethereum-Wallets können noch nicht synchronisiert werden."));
+  assign("bscscan-key-status", "textContent", settings.bscScanApiKeyConfigured ? window.CryptoBuchI18n.t("Ein API-Key ist gespeichert.") : window.CryptoBuchI18n.t("Kein API-Key gespeichert. BNB-Wallets können noch nicht synchronisiert werden."));
+  assign("snowtrace-key-status", "textContent", settings.snowtraceApiKeyConfigured ? window.CryptoBuchI18n.t("Ein API-Key ist gespeichert.") : window.CryptoBuchI18n.t("Kein API-Key gespeichert. AVAX-Wallets können noch nicht synchronisiert werden."));
+  assign("solscan-key-status", "textContent", settings.solscanApiKeyConfigured ? window.CryptoBuchI18n.t("Ein API-Key ist gespeichert.") : window.CryptoBuchI18n.t("Kein API-Key gespeichert. Solana-Wallets können noch nicht synchronisiert werden."));
+  assign("nearblocks-key-status", "textContent", settings.nearBlocksApiKeyConfigured ? window.CryptoBuchI18n.t("Ein API-Key ist gespeichert.") : window.CryptoBuchI18n.t("Kein API-Key gespeichert. NEAR-Wallets können noch nicht synchronisiert werden."));
+  assign("tonapi-key-status", "textContent", settings.tonApiKeyConfigured ? window.CryptoBuchI18n.t("Ein API-Key ist gespeichert.") : window.CryptoBuchI18n.t("Kein Key gespeichert; die öffentliche TonAPI-Rate kann begrenzt sein."));
+  assign("blockchair-key-status", "textContent", settings.blockchairApiKeyConfigured ? window.CryptoBuchI18n.t("Ein API-Key ist gespeichert.") : window.CryptoBuchI18n.t("Kein Key gespeichert; die öffentliche Blockchair-Rate für Zcash kann begrenzt sein."));
+  assign("blockcypher-token-status", "textContent", settings.blockCypherApiTokenConfigured ? window.CryptoBuchI18n.t("Ein Token ist gespeichert.") : window.CryptoBuchI18n.t("Kein Token gespeichert; die öffentliche BlockCypher-Rate kann begrenzt sein."));
   assign("coingecko-key-status", "textContent", settings.coinGeckoApiKeyConfigured
-    ? "Ein API-Key ist gespeichert. Bei pro-api.coingecko.com wird er als Pro-Key verwendet."
-    : "Kein API-Key gespeichert. Die öffentliche CoinGecko-API liefert historische Daten nur für die letzten 365 Tage.");
+    ? window.CryptoBuchI18n.t("Ein API-Key ist gespeichert. Bei pro-api.coingecko.com wird er als Pro-Key verwendet.")
+    : window.CryptoBuchI18n.t("Kein API-Key gespeichert. Die öffentliche CoinGecko-API liefert historische Daten nur für die letzten 365 Tage."));
   assign("cryptocompare-key-status", "textContent", settings.cryptoCompareApiKeyConfigured
-    ? "Ein API-Key ist gespeichert. Die Quelle wird erst nach den vier vorherigen Preisquellen verwendet."
-    : "Kein API-Key gespeichert; CryptoCompare wird übersprungen, die vier öffentlichen Quellen bleiben aktiv.");
+    ? window.CryptoBuchI18n.t("Ein API-Key ist gespeichert. Die Quelle wird erst nach den vier vorherigen Preisquellen verwendet.")
+    : window.CryptoBuchI18n.t("Kein API-Key gespeichert; CryptoCompare wird übersprungen, die vier öffentlichen Quellen bleiben aktiv."));
 }
 
 function settingsPayload(formElement) {
@@ -85,7 +85,7 @@ function settingsPayload(formElement) {
   if (el("tax-country-code")) {
     payload.personalTaxRatePercent = el("tax-income-rate").value;
     payload.taxProfile = {
-      id: `${String(el("tax-country-code").value || "CUSTOM").trim().toUpperCase()}-CUSTOM`,
+      id: `${String(el("tax-country-code").value || window.CryptoBuchI18n.t("CUSTOM")).trim().toUpperCase()}-CUSTOM`,
       countryCode: el("tax-country-code").value,
       label: el("tax-profile-label").value,
       disposalTaxRatePercent: el("tax-disposal-rate").value,
@@ -107,14 +107,14 @@ function settingsPayload(formElement) {
 
 function setSaving(button, saving) {
   button.disabled = saving;
-  button.textContent = saving ? "Speichert …" : "Einstellungen speichern";
+  button.textContent = saving ? window.CryptoBuchI18n.t("Speichert …") : window.CryptoBuchI18n.t("Einstellungen speichern");
 }
 
 async function loadSettings() {
   try {
     render(await api("/api/settings"));
   } catch (error) {
-    el("settings-error").textContent = error.message;
+    el("settings-error").textContent = window.CryptoBuchI18n.message(error.message);
     el("settings-error").hidden = false;
   }
 }
@@ -134,9 +134,9 @@ el("settings-form").addEventListener("submit", async (event) => {
     for (const field of formElement.querySelectorAll('input[type="password"]')) field.value = "";
     for (const field of formElement.querySelectorAll('input[type="checkbox"][name^="clear"]')) field.checked = false;
     render(settings);
-    toast("Einstellungen gespeichert. Sie gelten beim nächsten Synchronisieren.");
+    toast(window.CryptoBuchI18n.t("Einstellungen gespeichert. Sie gelten beim nächsten Synchronisieren."));
   } catch (requestError) {
-    error.textContent = requestError.message;
+    error.textContent = window.CryptoBuchI18n.message(requestError.message);
     error.hidden = false;
   } finally {
     setSaving(save, false);

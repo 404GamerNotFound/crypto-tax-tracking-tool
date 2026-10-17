@@ -4,140 +4,143 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokales Crypto-Portfolio für öffentliche Blockchain-Wallets" />
-    <title>CryptoBuch · Dashboard</title>
+    <title data-i18n="CryptoBuch · Dashboard">CryptoBuch · Dashboard</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/styles.css?v=20261004-visibility-1" />
+    <script src="/locales/catalog.js" defer></script>
+    <script src="/i18n-core.js" defer></script>
+    <script src="/i18n.js" defer></script>
   </head>
   <body>
     <div class="shell dashboard-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="CryptoBuch Dashboard">
+        <a class="brand" href="/" aria-label="CryptoBuch Dashboard" data-i18n-aria-label="CryptoBuch Dashboard">
           <img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" />
           <span>CryptoBuch</span>
         </a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
-        <div class="topbar-status" id="price-status" aria-live="polite">Preise werden geladen …</div>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-i18n-aria-label="Hauptnavigation" data-primary-navigation></nav>
+        <div class="topbar-status" id="price-status" aria-live="polite"><span data-i18n="Preise werden geladen …">Preise werden geladen …</span></div>
       </header>
 
       <main>
         <section class="hero dashboard-hero" aria-labelledby="page-title">
           <div>
-            <p class="eyebrow">PORTFOLIO-DASHBOARD</p>
-            <h1 id="page-title">Dein Bestand,<br /><em>Coin für Coin.</em></h1>
-            <p class="hero-copy">Käufe, noch gehaltene Bestände, Staking-Erträge und die Entwicklung gegenüber dem Kaufkurs in einer übersichtlichen Gesamtansicht.</p>
+            <p class="eyebrow"><span data-i18n="PORTFOLIO-DASHBOARD">PORTFOLIO-DASHBOARD</span></p>
+            <h1 id="page-title"><span data-i18n="Dein Bestand,">Dein Bestand,</span><br /><em><span data-i18n="Coin für Coin.">Coin für Coin.</span></em></h1>
+            <p class="hero-copy"><span data-i18n="Käufe, noch gehaltene Bestände, Staking-Erträge und die Entwicklung gegenüber dem Kaufkurs in einer übersichtlichen Gesamtansicht.">Käufe, noch gehaltene Bestände, Staking-Erträge und die Entwicklung gegenüber dem Kaufkurs in einer übersichtlichen Gesamtansicht.</span></p>
           </div>
           <div class="dashboard-brand-aside">
             <picture class="brand-hero-art" aria-hidden="true">
               <img src="/images/brand/cryptobuch-journal-480.jpg" srcset="/images/brand/cryptobuch-journal-480.jpg 480w, /images/brand/cryptobuch-journal-960.jpg 960w" sizes="306px" width="960" height="640" alt="" decoding="async" />
             </picture>
             <div class="hero-actions">
-              <a class="button button-primary" href="/wallets.html">Crypto-Bestände verwalten</a>
-              <a class="button button-secondary" href="/maintenance.html">Betrieb &amp; Backups</a>
-              <button class="button button-secondary" id="backfill-historical-prices" title="Fehlende historische EUR-Kurse ohne erneuten Blockchain-Import ergänzen">Historische Kurse ergänzen</button>
-              <button class="button button-secondary" id="refresh-all" title="Alle gespeicherten Wallets neu synchronisieren">Alles aktualisieren</button>
+              <a class="button button-primary" href="/wallets.html"><span data-i18n="Crypto-Bestände verwalten">Crypto-Bestände verwalten</span></a>
+              <a class="button button-secondary" href="/maintenance.html"><span data-i18n="Betrieb &amp; Backups">Betrieb &amp; Backups</span></a>
+              <button class="button button-secondary" id="backfill-historical-prices" title="Fehlende historische EUR-Kurse ohne erneuten Blockchain-Import ergänzen" data-i18n-title="Fehlende historische EUR-Kurse ohne erneuten Blockchain-Import ergänzen"><span data-i18n="Historische Kurse ergänzen">Historische Kurse ergänzen</span></button>
+              <button class="button button-secondary" id="refresh-all" title="Alle gespeicherten Wallets neu synchronisieren" data-i18n-title="Alle gespeicherten Wallets neu synchronisieren"><span data-i18n="Alles aktualisieren">Alles aktualisieren</span></button>
             </div>
           </div>
         </section>
 
-        <section class="insight-grid" aria-label="Portfolio-Analyse">
-          <article class="insight-panel"><div class="section-heading"><div><p class="eyebrow">ALLOKATION</p><h2>Aktuelle Verteilung</h2></div></div><div id="allocation-chart" class="allocation-chart"></div></article>
+        <section class="insight-grid" aria-label="Portfolio-Analyse" data-i18n-aria-label="Portfolio-Analyse">
+          <article class="insight-panel"><div class="section-heading"><div><p class="eyebrow"><span data-i18n="ALLOKATION">ALLOKATION</span></p><h2><span data-i18n="Aktuelle Verteilung">Aktuelle Verteilung</span></h2></div></div><div id="allocation-chart" class="allocation-chart"></div></article>
           <article class="insight-panel">
             <div class="section-heading history-chart-heading">
-              <div><p class="eyebrow">BUCHWERT</p><h2>Historische Entwicklung</h2></div>
-              <div class="history-range-control" role="group" aria-label="Zeitraum der Buchwertentwicklung">
-                <button type="button" class="history-range-button" data-history-range="day">1 Tag</button>
-                <button type="button" class="history-range-button" data-history-range="month">1 Monat</button>
-                <button type="button" class="history-range-button" data-history-range="year">1 Jahr</button>
-                <button type="button" class="history-range-button" data-history-range="fiveYears">5 Jahre</button>
-                <button type="button" class="history-range-button is-active" data-history-range="max" aria-pressed="true">Max</button>
+              <div><p class="eyebrow"><span data-i18n="BUCHWERT">BUCHWERT</span></p><h2><span data-i18n="Historische Entwicklung">Historische Entwicklung</span></h2></div>
+              <div class="history-range-control" role="group" aria-label="Zeitraum der Buchwertentwicklung" data-i18n-aria-label="Zeitraum der Buchwertentwicklung">
+                <button type="button" class="history-range-button" data-history-range="day"><span data-i18n="1 Tag">1 Tag</span></button>
+                <button type="button" class="history-range-button" data-history-range="month"><span data-i18n="1 Monat">1 Monat</span></button>
+                <button type="button" class="history-range-button" data-history-range="year"><span data-i18n="1 Jahr">1 Jahr</span></button>
+                <button type="button" class="history-range-button" data-history-range="fiveYears"><span data-i18n="5 Jahre">5 Jahre</span></button>
+                <button type="button" class="history-range-button is-active" data-history-range="max" aria-pressed="true"><span data-i18n="Max">Max</span></button>
               </div>
             </div>
             <p class="history-range-summary" id="portfolio-history-summary" aria-live="polite"></p>
             <div id="portfolio-history-chart" class="portfolio-history-chart"></div>
-            <p class="data-note">Zeigt bewertete Käufe, Verkäufe und Erträge; interne Transfers verändern den Buchwert nicht. Es handelt sich nicht um rückwirkende Marktwerte.</p>
+            <p class="data-note"><span data-i18n="Zeigt bewertete Käufe, Verkäufe und Erträge; interne Transfers verändern den Buchwert nicht. Es handelt sich nicht um rückwirkende Marktwerte.">Zeigt bewertete Käufe, Verkäufe und Erträge; interne Transfers verändern den Buchwert nicht. Es handelt sich nicht um rückwirkende Marktwerte.</span></p>
           </article>
         </section>
 
-        <section class="dashboard-overview" aria-label="Portfolio-Gesamtwert">
+        <section class="dashboard-overview" aria-label="Portfolio-Gesamtwert" data-i18n-aria-label="Portfolio-Gesamtwert">
           <article class="portfolio-value-card">
-            <span class="card-label">Portfolio-Wert</span>
+            <span class="card-label"><span data-i18n="Portfolio-Wert">Portfolio-Wert</span></span>
             <strong id="total-value">—</strong>
-            <span class="muted">Aktuelle Marktbewertung aller erfassten Bestände</span>
+            <span class="muted"><span data-i18n="Aktuelle Marktbewertung aller erfassten Bestände">Aktuelle Marktbewertung aller erfassten Bestände</span></span>
           </article>
           <article class="overview-stat">
-            <span class="card-label">Wallets</span>
+            <span class="card-label"><span data-i18n="Wallets">Wallets</span></span>
             <strong id="wallet-count">0</strong>
-            <span class="muted">Öffentliche Datenquellen</span>
+            <span class="muted"><span data-i18n="Öffentliche Datenquellen">Öffentliche Datenquellen</span></span>
           </article>
           <article class="overview-stat">
-            <span class="card-label">Erfasste Transaktionen</span>
+            <span class="card-label"><span data-i18n="Erfasste Transaktionen">Erfasste Transaktionen</span></span>
             <strong id="transaction-count">0</strong>
-            <span class="muted">Importiert aus der Blockchain</span>
+            <span class="muted"><span data-i18n="Importiert aus der Blockchain">Importiert aus der Blockchain</span></span>
           </article>
           <article class="overview-stat">
-            <span class="card-label">Kaufgewinn · bekannte Werte</span>
+            <span class="card-label"><span data-i18n="Kaufgewinn · bekannte Werte">Kaufgewinn · bekannte Werte</span></span>
             <strong id="purchase-profit">—</strong>
-            <span class="muted" id="purchase-profit-help">FIFO-Kaufchargen</span>
+            <span class="muted" id="purchase-profit-help"><span data-i18n="FIFO-Kaufchargen">FIFO-Kaufchargen</span></span>
           </article>
           <article class="overview-stat earnings-overview">
-            <span class="card-label">Erträge · aktueller Wert</span>
+            <span class="card-label"><span data-i18n="Erträge · aktueller Wert">Erträge · aktueller Wert</span></span>
             <strong id="earnings-value">—</strong>
-            <span class="muted">Staking und weitere Ertragsarten</span>
+            <span class="muted"><span data-i18n="Staking und weitere Ertragsarten">Staking und weitere Ertragsarten</span></span>
           </article>
           <article class="overview-stat quality-overview">
-            <span class="card-label">Offene Datenpunkte</span>
+            <span class="card-label"><span data-i18n="Offene Datenpunkte">Offene Datenpunkte</span></span>
             <strong id="data-issues">0</strong>
-            <span class="muted">Kurse oder Zwecke prüfen</span>
+            <span class="muted"><span data-i18n="Kurse oder Zwecke prüfen">Kurse oder Zwecke prüfen</span></span>
           </article>
-          <article class="overview-stat"><span class="card-label">Unrealisierter Gewinn</span><strong id="unrealized-profit">—</strong><span class="muted" id="purchase-return">bekannte Kaufchargen</span></article>
-          <article class="overview-stat"><span class="card-label">Realisierter Gewinn · Jahr</span><strong id="realized-year">—</strong><span class="muted">vollständig bewertete FIFO-Segmente</span></article>
-          <article class="overview-stat"><span class="card-label">Netto-Kapitalzufluss</span><strong id="net-investment">—</strong><span class="muted">Käufe minus Verkäufe · bekannte Kurse</span></article>
+          <article class="overview-stat"><span class="card-label"><span data-i18n="Unrealisierter Gewinn">Unrealisierter Gewinn</span></span><strong id="unrealized-profit">—</strong><span class="muted" id="purchase-return"><span data-i18n="bekannte Kaufchargen">bekannte Kaufchargen</span></span></article>
+          <article class="overview-stat"><span class="card-label"><span data-i18n="Realisierter Gewinn · Jahr">Realisierter Gewinn · Jahr</span></span><strong id="realized-year">—</strong><span class="muted"><span data-i18n="vollständig bewertete FIFO-Segmente">vollständig bewertete FIFO-Segmente</span></span></article>
+          <article class="overview-stat"><span class="card-label"><span data-i18n="Netto-Kapitalzufluss">Netto-Kapitalzufluss</span></span><strong id="net-investment">—</strong><span class="muted"><span data-i18n="Käufe minus Verkäufe · bekannte Kurse">Käufe minus Verkäufe · bekannte Kurse</span></span></article>
         </section>
 
         <section class="asset-section" id="coins" aria-labelledby="asset-section-title">
           <div class="section-heading asset-section-heading">
             <div>
-              <p class="eyebrow">COIN-AUSWERTUNG</p>
-              <h2 id="asset-section-title">Deine Kryptowährungen</h2>
+              <p class="eyebrow"><span data-i18n="COIN-AUSWERTUNG">COIN-AUSWERTUNG</span></p>
+              <h2 id="asset-section-title"><span data-i18n="Deine Kryptowährungen">Deine Kryptowährungen</span></h2>
             </div>
-            <p class="section-copy">Öffne einen Coin für Transaktionen und Zweckzuordnungen.</p>
+            <p class="section-copy"><span data-i18n="Öffne einen Coin für Transaktionen und Zweckzuordnungen.">Öffne einen Coin für Transaktionen und Zweckzuordnungen.</span></p>
           </div>
           <p id="hidden-assets-note" class="analytics-note" hidden></p>
           <details class="asset-visibility-panel">
-            <summary>Coins ein- / ausblenden</summary>
-            <p>Ausgeblendete Coins zählen nicht zum Portfolio-Wert, zur Verteilung oder Wertentwicklung. Buchungen, Datenqualität und Steuerberichte bleiben erhalten. Die Auswahl gilt auch in der App und kann jederzeit rückgängig gemacht werden.</p>
-            <label>Coin suchen <input id="asset-visibility-search" type="search" placeholder="Name, Symbol oder Contract-Adresse" /></label>
+            <summary><span data-i18n="Coins ein- / ausblenden">Coins ein- / ausblenden</span></summary>
+            <p><span data-i18n="Ausgeblendete Coins zählen nicht zum Portfolio-Wert, zur Verteilung oder Wertentwicklung. Buchungen, Datenqualität und Steuerberichte bleiben erhalten. Die Auswahl gilt auch in der App und kann jederzeit rückgängig gemacht werden.">Ausgeblendete Coins zählen nicht zum Portfolio-Wert, zur Verteilung oder Wertentwicklung. Buchungen, Datenqualität und Steuerberichte bleiben erhalten. Die Auswahl gilt auch in der App und kann jederzeit rückgängig gemacht werden.</span></p>
+            <label><span data-i18n="Coin suchen">Coin suchen</span> <input id="asset-visibility-search" type="search" placeholder="Name, Symbol oder Contract-Adresse" data-i18n-placeholder="Name, Symbol oder Contract-Adresse" /></label>
             <div id="asset-visibility-list" aria-live="polite"></div>
           </details>
           <div id="asset-dashboard" class="asset-dashboard"></div>
           <div id="dashboard-empty" class="dashboard-empty" hidden>
             <img class="brand-empty-logo" src="/images/brand/cryptobuch-logo-256.png" alt="" width="64" height="64" loading="lazy" decoding="async" />
-            <strong>Noch keine Blockchain-Daten</strong>
-            <p>Lege auf der Wallet-Seite eine öffentliche Adresse an und synchronisiere sie.</p>
-            <a class="button button-primary" href="/wallets.html">Wallet hinzufügen</a>
+            <strong><span data-i18n="Noch keine Blockchain-Daten">Noch keine Blockchain-Daten</span></strong>
+            <p><span data-i18n="Lege auf der Wallet-Seite eine öffentliche Adresse an und synchronisiere sie.">Lege auf der Wallet-Seite eine öffentliche Adresse an und synchronisiere sie.</span></p>
+            <a class="button button-primary" href="/wallets.html"><span data-i18n="Wallet hinzufügen">Wallet hinzufügen</span></a>
           </div>
         </section>
 
         <section class="market-section" aria-labelledby="market-section-title">
           <div class="section-heading market-section-heading">
             <div>
-              <p class="eyebrow">MARKTÜBERBLICK</p>
-              <h2 id="market-section-title">Top 30 Kryptowährungen</h2>
+              <p class="eyebrow"><span data-i18n="MARKTÜBERBLICK">MARKTÜBERBLICK</span></p>
+              <h2 id="market-section-title"><span data-i18n="Top 30 Kryptowährungen">Top 30 Kryptowährungen</span></h2>
             </div>
-            <p class="section-copy" id="market-status">Marktdaten werden geladen …</p>
+            <p class="section-copy" id="market-status"><span data-i18n="Marktdaten werden geladen …">Marktdaten werden geladen …</span></p>
           </div>
-          <p class="market-intro">Die Rangfolge wird live nach Marktkapitalisierung aktualisiert. „Wallet-Import“ bedeutet, dass die passende On-Chain-Quelle bereits eingerichtet ist; bei ERC-20 gilt dies für Transfers auf Ethereum Mainnet.</p>
+          <p class="market-intro"><span data-i18n="Die Rangfolge wird live nach Marktkapitalisierung aktualisiert. „Wallet-Import“ bedeutet, dass die passende On-Chain-Quelle bereits eingerichtet ist; bei ERC-20 gilt dies für Transfers auf Ethereum Mainnet.">Die Rangfolge wird live nach Marktkapitalisierung aktualisiert. „Wallet-Import“ bedeutet, dass die passende On-Chain-Quelle bereits eingerichtet ist; bei ERC-20 gilt dies für Transfers auf Ethereum Mainnet.</span></p>
           <div class="market-catalog" id="market-catalog" aria-live="polite"></div>
           <div class="market-empty" id="market-empty" hidden>
-            <strong>Marktdaten momentan nicht verfügbar</strong>
-            <p>Die lokale Portfolio-Auswertung bleibt davon unberührt.</p>
+            <strong><span data-i18n="Marktdaten momentan nicht verfügbar">Marktdaten momentan nicht verfügbar</span></strong>
+            <p><span data-i18n="Die lokale Portfolio-Auswertung bleibt davon unberührt.">Die lokale Portfolio-Auswertung bleibt davon unberührt.</span></p>
           </div>
         </section>
 
         <aside class="analytics-note">
-          <strong>So wird der Kaufgewinn berechnet</strong>
-          <p>Berücksichtigt werden Eingänge mit Zweck <em>Kauf</em>; als <em>Verkauf</em> markierte Ausgänge reduzieren diese Chargen nach FIFO. Transfers und nicht zugeordnete Bewegungen werden nicht als Kauf oder Verkauf gewertet. Fehlen nur einzelne Kaufkurse, wird der Gewinn der bepreisten Restchargen als teilweise ausgewiesen.</p>
+          <strong><span data-i18n="So wird der Kaufgewinn berechnet">So wird der Kaufgewinn berechnet</span></strong>
+          <p><span data-i18n="Berücksichtigt werden Eingänge mit Zweck">Berücksichtigt werden Eingänge mit Zweck</span> <em><span data-i18n="Kauf">Kauf</span></em><span data-i18n="; als">; als</span> <em><span data-i18n="Verkauf">Verkauf</span></em> <span data-i18n="markierte Ausgänge reduzieren diese Chargen nach FIFO. Transfers und nicht zugeordnete Bewegungen werden nicht als Kauf oder Verkauf gewertet. Fehlen nur einzelne Kaufkurse, wird der Gewinn der bepreisten Restchargen als teilweise ausgewiesen.">markierte Ausgänge reduzieren diese Chargen nach FIFO. Transfers und nicht zugeordnete Bewegungen werden nicht als Kauf oder Verkauf gewertet. Fehlen nur einzelne Kaufkurse, wird der Gewinn der bepreisten Restchargen als teilweise ausgewiesen.</span></p>
         </aside>
       </main>
     </div>

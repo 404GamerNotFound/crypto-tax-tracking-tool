@@ -4,56 +4,59 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Börsenbestände und Buchungsjournal in CryptoBuch" />
-    <title>CryptoBuch · Börse</title>
+    <title data-i18n="CryptoBuch · Börse">CryptoBuch · Börse</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/styles.css?v=20261004-brand-1" />
+    <script src="/locales/catalog.js" defer></script>
+    <script src="/i18n-core.js" defer></script>
+    <script src="/i18n.js" defer></script>
   </head>
   <body>
     <div class="shell asset-page-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="CryptoBuch Dashboard"><img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" /><span>CryptoBuch</span></a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
-        <div class="topbar-status" id="exchange-status" aria-live="polite">Börse wird geladen …</div>
+        <a class="brand" href="/" aria-label="CryptoBuch Dashboard" data-i18n-aria-label="CryptoBuch Dashboard"><img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" /><span>CryptoBuch</span></a>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-i18n-aria-label="Hauptnavigation" data-primary-navigation></nav>
+        <div class="topbar-status" id="exchange-status" aria-live="polite"><span data-i18n="Börse wird geladen …">Börse wird geladen …</span></div>
       </header>
 
       <main class="asset-main exchange-main">
         <section class="asset-hero" aria-labelledby="exchange-title">
           <div>
-            <a class="back-link" href="/wallets.html">← Crypto-Bestände</a>
+            <a class="back-link" href="/wallets.html"><span data-i18n="← Crypto-Bestände">← Crypto-Bestände</span></a>
             <div class="asset-hero-heading">
               <span id="exchange-icon" class="asset-hero-icon exchange" aria-hidden="true">⇄</span>
               <div>
-                <p class="eyebrow">BÖRSEN-DETAILANSICHT</p>
-                <h1 id="exchange-title">Börse</h1>
-                <p id="exchange-subtitle">Read-only-Bestände und alle lokal gespeicherten Börsenbuchungen.</p>
+                <p class="eyebrow"><span data-i18n="BÖRSEN-DETAILANSICHT">BÖRSEN-DETAILANSICHT</span></p>
+                <h1 id="exchange-title"><span data-i18n="Börse">Börse</span></h1>
+                <p id="exchange-subtitle"><span data-i18n="Read-only-Bestände und alle lokal gespeicherten Börsenbuchungen.">Read-only-Bestände und alle lokal gespeicherten Börsenbuchungen.</span></p>
               </div>
             </div>
           </div>
-          <div class="hero-actions"><a class="button button-secondary" href="/quality.html#exchange-connection-form">Börse verwalten</a><button class="button button-primary" id="refresh-exchange">Börse aktualisieren</button></div>
+          <div class="hero-actions"><a class="button button-secondary" href="/quality.html#exchange-connection-form"><span data-i18n="Börse verwalten">Börse verwalten</span></a><button class="button button-primary" id="refresh-exchange"><span data-i18n="Börse aktualisieren">Börse aktualisieren</span></button></div>
         </section>
 
-        <section id="exchange-metrics" class="asset-metrics" aria-label="Börsenübersicht"></section>
+        <section id="exchange-metrics" class="asset-metrics" aria-label="Börsenübersicht" data-i18n-aria-label="Börsenübersicht"></section>
 
         <section class="exchange-holdings-panel" aria-labelledby="exchange-holdings-title">
-          <div class="section-heading exchange-holdings-heading"><div><p class="eyebrow">BESTÄNDE AUF DER BÖRSE</p><h2 id="exchange-holdings-title">Aktuelle Assets</h2></div><p class="section-copy" id="exchange-holdings-copy">Kontostand wird geladen …</p></div>
+          <div class="section-heading exchange-holdings-heading"><div><p class="eyebrow"><span data-i18n="BESTÄNDE AUF DER BÖRSE">BESTÄNDE AUF DER BÖRSE</span></p><h2 id="exchange-holdings-title"><span data-i18n="Aktuelle Assets">Aktuelle Assets</span></h2></div><p class="section-copy" id="exchange-holdings-copy"><span data-i18n="Kontostand wird geladen …">Kontostand wird geladen …</span></p></div>
           <div class="exchange-balance-notice" id="exchange-balance-notice" hidden></div>
           <div class="exchange-holdings-grid" id="exchange-holdings"></div>
-          <div class="transactions-empty" id="exchange-holdings-empty" hidden><span class="empty-icon">◇</span><strong>Keine Bestände erkannt</strong><p>Der bestätigte Kontostand enthält derzeit keine positiven Assets.</p></div>
+          <div class="transactions-empty" id="exchange-holdings-empty" hidden><span class="empty-icon">◇</span><strong><span data-i18n="Keine Bestände erkannt">Keine Bestände erkannt</span></strong><p><span data-i18n="Der bestätigte Kontostand enthält derzeit keine positiven Assets.">Der bestätigte Kontostand enthält derzeit keine positiven Assets.</span></p></div>
         </section>
 
         <section id="exchange-positions-panel" class="transactions-panel asset-transactions-panel" aria-labelledby="exchange-positions-title" hidden>
-          <div class="section-heading transactions-title"><div><p class="eyebrow">ETORO · POSITIONSNACHWEISE</p><h2 id="exchange-positions-title">CFDs &amp; weitere Positionen</h2></div><p class="section-copy" id="exchange-positions-summary"></p></div>
-          <p class="data-note">CFDs, Shorts und Positionen mit unbestätigter Produktart werden separat erfasst. Sie fließen nicht in Coin-Guthaben, Coin-FIFO oder die bisherigen Steuer-Schätzungen ein. Ergebnisse stammen von eToro, ohne EUR-Umrechnung; Gebühren werden nicht nochmals vom gemeldeten Netto-Ergebnis abgezogen. Offene Ergebnisse sind Momentaufnahmen vom angegebenen Abruf.</p>
-          <div class="toolbar"><label class="search-control"><span class="visually-hidden">Positionen durchsuchen</span><input id="position-search" type="search" placeholder="Instrument oder Positions-ID suchen" /></label><label class="select-control"><span class="visually-hidden">Positionsstatus filtern</span><select id="position-status-filter"><option value="">Alle Positionen</option><option value="open">Offen</option><option value="closed">Geschlossen / Teilschließung</option><option value="unconfirmed">Status prüfen</option></select></label></div>
-          <div class="table-wrap"><table><thead><tr><th>Instrument / Produktart</th><th>Status / Zeitraum</th><th>Richtung / Hebel</th><th>Kontrakteinheiten</th><th>Einsatz</th><th>Gebühren</th><th>Ergebnis laut eToro</th></tr></thead><tbody id="exchange-position-list"></tbody></table><div class="transactions-empty" id="exchange-positions-empty" hidden><strong>Keine passenden Positionsnachweise</strong><p>Synchronisiere eToro oder passe die Filter an.</p></div></div>
+          <div class="section-heading transactions-title"><div><p class="eyebrow"><span data-i18n="ETORO · POSITIONSNACHWEISE">ETORO · POSITIONSNACHWEISE</span></p><h2 id="exchange-positions-title"><span data-i18n="CFDs &amp; weitere Positionen">CFDs &amp; weitere Positionen</span></h2></div><p class="section-copy" id="exchange-positions-summary"></p></div>
+          <p class="data-note"><span data-i18n="CFDs, Shorts und Positionen mit unbestätigter Produktart werden separat erfasst. Sie fließen nicht in Coin-Guthaben, Coin-FIFO oder die bisherigen Steuer-Schätzungen ein. Ergebnisse stammen von eToro, ohne EUR-Umrechnung; Gebühren werden nicht nochmals vom gemeldeten Netto-Ergebnis abgezogen. Offene Ergebnisse sind Momentaufnahmen vom angegebenen Abruf.">CFDs, Shorts und Positionen mit unbestätigter Produktart werden separat erfasst. Sie fließen nicht in Coin-Guthaben, Coin-FIFO oder die bisherigen Steuer-Schätzungen ein. Ergebnisse stammen von eToro, ohne EUR-Umrechnung; Gebühren werden nicht nochmals vom gemeldeten Netto-Ergebnis abgezogen. Offene Ergebnisse sind Momentaufnahmen vom angegebenen Abruf.</span></p>
+          <div class="toolbar"><label class="search-control"><span class="visually-hidden"><span data-i18n="Positionen durchsuchen">Positionen durchsuchen</span></span><input id="position-search" type="search" placeholder="Instrument oder Positions-ID suchen" data-i18n-placeholder="Instrument oder Positions-ID suchen" /></label><label class="select-control"><span class="visually-hidden"><span data-i18n="Positionsstatus filtern">Positionsstatus filtern</span></span><select id="position-status-filter"><option value="" data-i18n="Alle Positionen">Alle Positionen</option><option value="open" data-i18n="Offen">Offen</option><option value="closed" data-i18n="Geschlossen / Teilschließung">Geschlossen / Teilschließung</option><option value="unconfirmed" data-i18n="Status prüfen">Status prüfen</option></select></label></div>
+          <div class="table-wrap"><table><thead><tr><th><span data-i18n="Instrument / Produktart">Instrument / Produktart</span></th><th><span data-i18n="Status / Zeitraum">Status / Zeitraum</span></th><th><span data-i18n="Richtung / Hebel">Richtung / Hebel</span></th><th><span data-i18n="Kontrakteinheiten">Kontrakteinheiten</span></th><th><span data-i18n="Einsatz">Einsatz</span></th><th><span data-i18n="Gebühren">Gebühren</span></th><th><span data-i18n="Ergebnis laut eToro">Ergebnis laut eToro</span></th></tr></thead><tbody id="exchange-position-list"></tbody></table><div class="transactions-empty" id="exchange-positions-empty" hidden><strong><span data-i18n="Keine passenden Positionsnachweise">Keine passenden Positionsnachweise</span></strong><p><span data-i18n="Synchronisiere eToro oder passe die Filter an.">Synchronisiere eToro oder passe die Filter an.</span></p></div></div>
         </section>
 
         <section class="transactions-panel asset-transactions-panel" aria-labelledby="exchange-transactions-title">
-          <div class="section-heading transactions-title"><div><p class="eyebrow">VOLLSTÄNDIGES BUCHUNGSJOURNAL</p><h2 id="exchange-transactions-title">Alle Börsenbuchungen</h2></div><button class="icon-button" id="reload-exchange" aria-label="Ansicht neu laden" title="Ansicht neu laden">↻</button></div>
-          <div class="toolbar"><label class="search-control"><span class="visually-hidden">Börsenbuchungen durchsuchen</span><span aria-hidden="true">⌕</span><input id="transaction-search" type="search" placeholder="Asset, Hash oder Zweck suchen" autocomplete="off" /></label><label class="select-control"><span class="visually-hidden">Richtung filtern</span><select id="direction-filter"><option value="">Ein- &amp; Ausgänge</option><option value="in">Eingänge</option><option value="out">Ausgänge</option><option value="self">Eigene Transfers</option></select></label></div>
-          <div class="table-wrap"><table><thead><tr><th>Vorgang</th><th>Asset</th><th>Betrag</th><th>Preis jetzt</th><th>Preis Transaktionsdatum</th><th>Herkunft / Zweck</th></tr></thead><tbody id="exchange-transaction-list"></tbody></table><div id="exchange-transactions-empty" class="transactions-empty" hidden><span class="empty-icon">⌁</span><strong>Keine Buchungen gefunden</strong><p>Synchronisiere die Börse oder passe die Filter an.</p></div></div>
-          <p class="data-note">Die Ansicht zeigt sämtliche lokal gespeicherten Buchungen dieser Börsenverbindung. Die Verfügbarkeit sehr alter Daten hängt von der jeweiligen Börsen-API ab. Native EUR-Belegwerte von Coinbase sind damalige Kontobewertungen und können vom Ausführungskurs abweichen; daraus abgeleitete Steuerwerte bleiben unverbindliche Schätzungen.</p>
+          <div class="section-heading transactions-title"><div><p class="eyebrow"><span data-i18n="VOLLSTÄNDIGES BUCHUNGSJOURNAL">VOLLSTÄNDIGES BUCHUNGSJOURNAL</span></p><h2 id="exchange-transactions-title"><span data-i18n="Alle Börsenbuchungen">Alle Börsenbuchungen</span></h2></div><button class="icon-button" id="reload-exchange" aria-label="Ansicht neu laden" data-i18n-aria-label="Ansicht neu laden" title="Ansicht neu laden" data-i18n-title="Ansicht neu laden">↻</button></div>
+          <div class="toolbar"><label class="search-control"><span class="visually-hidden"><span data-i18n="Börsenbuchungen durchsuchen">Börsenbuchungen durchsuchen</span></span><span aria-hidden="true">⌕</span><input id="transaction-search" type="search" placeholder="Asset, Hash oder Zweck suchen" data-i18n-placeholder="Asset, Hash oder Zweck suchen" autocomplete="off" /></label><label class="select-control"><span class="visually-hidden"><span data-i18n="Richtung filtern">Richtung filtern</span></span><select id="direction-filter"><option value="" data-i18n="Ein- &amp; Ausgänge">Ein- &amp; Ausgänge</option><option value="in" data-i18n="Eingänge">Eingänge</option><option value="out" data-i18n="Ausgänge">Ausgänge</option><option value="self" data-i18n="Eigene Transfers">Eigene Transfers</option></select></label></div>
+          <div class="table-wrap"><table><thead><tr><th><span data-i18n="Vorgang">Vorgang</span></th><th><span data-i18n="Asset">Asset</span></th><th><span data-i18n="Betrag">Betrag</span></th><th><span data-i18n="Preis jetzt">Preis jetzt</span></th><th><span data-i18n="Preis Transaktionsdatum">Preis Transaktionsdatum</span></th><th><span data-i18n="Herkunft / Zweck">Herkunft / Zweck</span></th></tr></thead><tbody id="exchange-transaction-list"></tbody></table><div id="exchange-transactions-empty" class="transactions-empty" hidden><span class="empty-icon">⌁</span><strong><span data-i18n="Keine Buchungen gefunden">Keine Buchungen gefunden</span></strong><p><span data-i18n="Synchronisiere die Börse oder passe die Filter an.">Synchronisiere die Börse oder passe die Filter an.</span></p></div></div>
+          <p class="data-note"><span data-i18n="Die Ansicht zeigt sämtliche lokal gespeicherten Buchungen dieser Börsenverbindung. Die Verfügbarkeit sehr alter Daten hängt von der jeweiligen Börsen-API ab. Native EUR-Belegwerte von Coinbase sind damalige Kontobewertungen und können vom Ausführungskurs abweichen; daraus abgeleitete Steuerwerte bleiben unverbindliche Schätzungen.">Die Ansicht zeigt sämtliche lokal gespeicherten Buchungen dieser Börsenverbindung. Die Verfügbarkeit sehr alter Daten hängt von der jeweiligen Börsen-API ab. Native EUR-Belegwerte von Coinbase sind damalige Kontobewertungen und können vom Ausführungskurs abweichen; daraus abgeleitete Steuerwerte bleiben unverbindliche Schätzungen.</span></p>
         </section>
       </main>
     </div>

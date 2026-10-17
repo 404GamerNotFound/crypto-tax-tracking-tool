@@ -19,7 +19,7 @@ test("zentralisiert Zweck-, Quellen- und API-Helfer im Browser", async () => {
       getElementById: () => null,
     },
     fetch: async () => ({ status: 200, ok: true, json: async () => ({ ok: true }) }),
-    window: { setTimeout: () => 1 },
+    window: { CryptoBuchI18n: require('../public/i18n-core')(), setTimeout: () => 1 },
   };
   vm.runInNewContext(source, context, { filename: "ui.js" });
   const ui = context.window.CryptoBuchUI;

@@ -4,53 +4,56 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
-    <title>CryptoBuch · Einstellungen · Steuerprofil</title>
+    <title data-i18n="CryptoBuch · Einstellungen · Steuerprofil">CryptoBuch · Einstellungen · Steuerprofil</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/styles.css?v=20261004-auth-1" />
+    <script src="/locales/catalog.js" defer></script>
+    <script src="/i18n-core.js" defer></script>
+    <script src="/i18n.js" defer></script>
   </head>
   <body>
     <div class="shell settings-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="Zurück zum CryptoBuch Portfolio">
+        <a class="brand" href="/" aria-label="Zurück zum CryptoBuch Portfolio" data-i18n-aria-label="Zurück zum CryptoBuch Portfolio">
           <img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" />
           <span>CryptoBuch</span>
         </a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-i18n-aria-label="Hauptnavigation" data-primary-navigation></nav>
       </header>
 
       <main class="settings-main">
         <section class="settings-intro" aria-labelledby="settings-title">
-          <p class="eyebrow">LOKALE KONFIGURATION</p>
-          <h1 id="settings-title">Steuerprofil<br /><em>für deine Schätzungen.</em></h1>
-          <p>Passe das Regelwerk für die unverbindliche Steuerreserve an. Alle Werte werden lokal gespeichert; die Berechnung bleibt eine Organisationshilfe und ersetzt keine Steuerberatung.</p>
+          <p class="eyebrow"><span data-i18n="LOKALE KONFIGURATION">LOKALE KONFIGURATION</span></p>
+          <h1 id="settings-title"><span data-i18n="Steuerprofil">Steuerprofil</span><br /><em><span data-i18n="für deine Schätzungen.">für deine Schätzungen.</span></em></h1>
+          <p><span data-i18n="Passe das Regelwerk für die unverbindliche Steuerreserve an. Alle Werte werden lokal gespeichert; die Berechnung bleibt eine Organisationshilfe und ersetzt keine Steuerberatung.">Passe das Regelwerk für die unverbindliche Steuerreserve an. Alle Werte werden lokal gespeichert; die Berechnung bleibt eine Organisationshilfe und ersetzt keine Steuerberatung.</span></p>
         </section>
 
-        <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
+        <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-i18n-aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
         <form id="settings-form" class="settings-form">
           <section class="settings-card" aria-labelledby="tax-profile-title">
-            <div class="settings-heading"><div><p class="eyebrow">STEUERPROFIL</p><h2 id="tax-profile-title">Regelwerk &amp; Steuerreserve</h2></div><span class="settings-mark">01</span></div>
-            <p class="settings-inline-note">Die Deutschland-Vorlage ist ein Startwert, keine Rechtsberatung. Alle Felder können für dein Steuerland, Steuerjahr oder nach Rücksprache mit einer Fachperson angepasst werden. Es wird ausschließlich in EUR gerechnet.</p>
-            <div class="form-grid settings-grid"><label><span>Profilname</span><input id="tax-profile-label" type="text" maxlength="160" required /></label><label><span>Land / Region (Code)</span><input id="tax-country-code" type="text" maxlength="8" placeholder="DE" required /></label></div>
-            <div class="form-grid settings-grid"><label><span>Steuersatz Veräußerungen in Prozent</span><input id="tax-disposal-rate" type="number" min="0" max="100" step="0.01" required /></label><label><span>Steuersatz Erträge in Prozent</span><input id="tax-income-rate" type="number" min="0" max="100" step="0.01" required /><small>Die Steuerreserve wird getrennt für Veräußerungen und Erträge geschätzt.</small></label></div>
-            <label><span>Kostenbasis-Methode</span><select id="tax-cost-basis-method"><option value="FIFO">FIFO · älteste Charge zuerst</option><option value="LIFO">LIFO · jüngste Charge zuerst</option><option value="HIFO">HIFO · höchste Kostenbasis zuerst</option><option value="AVERAGE">Durchschnittskosten · vereinfachte Darstellung</option></select><small>Die Zulässigkeit hängt vom Steuerland ab. Die Einstellung ändert nur die lokale Schätzung und wird im Jahres-Snapshot dokumentiert.</small></label>
+            <div class="settings-heading"><div><p class="eyebrow"><span data-i18n="STEUERPROFIL">STEUERPROFIL</span></p><h2 id="tax-profile-title"><span data-i18n="Regelwerk &amp; Steuerreserve">Regelwerk &amp; Steuerreserve</span></h2></div><span class="settings-mark">01</span></div>
+            <p class="settings-inline-note"><span data-i18n="Die Deutschland-Vorlage ist ein Startwert, keine Rechtsberatung. Alle Felder können für dein Steuerland, Steuerjahr oder nach Rücksprache mit einer Fachperson angepasst werden. Es wird ausschließlich in EUR gerechnet.">Die Deutschland-Vorlage ist ein Startwert, keine Rechtsberatung. Alle Felder können für dein Steuerland, Steuerjahr oder nach Rücksprache mit einer Fachperson angepasst werden. Es wird ausschließlich in EUR gerechnet.</span></p>
+            <div class="form-grid settings-grid"><label><span><span data-i18n="Profilname">Profilname</span></span><input id="tax-profile-label" type="text" maxlength="160" required /></label><label><span><span data-i18n="Land / Region (Code)">Land / Region (Code)</span></span><input id="tax-country-code" type="text" maxlength="8" placeholder="DE" data-i18n-placeholder="DE" required /></label></div>
+            <div class="form-grid settings-grid"><label><span><span data-i18n="Steuersatz Veräußerungen in Prozent">Steuersatz Veräußerungen in Prozent</span></span><input id="tax-disposal-rate" type="number" min="0" max="100" step="0.01" required /></label><label><span><span data-i18n="Steuersatz Erträge in Prozent">Steuersatz Erträge in Prozent</span></span><input id="tax-income-rate" type="number" min="0" max="100" step="0.01" required /><small><span data-i18n="Die Steuerreserve wird getrennt für Veräußerungen und Erträge geschätzt.">Die Steuerreserve wird getrennt für Veräußerungen und Erträge geschätzt.</span></small></label></div>
+            <label><span><span data-i18n="Kostenbasis-Methode">Kostenbasis-Methode</span></span><select id="tax-cost-basis-method"><option value="FIFO" data-i18n="FIFO · älteste Charge zuerst">FIFO · älteste Charge zuerst</option><option value="LIFO" data-i18n="LIFO · jüngste Charge zuerst">LIFO · jüngste Charge zuerst</option><option value="HIFO" data-i18n="HIFO · höchste Kostenbasis zuerst">HIFO · höchste Kostenbasis zuerst</option><option value="AVERAGE" data-i18n="Durchschnittskosten · vereinfachte Darstellung">Durchschnittskosten · vereinfachte Darstellung</option></select><small><span data-i18n="Die Zulässigkeit hängt vom Steuerland ab. Die Einstellung ändert nur die lokale Schätzung und wird im Jahres-Snapshot dokumentiert.">Die Zulässigkeit hängt vom Steuerland ab. Die Einstellung ändert nur die lokale Schätzung und wird im Jahres-Snapshot dokumentiert.</span></small></label>
             <input id="personal-tax-rate" name="personalTaxRatePercent" type="hidden" />
-            <div class="form-grid settings-grid"><label><span>Haltefrist in Tagen</span><input id="tax-holding-days" type="number" min="0" max="36500" step="1" required /></label><label><span>Freigrenze / Schwelle in EUR</span><input id="tax-threshold" type="number" min="0" max="1000000000" step="0.01" required /></label></div>
-            <div class="form-grid settings-grid"><label class="check-setting"><input id="tax-disposal-enabled" type="checkbox" /><span>Veräußerungsgewinne in Steuerreserve einbeziehen</span></label><label class="check-setting"><input id="tax-holding-enabled" type="checkbox" /><span>Haltefrist auf Veräußerungen anwenden</span></label><label class="check-setting"><input id="tax-threshold-enabled" type="checkbox" /><span>Freigrenze / Schwelle anwenden</span></label><label class="check-setting"><input id="tax-loss-offset-enabled" type="checkbox" /><span>Bekannte Verluste mit Gewinnen verrechnen</span></label><label class="check-setting"><input id="tax-income-enabled" type="checkbox" /><span>Erträge in Steuerreserve einbeziehen</span></label></div>
-            <label><span>Als Ertrag behandeln</span><input id="tax-income-purposes" type="text" maxlength="500" /><small>Kommagetrennte Zwecke, z. B. <code>Staking Rewards, Mining Reward, Airdrop</code>. Nur Eingänge mit diesen Zwecken erscheinen als Ertrag.</small></label>
-            <label><span>Eigener Hinweis zum Regelwerk</span><textarea id="tax-rule-note" rows="3" maxlength="500"></textarea></label>
+            <div class="form-grid settings-grid"><label><span><span data-i18n="Haltefrist in Tagen">Haltefrist in Tagen</span></span><input id="tax-holding-days" type="number" min="0" max="36500" step="1" required /></label><label><span><span data-i18n="Freigrenze / Schwelle in EUR">Freigrenze / Schwelle in EUR</span></span><input id="tax-threshold" type="number" min="0" max="1000000000" step="0.01" required /></label></div>
+            <div class="form-grid settings-grid"><label class="check-setting"><input id="tax-disposal-enabled" type="checkbox" /><span><span data-i18n="Veräußerungsgewinne in Steuerreserve einbeziehen">Veräußerungsgewinne in Steuerreserve einbeziehen</span></span></label><label class="check-setting"><input id="tax-holding-enabled" type="checkbox" /><span><span data-i18n="Haltefrist auf Veräußerungen anwenden">Haltefrist auf Veräußerungen anwenden</span></span></label><label class="check-setting"><input id="tax-threshold-enabled" type="checkbox" /><span><span data-i18n="Freigrenze / Schwelle anwenden">Freigrenze / Schwelle anwenden</span></span></label><label class="check-setting"><input id="tax-loss-offset-enabled" type="checkbox" /><span><span data-i18n="Bekannte Verluste mit Gewinnen verrechnen">Bekannte Verluste mit Gewinnen verrechnen</span></span></label><label class="check-setting"><input id="tax-income-enabled" type="checkbox" /><span><span data-i18n="Erträge in Steuerreserve einbeziehen">Erträge in Steuerreserve einbeziehen</span></span></label></div>
+            <label><span><span data-i18n="Als Ertrag behandeln">Als Ertrag behandeln</span></span><input id="tax-income-purposes" type="text" maxlength="500" /><small><span data-i18n="Kommagetrennte Zwecke, z. B.">Kommagetrennte Zwecke, z. B.</span> <code>Staking Rewards, Mining Reward, Airdrop</code>. Nur Eingänge mit diesen Zwecken erscheinen als Ertrag.</small></label>
+            <label><span><span data-i18n="Eigener Hinweis zum Regelwerk">Eigener Hinweis zum Regelwerk</span></span><textarea id="tax-rule-note" rows="3" maxlength="500"></textarea></label>
           </section>
 
           <p id="settings-error" class="form-error" role="alert" hidden></p>
           <div class="settings-actions">
-            <a class="button button-secondary" href="/">Abbrechen</a>
-            <button id="save-settings" class="button button-primary" type="submit">Einstellungen speichern</button>
+            <a class="button button-secondary" href="/"><span data-i18n="Abbrechen">Abbrechen</span></a>
+            <button id="save-settings" class="button button-primary" type="submit"><span data-i18n="Einstellungen speichern">Einstellungen speichern</span></button>
           </div>
         </form>
 
         <aside class="settings-note">
-          <strong>Docker &amp; Portainer</strong>
-          <p>Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.</p>
+          <strong><span data-i18n="Docker &amp; Portainer">Docker &amp; Portainer</span></strong>
+          <p><span data-i18n="Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.">Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.</span></p>
         </aside>
       </main>
     </div>

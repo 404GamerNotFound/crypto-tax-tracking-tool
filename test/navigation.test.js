@@ -61,7 +61,7 @@ test("Einstellungen öffnen echte Unterseiten mit passendem aktivem Menü", () =
     const primary = navigation();
     const secondary = navigation();
     vm.runInNewContext(source, {
-      window: { location: { pathname, hash: "" }, addEventListener() {} },
+      window: { CryptoBuchI18n: require('../public/i18n-core')(), location: { pathname, hash: "" }, addEventListener() {} },
       fetch: async () => ({ json: async () => ({ enabled: false }) }),
       document: {
         readyState: "complete",

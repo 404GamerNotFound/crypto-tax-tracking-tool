@@ -4,72 +4,75 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
-    <title>CryptoBuch · Einstellungen · Synchronisierung</title>
+    <title data-i18n="CryptoBuch · Einstellungen · Synchronisierung">CryptoBuch · Einstellungen · Synchronisierung</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/styles.css?v=20261004-auth-1" />
+    <script src="/locales/catalog.js" defer></script>
+    <script src="/i18n-core.js" defer></script>
+    <script src="/i18n.js" defer></script>
   </head>
   <body>
     <div class="shell settings-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="Zurück zum CryptoBuch Portfolio">
+        <a class="brand" href="/" aria-label="Zurück zum CryptoBuch Portfolio" data-i18n-aria-label="Zurück zum CryptoBuch Portfolio">
           <img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" />
           <span>CryptoBuch</span>
         </a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-i18n-aria-label="Hauptnavigation" data-primary-navigation></nav>
       </header>
 
       <main class="settings-main">
         <section class="settings-intro" aria-labelledby="settings-title">
-          <p class="eyebrow">LOKALE KONFIGURATION</p>
-          <h1 id="settings-title">Synchronisierung<br /><em>für deinen Import.</em></h1>
-          <p>Lege die Importlimits und die automatische Nachbearbeitung fehlender historischer Kurse fest. Änderungen werden lokal gespeichert und gelten beim nächsten Durchlauf.</p>
+          <p class="eyebrow"><span data-i18n="LOKALE KONFIGURATION">LOKALE KONFIGURATION</span></p>
+          <h1 id="settings-title"><span data-i18n="Synchronisierung">Synchronisierung</span><br /><em><span data-i18n="für deinen Import.">für deinen Import.</span></em></h1>
+          <p><span data-i18n="Lege die Importlimits und die automatische Nachbearbeitung fehlender historischer Kurse fest. Änderungen werden lokal gespeichert und gelten beim nächsten Durchlauf.">Lege die Importlimits und die automatische Nachbearbeitung fehlender historischer Kurse fest. Änderungen werden lokal gespeichert und gelten beim nächsten Durchlauf.</span></p>
         </section>
 
-        <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
+        <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-i18n-aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
         <form id="settings-form" class="settings-form">
           <section class="settings-card" aria-labelledby="sync-title">
             <div class="settings-heading">
               <div>
-                <p class="eyebrow">IMPORT</p>
-                <h2 id="sync-title">Synchronisierung</h2>
+                <p class="eyebrow"><span data-i18n="IMPORT">IMPORT</span></p>
+                <h2 id="sync-title"><span data-i18n="Synchronisierung">Synchronisierung</span></h2>
               </div>
               <span class="settings-mark">01</span>
             </div>
             <label>
-              <span>Maximale Transaktionen pro Synchronisierung</span>
+              <span><span data-i18n="Maximale Transaktionen pro Synchronisierung">Maximale Transaktionen pro Synchronisierung</span></span>
               <input id="max-transactions" name="maxTransactionsPerSync" type="number" min="0" max="100000" step="1" required />
-              <small><code>0</code> bedeutet: komplette vom Explorer bereitgestellte Historie laden.</small>
+              <small><code>0</code> <span data-i18n="bedeutet: komplette vom Explorer bereitgestellte Historie laden.">bedeutet: komplette vom Explorer bereitgestellte Historie laden.</span></small>
             </label>
             <label>
-              <span>Maximale Transaktionen für eine Sammel-Zweckzuordnung</span>
+              <span><span data-i18n="Maximale Transaktionen für eine Sammel-Zweckzuordnung">Maximale Transaktionen für eine Sammel-Zweckzuordnung</span></span>
               <input id="bulk-purpose-limit" name="bulkPurposeLimit" type="number" min="1" max="2500" step="1" required />
-              <small>Aus Sicherheits- und Bedienungsgründen sind höchstens 2.500 möglich.</small>
+              <small><span data-i18n="Aus Sicherheits- und Bedienungsgründen sind höchstens 2.500 möglich.">Aus Sicherheits- und Bedienungsgründen sind höchstens 2.500 möglich.</span></small>
             </label>
             <div class="form-grid settings-grid">
               <label>
-                <span>Wiederholung fehlender historischer Kurse</span>
+                <span><span data-i18n="Wiederholung fehlender historischer Kurse">Wiederholung fehlender historischer Kurse</span></span>
                 <input id="historical-price-retry-interval" name="historicalPriceRetryIntervalMinutes" type="number" min="5" max="1440" step="1" required />
-                <small>Minuten zwischen regelmäßigen Prüfungen. Neue Importe und fällige Folge-Batches starten früher; Fehlschläge erhalten eine steigende Wartezeit.</small>
+                <small><span data-i18n="Minuten zwischen regelmäßigen Prüfungen. Neue Importe und fällige Folge-Batches starten früher; Fehlschläge erhalten eine steigende Wartezeit.">Minuten zwischen regelmäßigen Prüfungen. Neue Importe und fällige Folge-Batches starten früher; Fehlschläge erhalten eine steigende Wartezeit.</span></small>
               </label>
               <label>
-                <span>Historische Kurse je Durchlauf</span>
+                <span><span data-i18n="Historische Kurse je Durchlauf">Historische Kurse je Durchlauf</span></span>
                 <input id="historical-price-batch-size" name="historicalPriceBackfillBatchSize" type="number" min="1" max="250" step="1" required />
-                <small>Begrenzt unterschiedliche Coin-/Tageskurse. Mehrere passende Buchungen teilen sich einen Kurs; Anfragen laufen einzeln und gedrosselt.</small>
+                <small><span data-i18n="Begrenzt unterschiedliche Coin-/Tageskurse. Mehrere passende Buchungen teilen sich einen Kurs; Anfragen laufen einzeln und gedrosselt.">Begrenzt unterschiedliche Coin-/Tageskurse. Mehrere passende Buchungen teilen sich einen Kurs; Anfragen laufen einzeln und gedrosselt.</span></small>
               </label>
             </div>
           </section>
 
           <p id="settings-error" class="form-error" role="alert" hidden></p>
           <div class="settings-actions">
-            <a class="button button-secondary" href="/">Abbrechen</a>
-            <button id="save-settings" class="button button-primary" type="submit">Einstellungen speichern</button>
+            <a class="button button-secondary" href="/"><span data-i18n="Abbrechen">Abbrechen</span></a>
+            <button id="save-settings" class="button button-primary" type="submit"><span data-i18n="Einstellungen speichern">Einstellungen speichern</span></button>
           </div>
         </form>
 
         <aside class="settings-note">
-          <strong>Docker &amp; Portainer</strong>
-          <p>Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.</p>
+          <strong><span data-i18n="Docker &amp; Portainer">Docker &amp; Portainer</span></strong>
+          <p><span data-i18n="Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.">Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.</span></p>
         </aside>
       </main>
     </div>

@@ -20,7 +20,7 @@ function fixture() {
     querySelectorAll: () => ['bsdex-email', 'bsdex-password', 'bsdex-tan', 'bsdex-link', 'bsdex-consent-accepted'].map(element),
     addEventListener(event, fn) { this["on" + event] = fn; }, showModal() { this.open = true; }, close() { this.open = false; },
   };
-  const window = { isSecureContext: true };
+  const window = { CryptoBuchI18n: require('../public/i18n-core')(), isSecureContext: true };
   vm.runInNewContext(source, { window, location: { protocol: 'https:' },
     document: { createElement: () => dialog, body: { append() {} } },
     fetch: async (url, options) => {

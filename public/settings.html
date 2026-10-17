@@ -4,40 +4,43 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
-    <title>CryptoBuch · Einstellungen · Passwortschutz</title>
+    <title data-i18n="CryptoBuch · Einstellungen · Passwortschutz">CryptoBuch · Einstellungen · Passwortschutz</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/styles.css?v=20261004-auth-1" />
+    <script src="/locales/catalog.js" defer></script>
+    <script src="/i18n-core.js" defer></script>
+    <script src="/i18n.js" defer></script>
   </head>
   <body>
     <div class="shell settings-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="Zurück zum CryptoBuch Portfolio">
+        <a class="brand" href="/" aria-label="Zurück zum CryptoBuch Portfolio" data-i18n-aria-label="Zurück zum CryptoBuch Portfolio">
           <img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" />
           <span>CryptoBuch</span>
         </a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-i18n-aria-label="Hauptnavigation" data-primary-navigation></nav>
       </header>
 
       <main class="settings-main">
         <section class="settings-intro" aria-labelledby="settings-title">
-          <p class="eyebrow">LOKALE KONFIGURATION</p>
-          <h1 id="settings-title">Passwortschutz<br /><em>für deine Sicherheit.</em></h1>
-          <p>Schütze Oberfläche und Daten-APIs mit einem Passwort. In der iOS-App kannst du es mit Face ID im Schlüsselbund sichern.</p>
+          <p class="eyebrow"><span data-i18n="LOKALE KONFIGURATION">LOKALE KONFIGURATION</span></p>
+          <h1 id="settings-title"><span data-i18n="Passwortschutz">Passwortschutz</span><br /><em><span data-i18n="für deine Sicherheit.">für deine Sicherheit.</span></em></h1>
+          <p><span data-i18n="Schütze Oberfläche und Daten-APIs mit einem Passwort. In der iOS-App kannst du es mit Face ID im Schlüsselbund sichern.">Schütze Oberfläche und Daten-APIs mit einem Passwort. In der iOS-App kannst du es mit Face ID im Schlüsselbund sichern.</span></p>
         </section>
 
-        <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
+        <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-i18n-aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
         <section class="settings-card" aria-labelledby="auth-password-title">
-          <p class="eyebrow">SICHERHEIT</p><h2 id="auth-password-title">Passwortschutz</h2>
-          <p id="auth-password-status" aria-live="polite">Status wird geladen …</p>
+          <p class="eyebrow"><span data-i18n="SICHERHEIT">SICHERHEIT</span></p><h2 id="auth-password-title"><span data-i18n="Passwortschutz">Passwortschutz</span></h2>
+          <p id="auth-password-status" aria-live="polite"><span data-i18n="Status wird geladen …">Status wird geladen …</span></p>
           <form id="auth-password-form" class="settings-form">
-            <label id="auth-current-label" hidden>Aktuelles Passwort<input id="auth-current-password" type="password" autocomplete="current-password" maxlength="1024" /></label>
-            <label>Neues Passwort<input id="auth-new-password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required /></label>
-            <label>Neues Passwort wiederholen<input id="auth-confirm-password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required /></label>
-            <p>Mindestens 12 Zeichen. Nach dem Speichern müssen sich Web und App erneut anmelden. In der App kannst du das Passwort mit Face ID im Schlüsselbund sichern.</p>
-            <p id="auth-settings-transport" class="muted" hidden>HTTP überträgt Passwort und Daten unverschlüsselt. Verwende HTTPS oder ein vertrauenswürdiges privates Netz.</p>
+            <label id="auth-current-label" hidden><span data-i18n="Aktuelles Passwort">Aktuelles Passwort</span><input id="auth-current-password" type="password" autocomplete="current-password" maxlength="1024" /></label>
+            <label><span data-i18n="Neues Passwort">Neues Passwort</span><input id="auth-new-password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required /></label>
+            <label><span data-i18n="Neues Passwort wiederholen">Neues Passwort wiederholen</span><input id="auth-confirm-password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required /></label>
+            <p><span data-i18n="Mindestens 12 Zeichen. Nach dem Speichern müssen sich Web und App erneut anmelden. In der App kannst du das Passwort mit Face ID im Schlüsselbund sichern.">Mindestens 12 Zeichen. Nach dem Speichern müssen sich Web und App erneut anmelden. In der App kannst du das Passwort mit Face ID im Schlüsselbund sichern.</span></p>
+            <p id="auth-settings-transport" class="muted" hidden><span data-i18n="HTTP überträgt Passwort und Daten unverschlüsselt. Verwende HTTPS oder ein vertrauenswürdiges privates Netz.">HTTP überträgt Passwort und Daten unverschlüsselt. Verwende HTTPS oder ein vertrauenswürdiges privates Netz.</span></p>
             <p id="auth-password-error" role="alert" hidden></p>
-            <div class="hero-actions"><button id="auth-save" class="button button-primary" type="submit">Passwort speichern</button><button id="auth-disable" class="button button-secondary" type="button" hidden>Passwortschutz ausschalten</button></div>
+            <div class="hero-actions"><button id="auth-save" class="button button-primary" type="submit"><span data-i18n="Passwort speichern">Passwort speichern</span></button><button id="auth-disable" class="button button-secondary" type="button" hidden><span data-i18n="Passwortschutz ausschalten">Passwortschutz ausschalten</span></button></div>
           </form>
         </section>
       </main>

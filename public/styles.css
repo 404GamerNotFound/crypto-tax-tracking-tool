@@ -861,3 +861,10 @@ a.market-availability:hover { text-decoration: underline; }
 .update-content details { margin-top: 16px; }
 .update-content summary { cursor: pointer; }
 .update-content pre { max-height: 320px; overflow: auto; }
+
+/* Language preference is local to this browser, never part of journal data. */
+.language-selector { display: inline-flex; align-items: center; gap: .5rem; font-size: .8rem; color: var(--muted, #64756c); }
+.language-selector select { width: auto; min-width: 6.5rem; padding: .4rem .6rem; }
+.topbar > .language-selector { order: 10; margin-left: auto; }
+@media (max-width: 700px) { .topbar > .language-selector { margin-left: 0; } }
+@media print { .language-selector { display: none !important; } }

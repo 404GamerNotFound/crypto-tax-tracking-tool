@@ -4,53 +4,56 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
-    <title>CryptoBuch · Einstellungen · Netzwerke</title>
+    <title data-i18n="CryptoBuch · Einstellungen · Netzwerke">CryptoBuch · Einstellungen · Netzwerke</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/styles.css?v=20261004-auth-1" />
+    <script src="/locales/catalog.js" defer></script>
+    <script src="/i18n-core.js" defer></script>
+    <script src="/i18n.js" defer></script>
   </head>
   <body>
     <div class="shell settings-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="Zurück zum CryptoBuch Portfolio">
+        <a class="brand" href="/" aria-label="Zurück zum CryptoBuch Portfolio" data-i18n-aria-label="Zurück zum CryptoBuch Portfolio">
           <img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" />
           <span>CryptoBuch</span>
         </a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-i18n-aria-label="Hauptnavigation" data-primary-navigation></nav>
       </header>
 
       <main class="settings-main">
         <section class="settings-intro" aria-labelledby="settings-title">
-          <p class="eyebrow">LOKALE KONFIGURATION</p>
-          <h1 id="settings-title">Netzwerke<br /><em>für deine Wallets.</em></h1>
-          <p>Konfiguriere die Datenquellen für die einzelnen Blockchains und ihre Importgrenzen. Hinterlegte API-Keys und Blockfrost Project-IDs bleiben serverseitig.</p>
+          <p class="eyebrow"><span data-i18n="LOKALE KONFIGURATION">LOKALE KONFIGURATION</span></p>
+          <h1 id="settings-title"><span data-i18n="Netzwerke">Netzwerke</span><br /><em><span data-i18n="für deine Wallets.">für deine Wallets.</span></em></h1>
+          <p><span data-i18n="Konfiguriere die Datenquellen für die einzelnen Blockchains und ihre Importgrenzen. Hinterlegte API-Keys und Blockfrost Project-IDs bleiben serverseitig.">Konfiguriere die Datenquellen für die einzelnen Blockchains und ihre Importgrenzen. Hinterlegte API-Keys und Blockfrost Project-IDs bleiben serverseitig.</span></p>
         </section>
 
-        <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
+        <nav class="section-subnav" aria-label="Bereiche der Einstellungen" data-i18n-aria-label="Bereiche der Einstellungen" data-section-navigation="settings"></nav>
         <form id="settings-form" class="settings-form">
           <section class="settings-card" aria-labelledby="bitcoin-title">
             <div class="settings-heading">
               <div>
-                <p class="eyebrow">BITCOIN</p>
-                <h2 id="bitcoin-title">Explorer &amp; xPub</h2>
+                <p class="eyebrow"><span data-i18n="BITCOIN">BITCOIN</span></p>
+                <h2 id="bitcoin-title"><span data-i18n="Explorer &amp; xPub">Explorer &amp; xPub</span></h2>
               </div>
               <span class="settings-mark">01</span>
             </div>
             <label>
-              <span>Esplora-API-Basisadresse</span>
+              <span><span data-i18n="Esplora-API-Basisadresse">Esplora-API-Basisadresse</span></span>
               <input id="bitcoin-explorer" name="bitcoinExplorerBaseUrl" type="url" inputmode="url" required />
-              <small>Standard: Blockstream Esplora. Eigene Esplora-kompatible Instanzen sind möglich.</small>
+              <small><span data-i18n="Standard: Blockstream Esplora. Eigene Esplora-kompatible Instanzen sind möglich.">Standard: Blockstream Esplora. Eigene Esplora-kompatible Instanzen sind möglich.</span></small>
             </label>
             <div class="form-grid settings-grid">
               <label>
                 <span>xPub-Gap-Limit</span>
                 <input id="xpub-gap" name="xpubGapLimit" type="number" min="1" max="50" step="1" required />
-                <small>Aufeinanderfolgende unbenutzte Adressen pro Zweig.</small>
+                <small><span data-i18n="Aufeinanderfolgende unbenutzte Adressen pro Zweig.">Aufeinanderfolgende unbenutzte Adressen pro Zweig.</span></small>
               </label>
               <label>
                 <span>xPub-Sicherheitsgrenze</span>
                 <input id="xpub-maximum" name="xpubMaxDerivationsPerBranch" type="number" min="1" max="1000" step="1" required />
-                <small>Maximal geprüfte Adressen je Zweig.</small>
+                <small><span data-i18n="Maximal geprüfte Adressen je Zweig.">Maximal geprüfte Adressen je Zweig.</span></small>
               </label>
             </div>
           </section>
@@ -58,164 +61,164 @@
           <section class="settings-card" aria-labelledby="tezos-title">
             <div class="settings-heading">
               <div>
-                <p class="eyebrow">TEZOS</p>
-                <h2 id="tezos-title">Staking &amp; Datenquelle</h2>
+                <p class="eyebrow"><span data-i18n="TEZOS">TEZOS</span></p>
+                <h2 id="tezos-title"><span data-i18n="Staking &amp; Datenquelle">Staking &amp; Datenquelle</span></h2>
               </div>
               <span class="settings-mark">02</span>
             </div>
             <label>
-              <span>TzKT-API-Basisadresse</span>
+              <span><span data-i18n="TzKT-API-Basisadresse">TzKT-API-Basisadresse</span></span>
               <input id="tzkt-api" name="tzktApiBaseUrl" type="url" inputmode="url" required />
             </label>
             <label>
-              <span>Vertrauenswürdige Staking-Payout-Aliase</span>
-              <textarea id="staking-aliases" name="xtzStakingPayoutAliases" rows="3" placeholder="Stake.fish Payouts, Mein Baker Payouts"></textarea>
-              <small>Kommagetrennte, exakt bei TzKT angezeigte Absendernamen. Nur bestätigte Eingänge dieser Konten werden automatisch als Staking-Ertrag markiert.</small>
+              <span><span data-i18n="Vertrauenswürdige Staking-Payout-Aliase">Vertrauenswürdige Staking-Payout-Aliase</span></span>
+              <textarea id="staking-aliases" name="xtzStakingPayoutAliases" rows="3" placeholder="Stake.fish Payouts, Mein Baker Payouts" data-i18n-placeholder="Stake.fish Payouts, Mein Baker Payouts"></textarea>
+              <small><span data-i18n="Kommagetrennte, exakt bei TzKT angezeigte Absendernamen. Nur bestätigte Eingänge dieser Konten werden automatisch als Staking-Ertrag markiert.">Kommagetrennte, exakt bei TzKT angezeigte Absendernamen. Nur bestätigte Eingänge dieser Konten werden automatisch als Staking-Ertrag markiert.</span></small>
             </label>
           </section>
 
           <section class="settings-card" aria-labelledby="tron-title">
             <div class="settings-heading">
               <div>
-                <p class="eyebrow">TRON</p>
-                <h2 id="tron-title">TronGrid</h2>
+                <p class="eyebrow"><span data-i18n="TRON">TRON</span></p>
+                <h2 id="tron-title"><span data-i18n="TronGrid">TronGrid</span></h2>
               </div>
               <span class="settings-mark">03</span>
             </div>
             <label>
-              <span>TronGrid-API-Basisadresse</span>
+              <span><span data-i18n="TronGrid-API-Basisadresse">TronGrid-API-Basisadresse</span></span>
               <input id="trongrid-api" name="tronGridBaseUrl" type="url" inputmode="url" required />
             </label>
             <label>
-              <span>TronGrid-API-Key <small>optional</small></span>
-              <input id="trongrid-key" name="tronGridApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
-              <small id="trongrid-key-status">Key-Status wird geladen …</small>
+              <span><span data-i18n="TronGrid-API-Key">TronGrid-API-Key</span> <small>optional</small></span>
+              <input id="trongrid-key" name="tronGridApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
+              <small id="trongrid-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
             </label>
             <label class="check-setting">
               <input id="clear-trongrid-key" name="clearTronGridApiKey" type="checkbox" />
-              <span>Gespeicherten TronGrid-API-Key entfernen</span>
+              <span><span data-i18n="Gespeicherten TronGrid-API-Key entfernen">Gespeicherten TronGrid-API-Key entfernen</span></span>
             </label>
           </section>
 
           <section class="settings-card" aria-labelledby="cardano-title">
             <div class="settings-heading">
               <div>
-                <p class="eyebrow">CARDANO</p>
-                <h2 id="cardano-title">Blockfrost</h2>
+                <p class="eyebrow"><span data-i18n="CARDANO">CARDANO</span></p>
+                <h2 id="cardano-title"><span data-i18n="Blockfrost">Blockfrost</span></h2>
               </div>
               <span class="settings-mark">04</span>
             </div>
             <label>
-              <span>Blockfrost-API-Basisadresse</span>
+              <span><span data-i18n="Blockfrost-API-Basisadresse">Blockfrost-API-Basisadresse</span></span>
               <input id="blockfrost-api" name="blockfrostBaseUrl" type="url" inputmode="url" required />
-              <small>Standard: Cardano Mainnet. Eine Project-ID ist für den Blockchain-Import erforderlich.</small>
+              <small><span data-i18n="Standard: Cardano Mainnet. Eine Project-ID ist für den Blockchain-Import erforderlich.">Standard: Cardano Mainnet. Eine Project-ID ist für den Blockchain-Import erforderlich.</span></small>
             </label>
             <label>
-              <span>Blockfrost Project-ID</span>
-              <input id="blockfrost-project-id" name="blockfrostProjectId" type="password" autocomplete="new-password" placeholder="Nur eingeben, um die vorhandene Project-ID zu ersetzen" />
-              <small id="blockfrost-project-id-status">Status wird geladen …</small>
+              <span><span data-i18n="Blockfrost Project-ID">Blockfrost Project-ID</span></span>
+              <input id="blockfrost-project-id" name="blockfrostProjectId" type="password" autocomplete="new-password" placeholder="Nur eingeben, um die vorhandene Project-ID zu ersetzen" data-i18n-placeholder="Nur eingeben, um die vorhandene Project-ID zu ersetzen" />
+              <small id="blockfrost-project-id-status"><span data-i18n="Status wird geladen …">Status wird geladen …</span></small>
             </label>
             <label class="check-setting">
               <input id="clear-blockfrost-project-id" name="clearBlockfrostProjectId" type="checkbox" />
-              <span>Gespeicherte Blockfrost Project-ID entfernen</span>
+              <span><span data-i18n="Gespeicherte Blockfrost Project-ID entfernen">Gespeicherte Blockfrost Project-ID entfernen</span></span>
             </label>
           </section>
 
           <section class="settings-card" aria-labelledby="price-title">
             <div class="settings-heading">
               <div>
-                <p class="eyebrow">ETHEREUM</p>
-                <h2 id="price-title">Etherscan &amp; ERC-20</h2>
+                <p class="eyebrow"><span data-i18n="ETHEREUM">ETHEREUM</span></p>
+                <h2 id="price-title"><span data-i18n="Etherscan &amp; ERC-20">Etherscan &amp; ERC-20</span></h2>
               </div>
               <span class="settings-mark">05</span>
             </div>
             <label>
-              <span>Etherscan-API-Basisadresse</span>
+              <span><span data-i18n="Etherscan-API-Basisadresse">Etherscan-API-Basisadresse</span></span>
               <input id="etherscan-api" name="etherscanApiBaseUrl" type="url" inputmode="url" required />
-              <small>Standard: Etherscan API V2 für Ethereum Mainnet (Chain-ID 1).</small>
+              <small><span data-i18n="Standard: Etherscan API V2 für Ethereum Mainnet (Chain-ID 1).">Standard: Etherscan API V2 für Ethereum Mainnet (Chain-ID 1).</span></small>
             </label>
             <label>
-              <span>Ethereum Read-only RPC <small>optional</small></span>
+              <span><span data-i18n="Ethereum Read-only RPC">Ethereum Read-only RPC</span> <small>optional</small></span>
               <input id="ethereum-rpc" name="ethereumRpcUrl" type="url" inputmode="url" required />
-              <small>Wird ausschließlich für ERC-20-Metadaten per Contract-Multicall verwendet; Transaktionen und Signaturen bleiben bei Etherscan bzw. vollständig read-only.</small>
+              <small><span data-i18n="Wird ausschließlich für ERC-20-Metadaten per Contract-Multicall verwendet; Transaktionen und Signaturen bleiben bei Etherscan bzw. vollständig read-only.">Wird ausschließlich für ERC-20-Metadaten per Contract-Multicall verwendet; Transaktionen und Signaturen bleiben bei Etherscan bzw. vollständig read-only.</span></small>
             </label>
             <label>
-              <span>Etherscan-API-Key</span>
-              <input id="etherscan-key" name="etherscanApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
-              <small id="etherscan-key-status">Key-Status wird geladen …</small>
+              <span><span data-i18n="Etherscan-API-Key">Etherscan-API-Key</span></span>
+              <input id="etherscan-key" name="etherscanApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
+              <small id="etherscan-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
             </label>
             <label class="check-setting">
               <input id="clear-etherscan-key" name="clearEtherscanApiKey" type="checkbox" />
-              <span>Gespeicherten Etherscan-API-Key entfernen</span>
+              <span><span data-i18n="Gespeicherten Etherscan-API-Key entfernen">Gespeicherten Etherscan-API-Key entfernen</span></span>
             </label>
           </section>
 
           <section class="settings-card" aria-labelledby="evm-networks-title">
             <div class="settings-heading">
               <div>
-                <p class="eyebrow">WEITERE NETZWERKE</p>
-                <h2 id="evm-networks-title">BNB Chain &amp; Avalanche</h2>
+                <p class="eyebrow"><span data-i18n="WEITERE NETZWERKE">WEITERE NETZWERKE</span></p>
+                <h2 id="evm-networks-title"><span data-i18n="BNB Chain &amp; Avalanche">BNB Chain &amp; Avalanche</span></h2>
               </div>
               <span class="settings-mark">06</span>
             </div>
             <div class="form-grid settings-grid">
               <label>
-                <span>BscScan-API-Basisadresse</span>
+                <span><span data-i18n="BscScan-API-Basisadresse">BscScan-API-Basisadresse</span></span>
                 <input id="bscscan-api" name="bscScanApiBaseUrl" type="url" inputmode="url" required />
               </label>
               <label>
-                <span>BscScan-API-Key</span>
-                <input id="bscscan-key" name="bscScanApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
-                <small id="bscscan-key-status">Key-Status wird geladen …</small>
+                <span><span data-i18n="BscScan-API-Key">BscScan-API-Key</span></span>
+                <input id="bscscan-key" name="bscScanApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den Key zu ersetzen" />
+                <small id="bscscan-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
               </label>
               <label>
-                <span>Snowtrace-API-Basisadresse</span>
+                <span><span data-i18n="Snowtrace-API-Basisadresse">Snowtrace-API-Basisadresse</span></span>
                 <input id="snowtrace-api" name="snowtraceApiBaseUrl" type="url" inputmode="url" required />
               </label>
               <label>
-                <span>Snowtrace-API-Key</span>
-                <input id="snowtrace-key" name="snowtraceApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
-                <small id="snowtrace-key-status">Key-Status wird geladen …</small>
+                <span><span data-i18n="Snowtrace-API-Key">Snowtrace-API-Key</span></span>
+                <input id="snowtrace-key" name="snowtraceApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den Key zu ersetzen" />
+                <small id="snowtrace-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
               </label>
             </div>
-            <p class="settings-inline-note">Diese beiden Explorer werden getrennt abgefragt: BscScan für native BNB- und Snowtrace für native AVAX-Transfers.</p>
+            <p class="settings-inline-note"><span data-i18n="Diese beiden Explorer werden getrennt abgefragt: BscScan für native BNB- und Snowtrace für native AVAX-Transfers.">Diese beiden Explorer werden getrennt abgefragt: BscScan für native BNB- und Snowtrace für native AVAX-Transfers.</span></p>
           </section>
 
           <section class="settings-card" aria-labelledby="account-networks-title">
             <div class="settings-heading">
               <div>
-                <p class="eyebrow">WEITERE NETZWERKE</p>
-                <h2 id="account-networks-title">Solana, XRP, Stellar &amp; NEAR</h2>
+                <p class="eyebrow"><span data-i18n="WEITERE NETZWERKE">WEITERE NETZWERKE</span></p>
+                <h2 id="account-networks-title"><span data-i18n="Solana, XRP, Stellar &amp; NEAR">Solana, XRP, Stellar &amp; NEAR</span></h2>
               </div>
               <span class="settings-mark">07</span>
             </div>
             <div class="form-grid settings-grid">
               <label>
-                <span>Solscan-API-Basisadresse</span>
+                <span><span data-i18n="Solscan-API-Basisadresse">Solscan-API-Basisadresse</span></span>
                 <input id="solscan-api" name="solscanApiBaseUrl" type="url" inputmode="url" required />
               </label>
               <label>
-                <span>Solscan-API-Key</span>
-                <input id="solscan-key" name="solscanApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
-                <small id="solscan-key-status">Key-Status wird geladen …</small>
+                <span><span data-i18n="Solscan-API-Key">Solscan-API-Key</span></span>
+                <input id="solscan-key" name="solscanApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den Key zu ersetzen" />
+                <small id="solscan-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
               </label>
               <label>
-                <span>XRPL-RPC-Adresse</span>
+                <span><span data-i18n="XRPL-RPC-Adresse">XRPL-RPC-Adresse</span></span>
                 <input id="xrpl-rpc" name="xrplRpcUrl" type="url" inputmode="url" required />
-                <small>Öffentlicher oder eigener XRP-Ledger JSON-RPC-Endpunkt.</small>
+                <small><span data-i18n="Öffentlicher oder eigener XRP-Ledger JSON-RPC-Endpunkt.">Öffentlicher oder eigener XRP-Ledger JSON-RPC-Endpunkt.</span></small>
               </label>
               <label>
-                <span>Stellar-Horizon-Basisadresse</span>
+                <span><span data-i18n="Stellar-Horizon-Basisadresse">Stellar-Horizon-Basisadresse</span></span>
                 <input id="stellar-horizon" name="stellarHorizonBaseUrl" type="url" inputmode="url" required />
               </label>
               <label>
-                <span>NearBlocks-API-Basisadresse</span>
+                <span><span data-i18n="NearBlocks-API-Basisadresse">NearBlocks-API-Basisadresse</span></span>
                 <input id="nearblocks-api" name="nearBlocksApiBaseUrl" type="url" inputmode="url" required />
               </label>
               <label>
-                <span>NearBlocks-API-Key</span>
-                <input id="nearblocks-key" name="nearBlocksApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
-                <small id="nearblocks-key-status">Key-Status wird geladen …</small>
+                <span><span data-i18n="NearBlocks-API-Key">NearBlocks-API-Key</span></span>
+                <input id="nearblocks-key" name="nearBlocksApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den Key zu ersetzen" />
+                <small id="nearblocks-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
               </label>
             </div>
           </section>
@@ -223,64 +226,64 @@
           <section class="settings-card" aria-labelledby="utxo-networks-title">
             <div class="settings-heading">
               <div>
-                <p class="eyebrow">WEITERE NETZWERKE</p>
-                <h2 id="utxo-networks-title">TON, UTXO &amp; Zcash</h2>
+                <p class="eyebrow"><span data-i18n="WEITERE NETZWERKE">WEITERE NETZWERKE</span></p>
+                <h2 id="utxo-networks-title"><span data-i18n="TON, UTXO &amp; Zcash">TON, UTXO &amp; Zcash</span></h2>
               </div>
               <span class="settings-mark">08</span>
             </div>
             <div class="form-grid settings-grid">
               <label>
-                <span>TonAPI-Basisadresse</span>
+                <span><span data-i18n="TonAPI-Basisadresse">TonAPI-Basisadresse</span></span>
                 <input id="tonapi-api" name="tonApiBaseUrl" type="url" inputmode="url" required />
               </label>
               <label>
-                <span>TonAPI-Key <small>optional</small></span>
-                <input id="tonapi-key" name="tonApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
-                <small id="tonapi-key-status">Key-Status wird geladen …</small>
+                <span><span data-i18n="TonAPI-Key">TonAPI-Key</span> <small>optional</small></span>
+                <input id="tonapi-key" name="tonApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den Key zu ersetzen" />
+                <small id="tonapi-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
               </label>
               <label>
-                <span>BlockCypher-API-Basisadresse</span>
+                <span><span data-i18n="BlockCypher-API-Basisadresse">BlockCypher-API-Basisadresse</span></span>
                 <input id="blockcypher-api" name="blockCypherApiBaseUrl" type="url" inputmode="url" required />
-                <small>Dogecoin und Litecoin werden über getrennte Netzwerkpfade dieser Quelle geladen.</small>
+                <small><span data-i18n="Dogecoin und Litecoin werden über getrennte Netzwerkpfade dieser Quelle geladen.">Dogecoin und Litecoin werden über getrennte Netzwerkpfade dieser Quelle geladen.</span></small>
               </label>
               <label>
-                <span>BlockCypher-Token <small>optional</small></span>
-                <input id="blockcypher-token" name="blockCypherApiToken" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Token zu ersetzen" />
-                <small id="blockcypher-token-status">Key-Status wird geladen …</small>
+                <span><span data-i18n="BlockCypher-Token">BlockCypher-Token</span> <small>optional</small></span>
+                <input id="blockcypher-token" name="blockCypherApiToken" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Token zu ersetzen" data-i18n-placeholder="Nur eingeben, um den Token zu ersetzen" />
+                <small id="blockcypher-token-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
               </label>
               <label>
-                <span>Bitcoin-Cash-Indexer-Basisadresse</span>
+                <span><span data-i18n="Bitcoin-Cash-Indexer-Basisadresse">Bitcoin-Cash-Indexer-Basisadresse</span></span>
                 <input id="bitcoin-cash-api" name="bitcoinCashApiBaseUrl" type="url" inputmode="url" required />
-                <small>Bitcoin Cash wird über einen separaten, ausschließlich lesenden Fulcrum-Indexer importiert. Es werden weder Zahlungen noch Signaturen ausgelöst.</small>
+                <small><span data-i18n="Bitcoin Cash wird über einen separaten, ausschließlich lesenden Fulcrum-Indexer importiert. Es werden weder Zahlungen noch Signaturen ausgelöst.">Bitcoin Cash wird über einen separaten, ausschließlich lesenden Fulcrum-Indexer importiert. Es werden weder Zahlungen noch Signaturen ausgelöst.</span></small>
               </label>
               <label>
-                <span>Blockchair-API-Basisadresse</span>
+                <span><span data-i18n="Blockchair-API-Basisadresse">Blockchair-API-Basisadresse</span></span>
                 <input id="blockchair-api" name="blockchairApiBaseUrl" type="url" inputmode="url" required />
-                <small>Transparente Zcash-Adressen werden über einen eigenen Adapter abgefragt.</small>
+                <small><span data-i18n="Transparente Zcash-Adressen werden über einen eigenen Adapter abgefragt.">Transparente Zcash-Adressen werden über einen eigenen Adapter abgefragt.</span></small>
               </label>
               <label>
-                <span>Blockchair-API-Key für Zcash <small>optional</small></span>
-                <input id="blockchair-key" name="blockchairApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" />
-                <small id="blockchair-key-status">Key-Status wird geladen …</small>
+                <span><span data-i18n="Blockchair-API-Key für Zcash">Blockchair-API-Key für Zcash</span> <small>optional</small></span>
+                <input id="blockchair-key" name="blockchairApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den Key zu ersetzen" />
+                <small id="blockchair-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
               </label>
             </div>
-            <p class="settings-inline-note">Zcash unterstützt bewusst ausschließlich transparente Adressen. Eine shielded Adresse oder ein Monero-View-Key wird nicht gespeichert.</p>
+            <p class="settings-inline-note"><span data-i18n="Zcash unterstützt bewusst ausschließlich transparente Adressen. Eine shielded Adresse oder ein Monero-View-Key wird nicht gespeichert.">Zcash unterstützt bewusst ausschließlich transparente Adressen. Eine shielded Adresse oder ein Monero-View-Key wird nicht gespeichert.</span></p>
             <label class="check-setting">
               <input id="clear-additional-network-keys" name="clearAdditionalNetworkApiKeys" type="checkbox" />
-              <span>Alle gespeicherten Keys für weitere Netzwerke entfernen</span>
+              <span><span data-i18n="Alle gespeicherten Keys für weitere Netzwerke entfernen">Alle gespeicherten Keys für weitere Netzwerke entfernen</span></span>
             </label>
           </section>
 
           <p id="settings-error" class="form-error" role="alert" hidden></p>
           <div class="settings-actions">
-            <a class="button button-secondary" href="/">Abbrechen</a>
-            <button id="save-settings" class="button button-primary" type="submit">Einstellungen speichern</button>
+            <a class="button button-secondary" href="/"><span data-i18n="Abbrechen">Abbrechen</span></a>
+            <button id="save-settings" class="button button-primary" type="submit"><span data-i18n="Einstellungen speichern">Einstellungen speichern</span></button>
           </div>
         </form>
 
         <aside class="settings-note">
-          <strong>Docker &amp; Portainer</strong>
-          <p>Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.</p>
+          <strong><span data-i18n="Docker &amp; Portainer">Docker &amp; Portainer</span></strong>
+          <p><span data-i18n="Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.">Port, Container-Name und Daten-Volume werden vom Container beim Start festgelegt. Diese Infrastrukturwerte bleiben deshalb im Portainer-Stack; alle Import-, Explorer-, Staking- und Preisoptionen liegen hier.</span></p>
         </aside>
       </main>
     </div>

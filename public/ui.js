@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const currency = new Intl.NumberFormat("de-DE", {
+  const currency = new Intl.NumberFormat(window.CryptoBuchI18n.locale, {
     style: "currency",
     currency: "EUR",
     maximumFractionDigits: 2,
@@ -10,51 +10,51 @@
   const exchangeProviderLabels = Object.freeze({
     binance: "Binance Spot",
     coinbase: "Coinbase Exchange",
-    bitvavo: "Bitvavo",
+    bitvavo: window.CryptoBuchI18n.t("Bitvavo"),
     etoro: "eToro",
-    bsdex: "BSDEX",
-    trade_republic: "Trade Republic",
+    bsdex: window.CryptoBuchI18n.t("BSDEX"),
+    trade_republic: window.CryptoBuchI18n.t("Trade Republic"),
   });
 
   const priceProviderLabels = Object.freeze({
     coingecko: "CoinGecko",
-    bitvavo: "Bitvavo",
+    bitvavo: window.CryptoBuchI18n.t("Bitvavo"),
     coinbase: "Coinbase Exchange",
-    kraken: "Kraken",
-    cryptocompare: "CryptoCompare",
-    tzkt: "TzKT",
-    manual: "Manuelle Eingabe",
-    legacy: "Quelle nicht nachträglich dokumentiert",
-    "binance-api": "Binance-API",
-    "binance-csv": "Binance-CSV",
-    "coinbase-api": "Coinbase-API",
-    "coinbase-csv": "Coinbase-CSV",
-    "bitvavo-api": "Bitvavo-API",
-    "bitvavo-csv": "Bitvavo-CSV",
+    kraken: window.CryptoBuchI18n.t("Kraken"),
+    cryptocompare: window.CryptoBuchI18n.t("CryptoCompare"),
+    tzkt: window.CryptoBuchI18n.t("TzKT"),
+    manual: window.CryptoBuchI18n.t("Manuelle Eingabe"),
+    legacy: window.CryptoBuchI18n.t("Quelle nicht nachträglich dokumentiert"),
+    "binance-api": window.CryptoBuchI18n.t("Binance-API"),
+    "binance-csv": window.CryptoBuchI18n.t("Binance-CSV"),
+    "coinbase-api": window.CryptoBuchI18n.t("Coinbase-API"),
+    "coinbase-csv": window.CryptoBuchI18n.t("Coinbase-CSV"),
+    "bitvavo-api": window.CryptoBuchI18n.t("Bitvavo-API"),
+    "bitvavo-csv": window.CryptoBuchI18n.t("Bitvavo-CSV"),
     "etoro-api": "eToro-API",
     "etoro-csv": "eToro-CSV",
-    "bsdex-api": "BSDEX-API",
-    "bsdex-web": "BSDEX-Web-Export",
-    "bsdex-csv": "BSDEX-CSV",
-    "trade_republic-api": "Trade-Republic-Import",
-    "trade_republic-csv": "Trade-Republic-CSV",
-    csv: "CSV-Import",
-    adapter: "Blockchain-Adapter",
+    "bsdex-api": window.CryptoBuchI18n.t("BSDEX-API"),
+    "bsdex-web": window.CryptoBuchI18n.t("BSDEX-Web-Export"),
+    "bsdex-csv": window.CryptoBuchI18n.t("BSDEX-CSV"),
+    "trade_republic-api": window.CryptoBuchI18n.t("Trade-Republic-Import"),
+    "trade_republic-csv": window.CryptoBuchI18n.t("Trade-Republic-CSV"),
+    csv: window.CryptoBuchI18n.t("CSV-Import"),
+    adapter: window.CryptoBuchI18n.t("Blockchain-Adapter"),
   });
 
   const purposePresentation = Object.freeze({
-    "Staking Rewards": ["✦", "staking", "Staking-Ertrag"],
+    "Staking Rewards": ["✦", "staking", window.CryptoBuchI18n.t("Staking-Ertrag")],
     Kauf: ["↗", "purchase", "Kauf"],
     Verkauf: ["↘", "sale", "Verkauf"],
-    "Mining Reward": ["⛏", "mining", "Mining-Ertrag"],
+    "Mining Reward": ["⛏", "mining", window.CryptoBuchI18n.t("Mining-Ertrag")],
     Airdrop: ["◇", "gift", "Airdrop"],
     "Lending-Ertrag": ["✦", "staking", "Lending-Ertrag"],
     "DeFi-Ertrag": ["✦", "staking", "DeFi-Ertrag"],
-    "DeFi Swap": ["⇄", "transfer", "DeFi-Swap"],
-    "Liquidity Pool": ["◒", "staking", "Liquiditätspool"],
+    "DeFi Swap": ["⇄", "transfer", window.CryptoBuchI18n.t("DeFi-Swap")],
+    "Liquidity Pool": ["◒", "staking", window.CryptoBuchI18n.t("Liquiditätspool")],
     Bridge: ["⇆", "transfer", "Bridge"],
     NFT: ["▣", "gift", "NFT"],
-    Spam: ["!", "other", "Spam / ignorieren"],
+    Spam: ["!", "other", window.CryptoBuchI18n.t("Spam / ignorieren")],
     Transfer: ["↔", "transfer", "Transfer"],
     Geschenk: ["◇", "gift", "Geschenk"],
     Gebühr: ["−", "fee", "Gebühr"],
@@ -80,7 +80,7 @@
     return value !== null && value !== "" && value !== undefined && Number.isFinite(Number(value));
   }
 
-  function formatCurrency(value, fallback = "k. A.") {
+  function formatCurrency(value, fallback = window.CryptoBuchI18n.t("k. A.")) {
     return hasNumber(value) ? currency.format(Number(value)) : fallback;
   }
 
@@ -91,29 +91,29 @@
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
-  function priceProviderLabel(provider, fallback = "nicht dokumentiert") {
+  function priceProviderLabel(provider, fallback = window.CryptoBuchI18n.t("nicht dokumentiert")) {
     return priceProviderLabels[provider] || (provider ? String(provider) : fallback);
   }
 
-  function exchangeProviderLabel(provider, fallback = "Börse") {
+  function exchangeProviderLabel(provider, fallback = window.CryptoBuchI18n.t("Börse")) {
     return exchangeProviderLabels[provider] || fallback;
   }
 
   function purposeInfo(transaction = {}) {
     const [icon, tone, label] = purposePresentation[transaction.purpose]
-      || (transaction.purpose ? ["•", "custom", transaction.purpose] : ["?", "unassigned", "Noch nicht zugeordnet"]);
+      || (transaction.purpose ? ["•", "custom", transaction.purpose] : ["?", "unassigned", window.CryptoBuchI18n.t("Noch nicht zugeordnet")]);
     const origin = transaction.purpose_origin === "auto"
-      ? "automatisch erkannt"
+      ? window.CryptoBuchI18n.t("automatisch erkannt")
       : transaction.purpose_origin === "manual"
-        ? "manuell zugeordnet"
-        : "Herkunft prüfen";
-    return { icon, tone, label, origin };
+        ? window.CryptoBuchI18n.t("manuell zugeordnet")
+        : window.CryptoBuchI18n.t("Herkunft prüfen");
+    return { icon, tone, label: purposePresentation[transaction.purpose] ? window.CryptoBuchI18n.t(label) : label, origin };
   }
 
   function toast(message, kind = "success", { duration = 4200 } = {}) {
     const container = el("toast");
     if (!container) return;
-    container.textContent = message;
+    container.textContent = window.CryptoBuchI18n.message(message);
     container.className = `toast ${kind}`;
     container.hidden = false;
     clearTimeout(toast.timer);
@@ -128,7 +128,7 @@
     if (response.status === 204) return null;
     const payload = await response.json().catch(() => ({}));
     if (response.status === 401 && !String(url).startsWith("/api/auth/")) location.assign("/login.html");
-    if (!response.ok) throw new Error(payload.error || "Der Vorgang ist fehlgeschlagen.");
+    if (!response.ok) throw new Error(window.CryptoBuchI18n.message(payload.error) || window.CryptoBuchI18n.t("Der Vorgang ist fehlgeschlagen."));
     return payload;
   }
 

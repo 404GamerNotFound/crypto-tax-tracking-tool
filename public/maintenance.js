@@ -1,7 +1,7 @@
 const { api, cell, el, parseDbDate, toast: showToast } = window.CryptoBuchUI;
-const date = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" });
+const date = new Intl.DateTimeFormat(window.CryptoBuchI18n.locale, { dateStyle: "medium", timeStyle: "short" });
 const state = {};
-const RESET_CONFIRMATION = "ALLE DATEN LÖSCHEN";
+const RESET_CONFIRMATION = window.CryptoBuchI18n.t("ALLE DATEN LÖSCHEN");
 
 function toast(message, error = false) {
   showToast(message, error ? "error" : "success", { duration: 5000 });
@@ -15,10 +15,10 @@ function readableDate(value, fallback = "—") {
 
 function automationStateLabel(status) {
   return ({
-    waiting: "Bereit", queued: "Eingeplant", running: "Läuft", attention: "Prüfen",
-    inactive: "Nicht aktiv", connecting: "Verbindet", connected: "Verbunden",
-    reconnecting: "Verbindet erneut", success: "Erfolgreich", error: "Fehler",
-  })[status] || "Unbekannt";
+    waiting: window.CryptoBuchI18n.t("Bereit"), queued: window.CryptoBuchI18n.t("Eingeplant"), running: window.CryptoBuchI18n.t("Läuft"), attention: window.CryptoBuchI18n.t("Prüfen"),
+    inactive: window.CryptoBuchI18n.t("Nicht aktiv"), connecting: window.CryptoBuchI18n.t("Verbindet"), connected: window.CryptoBuchI18n.t("Verbunden"),
+    reconnecting: window.CryptoBuchI18n.t("Verbindet erneut"), success: window.CryptoBuchI18n.t("Erfolgreich"), error: window.CryptoBuchI18n.t("Fehler"),
+  })[status] || window.CryptoBuchI18n.t("Unbekannt");
 }
 
 function automationState(status) {
@@ -43,7 +43,7 @@ function renderAutomations(automations) {
   const schedules = automations.schedules || [];
   const active = schedules.filter((schedule) => schedule.status !== "inactive").length;
   el("automation-active-count").textContent = String(active);
-  el("automation-queue-status").textContent = `${automations.queue?.running || 0} läuft · ${automations.queue?.queued || 0} eingeplant`;
+  el("automation-queue-status").textContent = window.CryptoBuchI18n.t("{p0} läuft · {p1} eingeplant", { p0: automations.queue?.running || 0, p1: automations.queue?.queued || 0 });
 
   const scheduleList = el("automation-schedule-list");
   scheduleList.replaceChildren(...schedules.map((schedule) => {
@@ -52,20 +52,20 @@ function renderAutomations(automations) {
     const head = document.createElement("div");
     head.className = "automation-schedule-head";
     const title = document.createElement("h3");
-    title.textContent = schedule.label;
+    title.textContent = window.CryptoBuchI18n.message(schedule.label);
     head.append(title, automationState(schedule.status));
     const copy = document.createElement("p");
-    copy.textContent = schedule.description;
+    copy.textContent = window.CryptoBuchI18n.message(schedule.description);
     const details = document.createElement("dl");
     details.className = "automation-details";
     details.append(
-      automationDetail("Abstand", schedule.intervalMinutes ? `alle ${schedule.intervalMinutes} Min.` : "—"),
-      automationDetail("Nächster Lauf", readableDate(schedule.nextRunAt, schedule.status === "inactive" ? "nicht aktiv" : "—")),
+      automationDetail(window.CryptoBuchI18n.t("Abstand"), schedule.intervalMinutes ? window.CryptoBuchI18n.t("alle {p0} Min.", { p0: schedule.intervalMinutes }) : "—"),
+      automationDetail(window.CryptoBuchI18n.t("Nächster Lauf"), readableDate(schedule.nextRunAt, schedule.status === "inactive" ? window.CryptoBuchI18n.t("nicht aktiv") : "—")),
     );
     if (schedule.lastRun) {
       details.append(
-        automationDetail("Letzter Lauf", readableDate(schedule.lastRun.finishedAt || schedule.lastRun.startedAt)),
-        automationDetail("Ergebnis", schedule.lastRun.errorMessage ? "Fehler" : `${automationStateLabel(schedule.lastRun.status)} · ${schedule.lastRun.updatedCount || 0} ergänzt`),
+        automationDetail(window.CryptoBuchI18n.t("Letzter Lauf"), readableDate(schedule.lastRun.finishedAt || schedule.lastRun.startedAt)),
+        automationDetail(window.CryptoBuchI18n.t("Ergebnis"), schedule.lastRun.errorMessage ? window.CryptoBuchI18n.t("Fehler") : window.CryptoBuchI18n.t("{p0} · {p1} ergänzt", { p0: automationStateLabel(schedule.lastRun.status), p1: schedule.lastRun.updatedCount || 0 })),
       );
     }
     card.append(head, copy, details);
@@ -92,15 +92,15 @@ function renderAutomations(automations) {
     }
     return card;
   }));
-  if (!schedules.length) scheduleList.append(document.createTextNode("Keine automatischen Läufe eingerichtet."));
+  if (!schedules.length) scheduleList.append(document.createTextNode(window.CryptoBuchI18n.t("Keine automatischen Läufe eingerichtet.")));
 
   const jobs = automations.queue?.recent || [];
-  el("automation-queue-meta").textContent = `${automations.queue?.running || 0} läuft · ${automations.queue?.queued || 0} eingeplant`;
+  el("automation-queue-meta").textContent = window.CryptoBuchI18n.t("{p0} läuft · {p1} eingeplant", { p0: automations.queue?.running || 0, p1: automations.queue?.queued || 0 });
   const jobList = el("automation-job-list");
   jobList.replaceChildren(...jobs.map((job) => {
     const row = document.createElement("tr");
     const name = document.createElement("td");
-    name.textContent = `#${job.id} · ${job.label}`;
+    name.textContent = `#${job.id} · ${window.CryptoBuchI18n.message(job.label)}`;
     if (job.sourceLabel) {
       const source = document.createElement(job.sourceType === "exchange" ? "a" : "span");
       source.textContent = job.sourceLabel;
@@ -110,7 +110,7 @@ function renderAutomations(automations) {
     const status = document.createElement("td");
     status.append(automationState(job.status));
     const finished = job.errorMessage
-      ? `Fehler: ${job.errorMessage}`
+      ? window.CryptoBuchI18n.t("Fehler: {p0}", { p0: job.errorMessage })
       : job.finishedAt ? readableDate(job.finishedAt)
         : job.progressTotal > 1 ? `${job.progressCurrent}/${job.progressTotal}` : "—";
     row.append(name, status, cell(readableDate(job.createdAt)), cell(readableDate(job.startedAt)), cell(finished));
@@ -124,8 +124,8 @@ async function load() {
     const [status, backup, automations] = await Promise.all([api("/api/system-status"), api("/api/backups"), api("/api/system-status/automations")]);
     state.status = status;
     state.backups = backup.backups;
-    el("pending-prices").textContent = status.priceRetry.pending.toLocaleString("de-DE");
-    el("retry-status").textContent = status.priceRetry.nextAttemptAt ? `Nächster Retry: ${date.format(parseDbDate(status.priceRetry.nextAttemptAt))}` : "Keine verzögerten Retries";
+    el("pending-prices").textContent = status.priceRetry.pending.toLocaleString(window.CryptoBuchI18n.locale);
+    el("retry-status").textContent = status.priceRetry.nextAttemptAt ? window.CryptoBuchI18n.t("Nächster Retry: {p0}", { p0: date.format(parseDbDate(status.priceRetry.nextAttemptAt)) }) : window.CryptoBuchI18n.t("Keine verzögerten Retries");
     el("sync-errors").textContent = status.wallets.filter((wallet) => wallet.last_status === "error").length;
     el("backup-count").textContent = backup.backups.length;
     renderAutomations(automations);
@@ -133,7 +133,7 @@ async function load() {
     const wallets = el("wallet-status-list");
     wallets.replaceChildren(...status.wallets.map((wallet) => {
       const row = document.createElement("tr");
-      row.append(cell(wallet.label || wallet.address), cell(wallet.chain), cell(wallet.last_synced_at ? date.format(parseDbDate(wallet.last_synced_at)) : "noch nie"), cell(wallet.last_status === "error" ? "Fehler" : wallet.last_status === "success" ? "erfolgreich" : "offen"), cell(wallet.last_status === "success" ? String(wallet.last_imported_count || 0) : "—"), cell(wallet.last_message || "—"));
+      row.append(cell(wallet.label || wallet.address), cell(wallet.chain), cell(wallet.last_synced_at ? date.format(parseDbDate(wallet.last_synced_at)) : window.CryptoBuchI18n.t("noch nie")), cell(wallet.last_status === "error" ? window.CryptoBuchI18n.t("Fehler") : wallet.last_status === "success" ? "erfolgreich" : window.CryptoBuchI18n.t("offen")), cell(wallet.last_status === "success" ? String(wallet.last_imported_count || 0) : "—"), cell(wallet.last_message || "—"));
       return row;
     }));
 
@@ -144,13 +144,13 @@ async function load() {
       const download = document.createElement("a");
       download.className = "text-button";
       download.href = `/api/backups/${encodeURIComponent(entry.name)}/download`;
-      download.textContent = "Download";
+      download.textContent = window.CryptoBuchI18n.t("Download");
       const restore = document.createElement("button");
       restore.className = "text-button quality-action";
-      restore.textContent = "Wiederherstellen";
+      restore.textContent = window.CryptoBuchI18n.t("Wiederherstellen");
       restore.addEventListener("click", () => restoreBackup(entry.name));
       action.append(download, restore);
-      row.append(cell(entry.name), cell(date.format(parseDbDate(entry.createdAt))), cell(`${Math.ceil(entry.size / 1024)} KB`), action);
+      row.append(cell(entry.name), cell(date.format(parseDbDate(entry.createdAt))), cell(window.CryptoBuchI18n.t("{p0} KB", { p0: Math.ceil(entry.size / 1024) })), action);
       return row;
     }));
   } catch (error) {
@@ -159,10 +159,10 @@ async function load() {
 }
 
 async function restoreBackup(name) {
-  if (!confirm(`Backup ${name} wiederherstellen? Die aktuelle Datenbank wird ersetzt und der Container neu gestartet.`)) return;
+  if (!confirm(window.CryptoBuchI18n.t("Backup {p0} wiederherstellen? Die aktuelle Datenbank wird ersetzt und der Container neu gestartet.", { p0: name }))) return;
   try {
     await api(`/api/backups/${encodeURIComponent(name)}/restore`, { method: "POST" });
-    toast("Backup wiederhergestellt. Container startet neu …");
+    toast(window.CryptoBuchI18n.t("Backup wiederhergestellt. Container startet neu …"));
   } catch (error) {
     toast(error.message, true);
   }
@@ -188,7 +188,7 @@ function openResetDialog() {
 el("create-backup").addEventListener("click", async () => {
   try {
     const backup = await api("/api/backups", { method: "POST" });
-    toast(`Backup ${backup.name} erstellt.`);
+    toast(window.CryptoBuchI18n.t("Backup {p0} erstellt.", { p0: backup.name }));
     load();
   } catch (error) {
     toast(error.message, true);
@@ -208,18 +208,18 @@ el("data-reset-form").addEventListener("submit", async (event) => {
   error.hidden = true;
   try {
     submit.disabled = true;
-    submit.textContent = "Setzt zurück …";
+    submit.textContent = window.CryptoBuchI18n.t("Setzt zurück …");
     await api("/api/data/reset", {
       method: "POST",
-      body: JSON.stringify({ confirmation: el("data-reset-confirmation").value }),
+      body: JSON.stringify({ confirmation: "ALLE DATEN LÖSCHEN" }),
     });
     closeResetDialog();
-    toast("Lokale Daten gelöscht. Container startet neu …");
+    toast(window.CryptoBuchI18n.t("Lokale Daten gelöscht. Container startet neu …"));
     setTimeout(() => { window.location.href = "/"; }, 1200);
   } catch (requestError) {
-    error.textContent = requestError.message;
+    error.textContent = window.CryptoBuchI18n.message(requestError.message);
     error.hidden = false;
-    submit.textContent = "Endgültig zurücksetzen";
+    submit.textContent = window.CryptoBuchI18n.t("Endgültig zurücksetzen");
     resetConfirmationState();
   }
 });

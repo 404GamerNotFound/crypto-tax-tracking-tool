@@ -4,73 +4,76 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Lokale Pipeline und Protokoll für historische Kursabrufe" />
-    <title>CryptoBuch · Datenabrufe</title>
+    <title data-i18n="CryptoBuch · Datenabrufe">CryptoBuch · Datenabrufe</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/styles.css?v=20261004-brand-1" />
+    <script src="/locales/catalog.js" defer></script>
+    <script src="/i18n-core.js" defer></script>
+    <script src="/i18n.js" defer></script>
   </head>
   <body>
     <div class="shell report-shell">
       <header class="topbar">
         <a class="brand" href="/"><img class="brand-mark" src="/images/brand/cryptobuch-logo-128.png" alt="" width="40" height="40" /><span>CryptoBuch</span></a>
-        <nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation></nav>
+        <nav class="topbar-nav" aria-label="Hauptnavigation" data-i18n-aria-label="Hauptnavigation" data-primary-navigation></nav>
       </header>
       <main class="report-main price-fetch-main">
         <section class="page-hero compact-hero price-fetch-hero">
           <div>
-            <p class="eyebrow"><a href="/quality.html">DATENQUALITÄT</a> / DATENABRUFE</p>
-            <h1>Kurse <em>abrufen.</em></h1>
-            <p>Die lokale Pipeline zeigt, welche fehlenden historischen Kurse als Nächstes geprüft werden und dokumentiert jeden tatsächlichen Abruf ohne API-Keys oder Anfragedaten zu speichern.</p>
+            <p class="eyebrow"><a href="/quality.html"><span data-i18n="DATENQUALITÄT">DATENQUALITÄT</span></a> / DATENABRUFE</p>
+            <h1><span data-i18n="Kurse">Kurse</span> <em>abrufen.</em></h1>
+            <p><span data-i18n="Die lokale Pipeline zeigt, welche fehlenden historischen Kurse als Nächstes geprüft werden und dokumentiert jeden tatsächlichen Abruf ohne API-Keys oder Anfragedaten zu speichern.">Die lokale Pipeline zeigt, welche fehlenden historischen Kurse als Nächstes geprüft werden und dokumentiert jeden tatsächlichen Abruf ohne API-Keys oder Anfragedaten zu speichern.</span></p>
           </div>
-          <div class="hero-actions"><a class="button button-secondary" href="/quality.html">Zur Datenqualität</a><button class="button button-primary" id="start-price-fetch">Jetzt prüfen</button><button class="button button-secondary" id="reload-price-fetches">Neu laden</button></div>
+          <div class="hero-actions"><a class="button button-secondary" href="/quality.html"><span data-i18n="Zur Datenqualität">Zur Datenqualität</span></a><button class="button button-primary" id="start-price-fetch"><span data-i18n="Jetzt prüfen">Jetzt prüfen</span></button><button class="button button-secondary" id="reload-price-fetches"><span data-i18n="Neu laden">Neu laden</span></button></div>
         </section>
-        <nav class="section-subnav" aria-label="Bereiche der Datenqualität" data-section-navigation="quality"></nav>
+        <nav class="section-subnav" aria-label="Bereiche der Datenqualität" data-i18n-aria-label="Bereiche der Datenqualität" data-section-navigation="quality"></nav>
 
         <section class="price-pipeline-panel" aria-labelledby="price-pipeline-title">
           <div class="price-pipeline-heading">
             <div>
-              <p class="eyebrow">AUTOMATISCHE PIPELINE</p>
-              <h2 id="price-pipeline-title">Nächster Kursabruf</h2>
-              <p id="price-pipeline-copy">Pipeline wird geladen …</p>
+              <p class="eyebrow"><span data-i18n="AUTOMATISCHE PIPELINE">AUTOMATISCHE PIPELINE</span></p>
+              <h2 id="price-pipeline-title"><span data-i18n="Nächster Kursabruf">Nächster Kursabruf</span></h2>
+              <p id="price-pipeline-copy"><span data-i18n="Pipeline wird geladen …">Pipeline wird geladen …</span></p>
             </div>
             <span class="price-pipeline-status" id="price-pipeline-status">—</span>
           </div>
-          <div class="price-pipeline-metrics" aria-label="Status der Kurs-Pipeline">
-            <article><span>Offene Kurse</span><strong id="pipeline-pending">—</strong><small>ohne manuellen Kurs</small></article>
-            <article><span>Im nächsten Batch</span><strong id="pipeline-due">—</strong><small>maximal <span id="pipeline-batch-size">—</span> Coin-/Tageskurse je Durchlauf</small></article>
-            <article><span>Später eingeplant</span><strong id="pipeline-scheduled">—</strong><small>abrufbare Buchungen</small></article>
+          <div class="price-pipeline-metrics" aria-label="Status der Kurs-Pipeline" data-i18n-aria-label="Status der Kurs-Pipeline">
+            <article><span><span data-i18n="Offene Kurse">Offene Kurse</span></span><strong id="pipeline-pending">—</strong><small><span data-i18n="ohne manuellen Kurs">ohne manuellen Kurs</span></small></article>
+            <article><span><span data-i18n="Im nächsten Batch">Im nächsten Batch</span></span><strong id="pipeline-due">—</strong><small>maximal <span id="pipeline-batch-size">—</span> <span data-i18n="Coin-/Tageskurse je Durchlauf">Coin-/Tageskurse je Durchlauf</span></small></article>
+            <article><span><span data-i18n="Später eingeplant">Später eingeplant</span></span><strong id="pipeline-scheduled">—</strong><small><span data-i18n="abrufbare Buchungen">abrufbare Buchungen</span></small></article>
           </div>
           <p class="data-note" id="pipeline-blocked"></p>
-          <ol class="price-pipeline-stages" id="price-pipeline-stages" aria-label="Reihenfolge der Preisquellen"></ol>
-          <p class="price-pipeline-note">Alle historischen HTTP-Anfragen teilen sich eine serielle Warteschlange. Ein Treffer beendet die Suche für dieses Datum; fehlende Werte erhalten einen lokalen Retry-Zeitpunkt.</p>
+          <ol class="price-pipeline-stages" id="price-pipeline-stages" aria-label="Reihenfolge der Preisquellen" data-i18n-aria-label="Reihenfolge der Preisquellen"></ol>
+          <p class="price-pipeline-note"><span data-i18n="Alle historischen HTTP-Anfragen teilen sich eine serielle Warteschlange. Ein Treffer beendet die Suche für dieses Datum; fehlende Werte erhalten einen lokalen Retry-Zeitpunkt.">Alle historischen HTTP-Anfragen teilen sich eine serielle Warteschlange. Ein Treffer beendet die Suche für dieses Datum; fehlende Werte erhalten einen lokalen Retry-Zeitpunkt.</span></p>
         </section>
 
         <section class="transactions-panel report-panel" aria-labelledby="price-mappings-title">
-          <div class="section-heading transactions-title"><div><p class="eyebrow">IMPORTIERTE ASSETS</p><h2 id="price-mappings-title">Preiszuordnung bestätigen</h2></div></div>
-          <p class="data-note">Gleiche Kürzel können verschiedene Coins bezeichnen. Prüfe die CoinGecko-ID auf der CoinGecko-Coinseite (API-ID). Die Zuordnung gilt nur für die angezeigte Quelle. Unbekannte Assets pausieren bis zur Bestätigung. Vorhandene und manuelle Kurse bleiben erhalten. Eigene Zuordnungen verwenden ausschließlich CoinGecko; dessen Tarif muss den Zeitraum abdecken.</p>
+          <div class="section-heading transactions-title"><div><p class="eyebrow"><span data-i18n="IMPORTIERTE ASSETS">IMPORTIERTE ASSETS</span></p><h2 id="price-mappings-title"><span data-i18n="Preiszuordnung bestätigen">Preiszuordnung bestätigen</span></h2></div></div>
+          <p class="data-note"><span data-i18n="Gleiche Kürzel können verschiedene Coins bezeichnen. Prüfe die CoinGecko-ID auf der CoinGecko-Coinseite (API-ID). Die Zuordnung gilt nur für die angezeigte Quelle. Unbekannte Assets pausieren bis zur Bestätigung. Vorhandene und manuelle Kurse bleiben erhalten. Eigene Zuordnungen verwenden ausschließlich CoinGecko; dessen Tarif muss den Zeitraum abdecken.">Gleiche Kürzel können verschiedene Coins bezeichnen. Prüfe die CoinGecko-ID auf der CoinGecko-Coinseite (API-ID). Die Zuordnung gilt nur für die angezeigte Quelle. Unbekannte Assets pausieren bis zur Bestätigung. Vorhandene und manuelle Kurse bleiben erhalten. Eigene Zuordnungen verwenden ausschließlich CoinGecko; dessen Tarif muss den Zeitraum abdecken.</span></p>
           <div id="price-mapping-list" class="price-mapping-list"></div>
-          <p class="data-note" id="price-mapping-empty" hidden>Alle erfassten Assets haben eine feste Preisidentität.</p>
+          <p class="data-note" id="price-mapping-empty" hidden><span data-i18n="Alle erfassten Assets haben eine feste Preisidentität.">Alle erfassten Assets haben eine feste Preisidentität.</span></p>
         </section>
 
         <section class="transactions-panel report-panel price-fetch-upcoming" aria-labelledby="price-fetch-upcoming-title">
           <div class="section-heading transactions-title">
-            <div><p class="eyebrow">WARTESCHLANGE</p><h2 id="price-fetch-upcoming-title">Demnächst automatisch prüfen</h2></div>
+            <div><p class="eyebrow"><span data-i18n="WARTESCHLANGE">WARTESCHLANGE</span></p><h2 id="price-fetch-upcoming-title"><span data-i18n="Demnächst automatisch prüfen">Demnächst automatisch prüfen</span></h2></div>
             <span class="count-badge" id="price-fetch-upcoming-count">—</span>
           </div>
-          <p class="data-note" id="price-fetch-next-at">Zeitplan wird geladen …</p>
-          <div class="table-wrap"><table><thead><tr><th>Transaktionsdatum</th><th>Coin</th><th>Quelle</th><th>Nächste Prüfung</th><th>Versuche</th><th>Hinweis</th></tr></thead><tbody id="price-fetch-upcoming-list"></tbody></table></div>
-          <p class="data-note" id="price-fetch-upcoming-empty" hidden>Keine fehlenden historischen Kurse in der Warteschlange.</p>
+          <p class="data-note" id="price-fetch-next-at"><span data-i18n="Zeitplan wird geladen …">Zeitplan wird geladen …</span></p>
+          <div class="table-wrap"><table><thead><tr><th><span data-i18n="Transaktionsdatum">Transaktionsdatum</span></th><th><span data-i18n="Coin">Coin</span></th><th><span data-i18n="Quelle">Quelle</span></th><th><span data-i18n="Nächste Prüfung">Nächste Prüfung</span></th><th><span data-i18n="Versuche">Versuche</span></th><th><span data-i18n="Hinweis">Hinweis</span></th></tr></thead><tbody id="price-fetch-upcoming-list"></tbody></table></div>
+          <p class="data-note" id="price-fetch-upcoming-empty" hidden><span data-i18n="Keine fehlenden historischen Kurse in der Warteschlange.">Keine fehlenden historischen Kurse in der Warteschlange.</span></p>
         </section>
 
         <section class="transactions-panel report-panel price-fetch-log" aria-labelledby="price-fetch-log-title">
           <div class="section-heading transactions-title">
-            <div><p class="eyebrow">LOKALES ABRUFPROTOKOLL</p><h2 id="price-fetch-log-title">Abgeschlossen, teilweise offen oder fehlgeschlagen</h2></div>
+            <div><p class="eyebrow"><span data-i18n="LOKALES ABRUFPROTOKOLL">LOKALES ABRUFPROTOKOLL</span></p><h2 id="price-fetch-log-title"><span data-i18n="Abgeschlossen, teilweise offen oder fehlgeschlagen">Abgeschlossen, teilweise offen oder fehlgeschlagen</span></h2></div>
             <span class="muted" id="price-fetch-log-meta">—</span>
           </div>
-          <p class="data-note">Das Protokoll speichert Zeitpunkt, Quelle, Asset, Ergebnis und sichere Fehlerklasse. Es speichert weder API-Keys noch vollständige Anfrage-URLs.</p>
+          <p class="data-note"><span data-i18n="Das Protokoll speichert Zeitpunkt, Quelle, Asset, Ergebnis und sichere Fehlerklasse. Es speichert weder API-Keys noch vollständige Anfrage-URLs.">Das Protokoll speichert Zeitpunkt, Quelle, Asset, Ergebnis und sichere Fehlerklasse. Es speichert weder API-Keys noch vollständige Anfrage-URLs.</span></p>
           <div class="price-fetch-run-list" id="price-fetch-run-list" aria-live="polite"></div>
-          <p class="data-note" id="price-fetch-run-empty" hidden>Es wurden noch keine historischen Kursabrufe protokolliert.</p>
-          <div class="pagination-actions" id="price-fetch-pagination" hidden><button class="button button-secondary button-small" id="price-fetch-previous" type="button">Neuere Einträge</button><span id="price-fetch-page-label"></span><button class="button button-secondary button-small" id="price-fetch-next" type="button">Ältere Einträge</button></div>
+          <p class="data-note" id="price-fetch-run-empty" hidden><span data-i18n="Es wurden noch keine historischen Kursabrufe protokolliert.">Es wurden noch keine historischen Kursabrufe protokolliert.</span></p>
+          <div class="pagination-actions" id="price-fetch-pagination" hidden><button class="button button-secondary button-small" id="price-fetch-previous" type="button"><span data-i18n="Neuere Einträge">Neuere Einträge</span></button><span id="price-fetch-page-label"></span><button class="button button-secondary button-small" id="price-fetch-next" type="button"><span data-i18n="Ältere Einträge">Ältere Einträge</span></button></div>
         </section>
       </main>
     </div>
