@@ -1,0 +1,26 @@
+# In einem BESTEHENDEN Stack verwenden und dessen bisherige Ports/Umgebung
+# übernehmen. DATA_VOLUME muss das tatsächlich vorhandene Docker-Volume sein.
+services:
+  cryptobuch:
+    image: ghcr.io/404gamernotfound/crypto-tax-tracking-tool:${CRYPTOBUCH_IMAGE_TAG}
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DATA_DIR: /data
+      CRYPTOBUCH_HTTPS: ${CRYPTOBUCH_HTTPS:-true}
+      CRYPTOBUCH_TLS_HOSTS: ${CRYPTOBUCH_TLS_HOSTS:-localhost,127.0.0.1,::1}
+      CRYPTOBUCH_PORTAINER_URL: ${CRYPTOBUCH_PORTAINER_URL}
+      CRYPTOBUCH_PORTAINER_STACK_ID: ${CRYPTOBUCH_PORTAINER_STACK_ID}
+      CRYPTOBUCH_PORTAINER_ENDPOINT_ID: ${CRYPTOBUCH_PORTAINER_ENDPOINT_ID}
+      CRYPTOBUCH_PORTAINER_TOKEN_FILE: /run/secrets/portainer-token
+      # Für selbstsigniertes Portainer-TLS optional CA-Datei zusätzlich mounten:
+      # NODE_EXTRA_CA_CERTS: /run/secrets/portainer-ca.crt
+    volumes:
+      - cryptobuch_data:/data
+      - ${PORTAINER_TOKEN_HOST_PATH}:/run/secrets/portainer-token:ro
+    restart: unless-stopped
+volumes:
+  cryptobuch_data:
+    external: true
+    name: ${DATA_VOLUME}

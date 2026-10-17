@@ -853,3 +853,11 @@ a.market-availability:hover { text-decoration: underline; }
 .price-mapping-form .price-mapping-confirm { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; }
 .price-mapping-confirm input { flex: 0 0 auto; width: auto; }
 .price-mapping-form button { justify-self: start; white-space: normal; }
+/* Application updates reuse the maintenance panel, with readable spacing for
+   status messages and expandable setup instructions on small screens. */
+#updates { margin-bottom: 24px; }
+.update-content { padding: 0 24px 24px; overflow-wrap: anywhere; }
+.update-content .data-note { padding: 0; border: 0; margin: 12px 0; }
+.update-content details { margin-top: 16px; }
+.update-content summary { cursor: pointer; }
+.update-content pre { max-height: 320px; overflow: auto; }

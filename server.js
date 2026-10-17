@@ -830,7 +830,16 @@ app.use("/api/bitcoin/psbt-preview", (_request, response) => response.status(410
 app.use("/api/import/csv", express.json({ limit: "6mb" }));
 app.use(express.json({ limit: "64kb" }));
 const { createAuth } = require("./lib/auth");
-createAuth({ dataDir: DATA_DIR }).register(app);
+const authentication = createAuth({ dataDir: DATA_DIR });
+authentication.register(app);
+let applicationUpdates = null;
+app.use("/api", (request, response, next) => {
+  if (applicationUpdates?.isDeploying() && !["GET", "HEAD", "OPTIONS"].includes(request.method)
+    && !/^\/(auth|updates)(\/|$)/i.test(request.path)) {
+    return response.status(503).json({ error: "Ein Anwendungsupdate läuft. Änderungen sind bis zum Abschluss oder zur Prüfung in Betrieb gesperrt." });
+  }
+  next();
+});
 
 let currentPriceCache = { expiresAt: 0, data: {} };
 let tokenPriceCache = { expiresAt: 0, data: {} };
@@ -2388,7 +2397,7 @@ function scheduleJobWorker() {
   jobWorkerScheduled = true;
   setImmediate(async () => {
     jobWorkerScheduled = false;
-    if (localDataResetting) return;
+    if (localDataResetting || applicationUpdates?.isDeploying()) return;
     const job = db.prepare("SELECT * FROM background_jobs WHERE status = 'queued' ORDER BY id ASC LIMIT 1").get();
     if (!job) return;
     db.prepare("UPDATE background_jobs SET status = 'running', started_at = datetime('now') WHERE id = ?").run(job.id);
@@ -3670,6 +3679,35 @@ function createBackup() {
   return listBackups().find((backup) => backup.name === name);
 }
 
+applicationUpdates = require("./lib/application-updates").createApplicationUpdates({
+  dataDir: DATA_DIR, version: require("./package.json").version,
+  backup: createBackup, protectedMode: authentication.enabled,
+  busy: () => jobWorkerRunning || localDataResetting,
+  resume: scheduleJobWorker,
+});
+app.get("/api/updates", (_request, response) => response.json(applicationUpdates.status()));
+app.post("/api/updates/check", async (request, response, next) => {
+  try {
+    if (request.get("x-cryptobuch-request") !== "1") throw makeError("CryptoBuch-Anfrageschutz fehlt.", 403);
+    response.json(await applicationUpdates.check());
+  } catch (error) { next(error); }
+});
+app.post("/api/updates/install", authentication.requireProtected, async (request, response, next) => {
+  try {
+    if (request.body?.confirmed !== true) throw makeError("Das Update muss ausdrücklich bestätigt werden.");
+    response.status(202).json(await applicationUpdates.install(request.body.version));
+  } catch (error) {
+    if (error.updateSafe) return response.status(error.status).json({ error: error.message });
+    next(error);
+  }
+});
+app.post("/api/updates/acknowledge", authentication.requireProtected, (request, response, next) => {
+  try {
+    if (request.body?.confirmation !== "PORTAINER GEPRÜFT") throw makeError("Bitte zuerst den Deployment-Status in Portainer prüfen und bestätigen.");
+    response.json(applicationUpdates.acknowledge());
+  } catch (error) { next(error); }
+});
+
 function resetLocalData() {
   void bsdexWebLogin.close();
   // Backups deliberately remain untouched: a reset must be reversible by a
@@ -4669,7 +4707,7 @@ function bsdexWebView(connection) {
   if (!stored) return null;
   const pending = bsdexWebLogin.status(connection.id);
   return { status: pending !== "login_required" ? pending : stored.session_ciphertext ? "connected" : "login_required",
-    connectedAt: stored.connected_at, lastError: stored.last_error };
+    connectedAt: stored.connected_at, lastError: stored.last_error, ...(bsdexWebLogin.details?.(connection.id) || {}) };
 }
 
 function exchangeConnectionView(connection) {
@@ -5098,6 +5136,7 @@ app.post("/api/exchange-connections/:id/bsdex/web-login/:action", async (request
     else if (action === "device") result = await bsdexWebLogin.confirmDevice(id, request.body?.link);
     else if (action === "consent") result = await bsdexWebLogin.consent(id, { accepted: request.body?.accepted, digest: request.body?.digest });
     else throw makeError("Unbekannter Anmeldeschritt.");
+    db.prepare("UPDATE bsdex_web_sessions SET last_error = NULL WHERE connection_id = ?").run(id);
     let job = null;
     if (result.status === "connected") {
       const saved = db.prepare("UPDATE bsdex_web_sessions SET session_ciphertext = ?, account_identity = ?, connected_at = datetime('now'), last_error = NULL WHERE connection_id = ?")
@@ -5111,6 +5150,10 @@ app.post("/api/exchange-connections/:id/bsdex/web-login/:action", async (request
     // Only adapter-authored messages reach storage; browser errors may contain
     // passwords, one-time links or cookies and are caught inside the adapter.
     if (id && error.status) db.prepare("UPDATE bsdex_web_sessions SET last_error = ? WHERE connection_id = ?").run(error.message, id);
+    if (id && error.status && (error.status < 500 || error.bsdexSafe)) {
+      return response.status(error.status).json({ error: error.message,
+        bsdexWeb: { status: bsdexWebLogin.status(id), ...(bsdexWebLogin.details?.(id) || {}) } });
+    }
     next(error);
   }
 });

@@ -24,6 +24,22 @@
           <div class="hero-actions"><a class="button button-secondary" href="#automatische-laeufe">Automatische Läufe</a><button class="button button-primary" id="create-backup">Backup erstellen</button><button class="button button-secondary" id="reload-status">Neu laden</button></div>
         </section>
         <nav class="section-subnav" aria-label="Betriebsbereiche" data-section-navigation="maintenance"></nav>
+        <section class="transactions-panel report-panel" id="updates" aria-labelledby="updates-title">
+          <div class="section-heading transactions-title"><div><p class="eyebrow">ANWENDUNG AKTUALISIEREN</p><h2 id="updates-title">Docker-Updates</h2></div><div class="hero-actions"><button class="button button-secondary button-small" id="check-update" type="button">Nach Updates suchen</button><button class="button button-primary button-small" id="install-update" type="button" disabled>Jetzt aktualisieren</button></div></div>
+          <div class="update-content">
+          <p id="update-status" role="status" aria-live="polite">Update-Status wird geladen …</p>
+          <p class="data-note" id="update-configuration"></p>
+          <p class="data-note" id="update-attempt"></p>
+          <a id="update-release" class="text-button" target="_blank" rel="noopener noreferrer" hidden>Release auf GitHub ansehen</a>
+          <details id="update-notes-section" hidden><summary>Änderungen dieser Version</summary><pre id="update-notes" style="white-space: pre-wrap; overflow-wrap: anywhere; font: inherit"></pre></details>
+          <p><button class="button button-secondary button-small" id="acknowledge-update" type="button" hidden>Deployment geprüft – Sperre aufheben</button></p>
+          <details><summary>Portainer-Anbindung einrichten</summary>
+            <p>Unterstützt werden dateibasierte Docker-Compose-Stacks in Portainer CE und BE mit einem versionierten CryptoBuch-Image. Git-Stacks und einzelne Container müssen zunächst in Portainer umgestellt werden. Das bestehende Daten-Volume weiterverwenden.</p>
+            <p>Im Container werden Portainer-HTTPS-Adresse, Stack-ID, Environment-ID und der Pfad zu einer schreibgeschützt eingebundenen API-Token-Datei konfiguriert. Der Token bleibt serverseitig. Der CryptoBuch-Passwortschutz muss aktiviert sein.</p>
+            <p>Die genaue Einrichtung mit Compose-Vorlage findest du in <a href="/update-setup.html">Docker-Updates einrichten</a>.</p>
+          </details>
+          </div>
+        </section>
         <section class="summary-grid" id="betriebsstatus">
           <article class="summary-card"><span class="card-label">Offene historische Kurse</span><strong id="pending-prices">—</strong><span class="muted" id="retry-status"></span></article>
           <article class="summary-card"><span class="card-label">Wallets mit Fehler</span><strong id="sync-errors">—</strong><span class="muted">letzter Synchronisationsversuch</span></article>
@@ -69,5 +85,6 @@
     <script src="/ui.js?v=20261004-auth-1" defer></script>
     <script src="/navigation.js?v=20261010-settings-1" defer></script>
     <script src="/maintenance.js?v=coinbase2-20260929-1" defer></script>
+    <script src="/application-updates.js?v=20261016-1" defer></script>
   </body>
 </html>

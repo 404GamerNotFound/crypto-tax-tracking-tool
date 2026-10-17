@@ -10,15 +10,26 @@ const sessions = require('../lib/bsdex-web-session');
 const originalFetchHistory = web.fetchBsdexWebHistory, originalLogin = sessions.createBsdexWebLogin;
 const secretState = { cookies: [{ name: 'session', value: 'PRIVATE-COOKIE', domain: '.bsdex.de' }], origins: [] };
 const sample = HEADERS.join(',') + '\nbuy-1,buy,2021-01-01 12:00:00 +0000,1.0,ETH,100.0,EUR,0.1,EUR,,';
-let expired = false, importedRequests = 0;
+let expired = false, importedRequests = 0, stagedLogin = false;
+const pending = new Map();
 web.fetchBsdexWebHistory = async ({ storageState }) => {
   assert.equal(storageState.cookies[0].value, 'PRIVATE-COOKIE'); importedRequests++;
   if (expired) throw Object.assign(new Error('Sitzung abgelaufen'), { status: 400, code: 'BSDEX_LOGIN_REQUIRED' });
   return { ...parseBsdexCsv(sample), storageState: secretState, warnings: [] };
 };
 sessions.createBsdexWebLogin = () => ({
-  status: () => 'login_required', cancel: async () => {}, close: async () => {},
-  start: async (_id, { identity }) => ({ status: 'connected', storageState: secretState, identity }),
+  status: id => pending.has(id) ? 'two_factor_required' : 'login_required',
+  details: id => pending.has(id) ? { expiresAt: new Date(Date.now() + 600000).toISOString(), attemptsRemaining: pending.get(id).remaining } : {},
+  cancel: async id => { pending.delete(id); }, close: async () => { pending.clear(); },
+  start: async (id, { identity }) => {
+    if (!stagedLogin) return { status: 'connected', storageState: secretState, identity };
+    pending.set(id, { identity, remaining: 5 }); return { status: 'two_factor_required' };
+  },
+  confirm: async (id, tan) => {
+    const entry = pending.get(id);
+    if (tan !== '222222') { entry.remaining--; throw Object.assign(new Error('Der Code ist ungültig. Bitte erneut eingeben.'), { status: 400, bsdexSafe: true }); }
+    pending.delete(id); return { status: 'connected', storageState: secretState, identity: entry.identity };
+  },
 });
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cryptobuch-bsdex-web-'));
 process.env.DATA_DIR = directory;
@@ -79,4 +90,32 @@ test('BSDEX-Web: additive Quelle, verschlüsselte Sitzung, serielle Jobs, Dublet
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
   await request(base, undefined, 'DELETE');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bsdex_web_sessions').get().n, 0);
+});
+
+test('BSDEX-2FA-API liefert bei Fehlern den offenen Schritt und speichert erst nach gültigem Code', async () => {
+  expired = false; stagedLogin = true;
+  const created = await request('/api/exchange-connections', { provider: 'bsdex_web', label: '2FA-Test', bsdexWebConsent: true });
+  const id = created.data.id, base = `/api/exchange-connections/${id}`;
+  const started = await request(base + '/bsdex/web-login/start', { email: 'test@example.test', password: 'PRIVATE-PASSWORD' });
+  assert.equal(started.status, 200); assert.equal(started.data.job, null);
+  assert.equal(started.data.bsdexWeb.status, 'two_factor_required');
+  assert.equal(started.data.bsdexWeb.attemptsRemaining, 5);
+  const priorImports = importedRequests;
+  const rejected = await request(base + '/bsdex/web-login/confirm', { tan: '111111' });
+  assert.equal(rejected.status, 400);
+  assert.equal(rejected.data.bsdexWeb.status, 'two_factor_required');
+  assert.equal(rejected.data.bsdexWeb.attemptsRemaining, 4);
+  assert.ok(Date.parse(rejected.data.bsdexWeb.expiresAt) > Date.now());
+  assert.equal(db.prepare('SELECT session_ciphertext FROM bsdex_web_sessions WHERE connection_id=?').get(id).session_ciphertext, '');
+  assert.equal(importedRequests, priorImports);
+  const accepted = await request(base + '/bsdex/web-login/confirm', { tan: '222222' });
+  assert.equal(accepted.status, 200); assert.equal(accepted.data.bsdexWeb.status, 'connected');
+  assert.ok(accepted.data.job.id);
+  assert.equal(accepted.data.bsdexWeb.lastError, null);
+  await idle(); assert.equal(importedRequests, priorImports + 1);
+  const stored = db.prepare('SELECT * FROM bsdex_web_sessions WHERE connection_id=?').get(id);
+  assert.ok(stored.session_ciphertext.length); assert.equal(stored.last_error, null);
+  const exposed = JSON.stringify([started.data, rejected.data, accepted.data, db.prepare('SELECT payload_json,result_json FROM background_jobs').all()]);
+  for (const secret of ['PRIVATE-', '111111', '222222', 'test@example.test']) assert.ok(!exposed.includes(secret));
+  await request(base, undefined, 'DELETE'); stagedLogin = false;
 });

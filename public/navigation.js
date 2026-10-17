@@ -52,6 +52,7 @@
     ]),
     maintenance: Object.freeze([
       { href: "#betriebsstatus", label: "Status & Backups" },
+      { href: "#updates", label: "Docker-Updates" },
       { href: "#automatische-laeufe", label: "Automatische Läufe" },
       { href: "#daten-reset", label: "Daten zurücksetzen" },
     ]),

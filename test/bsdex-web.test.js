@@ -41,32 +41,57 @@ test("BSDEX meldet fehlendes Chromium ohne lokale Pfade oder Browser-Rohfehler",
   assert.equal(login.status(1), 'login_required');
 });
 
-function loginBrowserFixture() {
-  let state = 'landing', closed = 0, saved = 0;
+function loginBrowserFixture(options = {}) {
+  let state = 'landing', closed = 0, saved = 0, codeError = false, resolveResponse;
   let currentUrl = 'https://app.bsdex.de/';
-  const visible = key => key === '#user_email' ? state === 'login' : key === '#challenge_tan' ? state === 'tan'
-    : key === 'Bitte überprüfen Sie Ihre E-Mails' ? state === 'device'
-      : key === 'dialog' ? state === 'consent' : ['Historie', 'Wallet'].includes(key) ? ['ready', 'consent'].includes(state) : false;
+  const fills = [], submissions = [], outcomes = [...(options.outcomes || ['device'])];
+  const isCode = key => typeof key === 'string' && key.includes(options.codeSelector || '#challenge_tan');
+  const visible = key => key instanceof RegExp ? key.test(state === 'security' ? 'Sicherheitsüberprüfung wird durchgeführt' : codeError ? 'Der eingegebene Code ist ungültig' : '')
+    : key === '#user_email' ? state === 'login' : isCode(key) ? state === 'tan'
+      : key === 'Bitte überprüfen Sie Ihre E-Mails' ? state === 'device'
+        : key === 'dialog' ? state === 'consent' : ['Historie', 'Wallet'].includes(key) ? ['ready', 'consent'].includes(state) : false;
   const locator = key => ({
     first: () => locator(key), last: () => locator('open-login'), filter: () => locator(key),
-    isVisible: async () => visible(key), getAttribute: async () => '/oauth/session', fill: async () => {},
+    isVisible: async () => visible(key),
+    getAttribute: async name => name === 'method' ? 'post' : options.formAction || (state === 'tan' ? '/oauth/multi_factor_auth' : '/oauth/session'),
+    fill: async value => { fills.push({ key, value }); },
     innerText: async () => 'Zur Sicherung Ihres BSDEX-Accounts: Daten an Solaris. Ich stimme zu',
     getByRole: () => locator('consent-button'),
     waitFor: async ({ state: wanted }) => { if (visible(key) !== (wanted === 'visible')) throw new Error('not visible'); },
+    press: async button => {
+      assert.equal(button, 'Enter');
+      const target = state === 'tan' ? '/oauth/multi_factor_auth' : '/oauth/session';
+      submissions.push(target);
+      if (options.beforeSubmit) await options.beforeSubmit(target);
+      if (state === 'login') { state = 'tan'; currentUrl = 'https://auth.bsdex.de/oauth/multi_factor_auth/new'; }
+      else {
+        const outcome = outcomes.shift() || 'tan';
+        state = outcome === 'timeout' ? 'tan' : outcome;
+        codeError = state === 'tan';
+        if (state === 'device') currentUrl = 'https://auth.bsdex.de/api/v2/oauth/device_confirmation';
+        if (state === 'ready') currentUrl = 'https://app.bsdex.de/invest/btc-eur';
+        if (outcome === 'timeout') { resolveResponse({ timeout: true }); return; }
+      }
+      resolveResponse({ url: () => 'https://auth.bsdex.de' + target, request: () => ({ method: () => 'POST' }), finished: async () => {} });
+    },
     click: async () => {
-      if (key === 'open-login') { state = 'login'; currentUrl = 'https://auth.bsdex.de/oauth/session/new'; }
-      else if (key === 'Anmelden') { state = 'tan'; currentUrl = 'https://auth.bsdex.de/oauth/multi_factor_auth/new'; }
-      else if (key.includes('commit')) { state = 'device'; currentUrl = 'https://auth.bsdex.de/api/v2/oauth/device_confirmation'; }
+      if (key === 'open-login') { state = options.security ? 'security' : 'login'; currentUrl = 'https://auth.bsdex.de/oauth/session/new'; }
       else if (key === 'consent-button') state = 'ready';
     },
   });
   const page = { url: () => currentUrl, locator, getByText: locator,
     getByRole: (role, options) => locator(role === 'dialog' ? 'dialog' : options?.name),
+    waitForResponse: predicate => new Promise(resolve => { resolveResponse = resolve; }).then(response => {
+      if (response.timeout) throw new Error('Timeout: request payload PRIVATE-CODE');
+      assert.equal(predicate(response), true); return response;
+    }),
+    waitForLoadState: async () => {},
     goto: async url => { if (url.includes('/device_confirmation/')) { state = 'consent'; currentUrl = 'https://app.bsdex.de/invest/btc-eur'; } },
   };
   const context = { setDefaultTimeout: () => {}, setDefaultNavigationTimeout: () => {}, route: async () => {}, routeWebSocket: async () => {}, newPage: async () => page,
     storageState: async () => { saved++; return { cookies: [], origins: [] }; } };
-  return { launch: async () => ({ newContext: async () => context, close: async () => { closed++; } }), counters: () => ({ closed, saved }) };
+  return { launch: async () => ({ newContext: async () => context, close: async () => { closed++; } }),
+    pause: async () => {}, resultTimeoutMs: 200, fills, submissions, counters: () => ({ closed, saved }) };
 }
 
 test('BSDEX-Anmeldestufen: TAN, E-Mail-Gerätelink und ausdrückliche aktuelle Zustimmung vor Sitzungsspeicherung', async () => {
@@ -81,6 +106,79 @@ test('BSDEX-Anmeldestufen: TAN, E-Mail-Gerätelink und ausdrückliche aktuelle Z
   assert.deepEqual(fixture.counters(), { saved: 1, closed: 1 }); assert.equal(login.status(1), 'login_required');
 });
 
+test('BSDEX-2FA behält falsche Codes und Transportfehler als wiederholbaren Schritt, speichert erst nach Erfolg', async () => {
+  for (const failure of ['tan', 'timeout']) {
+    const fixture = loginBrowserFixture({ outcomes: [failure, 'ready'], codeSelector: 'input[autocomplete="one-time-code"]' });
+    const login = createBsdexWebLogin(fixture);
+    await login.start(1, { email: 'test@example.test', password: 'test' });
+    assert.equal(login.details(1).attemptsRemaining, 5);
+    assert.ok(Date.parse(login.details(1).expiresAt) > Date.now());
+    await assert.rejects(login.confirm(1, '111111'), error => error.status === 400 && !error.message.includes('PRIVATE-CODE'));
+    assert.equal(login.status(1), 'two_factor_required');
+    assert.equal(login.details(1).attemptsRemaining, 4);
+    assert.equal(fixture.fills.at(-1).value, '');
+    assert.deepEqual(fixture.counters(), { closed: 0, saved: 0 });
+    assert.equal((await login.confirm(1, '222222')).status, 'connected');
+    assert.deepEqual(fixture.counters(), { closed: 1, saved: 1 });
+    assert.deepEqual(login.details(1), {});
+  }
+});
+
+test('BSDEX-2FA validiert Codes und beendet nach fünf abgelehnten Versuchen ohne Sitzungsspeicherung', async () => {
+  const fixture = loginBrowserFixture({ outcomes: Array(5).fill('tan') });
+  const login = createBsdexWebLogin(fixture);
+  await login.start(1, { email: 'test@example.test', password: 'test' });
+  for (const code of ['abc', '123', '12345678901', 123456]) await assert.rejects(login.confirm(1, code), /Ziffern/);
+  assert.equal(login.details(1).attemptsRemaining, 5);
+  for (let i = 0; i < 5; i++) {
+    await assert.rejects(login.confirm(1, '111111'), error => error.status === (i === 4 ? 429 : 400));
+  }
+  assert.equal(login.status(1), 'login_required');
+  assert.deepEqual(fixture.counters(), { closed: 1, saved: 0 });
+});
+
+test('BSDEX-2FA beendet abgelaufene und abgebrochene Anmeldungen vor weiterer Übertragung', async () => {
+  let now = Date.now();
+  const fixture = loginBrowserFixture();
+  const login = createBsdexWebLogin({ ...fixture, now: () => now });
+  await login.start(1, { email: 'test@example.test', password: 'test' });
+  now += 10 * 60 * 1000;
+  await assert.rejects(login.confirm(1, '123456'), /abgelaufen/);
+  assert.deepEqual(fixture.submissions, ['/oauth/session']);
+  assert.deepEqual(fixture.counters(), { closed: 1, saved: 0 });
+  await login.start(1, { email: 'test@example.test', password: 'test' });
+  await login.cancel(1);
+  await assert.rejects(login.confirm(1, '123456'), /abgelaufen/);
+  assert.equal(login.status(1), 'login_required');
+});
+
+test('BSDEX-2FA verhindert paralleles Bestätigen und Neustarten während der Prüfung', async () => {
+  let release, submitted;
+  const entered = new Promise(resolve => { submitted = resolve; });
+  const fixture = loginBrowserFixture({ beforeSubmit: async path => {
+    if (path.includes('multi_factor')) { submitted(); await new Promise(resolve => { release = resolve; }); }
+  } });
+  const login = createBsdexWebLogin(fixture);
+  await login.start(1, { email: 'test@example.test', password: 'test' });
+  const first = login.confirm(1, '123456');
+  await entered;
+  await assert.rejects(login.confirm(1, '123456'), error => error.status === 409);
+  await assert.rejects(login.start(1, { email: 'test@example.test', password: 'test' }), error => error.status === 409);
+  release();
+  assert.equal((await first).status, 'device_confirmation_required');
+  assert.equal(fixture.submissions.length, 2);
+  await login.close();
+});
+
+test('BSDEX meldet Browser-Sicherheitsprüfung und füllt keine fremden Formulare', async () => {
+  for (const options of [{ security: true }, { formAction: 'https://evil.test/oauth/session' }, { formAction: '/orders' }]) {
+    const fixture = loginBrowserFixture(options), login = createBsdexWebLogin(fixture);
+    await assert.rejects(login.start(1, { email: 'test@example.test', password: 'test' }), options.security ? /Browser-Sicherheitsprüfung/ : /Anmeldeformular/);
+    assert.equal(fixture.fills.length, 0);
+    assert.deepEqual(fixture.counters(), { closed: 1, saved: 0 });
+  }
+});
+
 test('BSDEX-Abbruch während Browserstart lässt keine verwaiste Anmeldung zu', async () => {
   let resolveLaunch, closed = 0;
   const login = createBsdexWebLogin({ launch: () => new Promise(resolve => { resolveLaunch = resolve; }) });
@@ -88,7 +186,7 @@ test('BSDEX-Abbruch während Browserstart lässt keine verwaiste Anmeldung zu', 
   await new Promise(resolve => setImmediate(resolve));
   await login.cancel(1);
   resolveLaunch({ newContext: async () => ({ setDefaultTimeout() {}, setDefaultNavigationTimeout() {}, route: async () => {}, routeWebSocket: async () => {}, newPage: async () => ({}) }), close: async () => { closed++; } });
-  await assert.rejects(running, /nicht abgeschlossen/); assert.equal(closed, 1); assert.equal(login.status(1), 'login_required');
+  await assert.rejects(running, /abgebrochen/); assert.equal(closed, 1); assert.equal(login.status(1), 'login_required');
 });
 
 function browserFixture({ malformed = false, expired = false } = {}) {
