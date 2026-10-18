@@ -53,7 +53,7 @@ function historyStatus(history) {
     const markets = (history.unresolvedMarkets || []).join(", ");
     return { value: window.CryptoBuchI18n.t("Prüfen"), help: markets ? window.CryptoBuchI18n.t("CSV-Export für {p0} ergänzen", { p0: markets }) : window.CryptoBuchI18n.message(history.warnings?.[0]) || window.CryptoBuchI18n.t("Historische Märkte oder CSV-Export ergänzen"), tone: "warning" };
   }
-  if (history.lastError) return { value: window.CryptoBuchI18n.t("Prüfen"), help: history.lastError, tone: "warning" };
+  if (window.CryptoBuchI18n.message(history.lastError)) return { value: window.CryptoBuchI18n.t("Prüfen"), help: window.CryptoBuchI18n.message(history.lastError), tone: "warning" };
   const percent = history.progressTotal ? Math.min(100, Math.round((history.progressCurrent / history.progressTotal) * 100)) : 0;
   return { value: `${percent} %`, help: window.CryptoBuchI18n.t("{p0} werden automatisch und gedrosselt nachgeladen", { p0: history.phaseLabel }), tone: "highlight" };
 }
@@ -81,7 +81,7 @@ function renderMetrics() {
     const live = data.connection.live;
     const copy = live.status === "connected" ? window.CryptoBuchI18n.t("Verbunden · REST-Abgleich alle {p0} Min.", { p0: live.reconcileIntervalMinutes })
       : live.status === "reconnecting" ? window.CryptoBuchI18n.t("Verbindung wird wiederhergestellt")
-        : live.status === "error" ? (live.lastError || window.CryptoBuchI18n.t("Verbindung prüfen")) : window.CryptoBuchI18n.t("Wird verbunden");
+        : live.status === "error" ? (window.CryptoBuchI18n.message(live.lastError) || window.CryptoBuchI18n.t("Verbindung prüfen")) : window.CryptoBuchI18n.t("Wird verbunden");
     entries.push(metric(window.CryptoBuchI18n.t("Live-Updates"), live.status === "connected" ? window.CryptoBuchI18n.t("Aktiv") : window.CryptoBuchI18n.t("Prüfen"), copy, live.status === "connected" ? "success" : "warning"));
   }
   metrics.replaceChildren(...entries);
@@ -258,8 +258,8 @@ function renderTransactions() {
   const history = state.data.connection.history;
   const emptyCopy = el("exchange-transactions-empty").querySelector("p");
   emptyCopy.textContent = !state.data.transactionCount && history && ["pending", "running"].includes(history.status)
-    ? history.lastError || window.CryptoBuchI18n.t("Die Kontohistorie wird im Hintergrund nachgeladen. Buchungen erscheinen hier automatisch.")
-    : history?.lastError || window.CryptoBuchI18n.t("Synchronisiere die Börse oder passe die Filter an.");
+    ? window.CryptoBuchI18n.message(history.lastError) || window.CryptoBuchI18n.t("Die Kontohistorie wird im Hintergrund nachgeladen. Buchungen erscheinen hier automatisch.")
+    : window.CryptoBuchI18n.message(history?.lastError) || window.CryptoBuchI18n.t("Synchronisiere die Börse oder passe die Filter an.");
 }
 
 function render() {
@@ -315,7 +315,7 @@ async function waitForJob(id) {
   for (let attempt = 0; attempt < 240; attempt += 1) {
     const job = await api(`/api/jobs/${id}`);
     if (job.status === "success") return job.result || {};
-    if (job.status === "error") throw new Error(job.error_message || window.CryptoBuchI18n.t("Synchronisierung fehlgeschlagen."));
+    if (job.status === "error") throw new Error(window.CryptoBuchI18n.message(job.error_message) || window.CryptoBuchI18n.t("Synchronisierung fehlgeschlagen."));
     await new Promise((resolve) => setTimeout(resolve, 700));
   }
   throw new Error(window.CryptoBuchI18n.t("Synchronisierung benötigt länger als erwartet."));

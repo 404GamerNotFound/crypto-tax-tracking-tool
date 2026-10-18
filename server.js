@@ -4216,12 +4216,17 @@ app.post("/api/tax-report/snapshots", (request, response, next) => {
 app.get("/api/tax-report.csv", (request, response, next) => {
   try {
     const report = taxReportResponse(reportYear(request.query.year));
+    // Opt-in localized presentation; legacy CSV consumers retain the German schema.
+    const { translators } = require("./lib/i18n");
+    const language = ["de", "en", "es"].includes(request.query.language) ? request.query.language : "de";
+    const { t } = translators[language];
     const rows = [
-      ["Kategorie", "Asset", "Menge", "Datum", "Anschaffungsdatum", "Erlös EUR", "Kosten EUR", "Gebühr EUR", "Gewinn EUR", "Haltedauer Tage", "Haltefrist erfüllt", "Transaktions-ID", "Anschaffungs-ID", "Vollständig"],
-      ...report.sales.map((sale) => ["Verkauf", sale.asset, sale.amount, sale.soldAt, sale.acquiredAt, sale.proceedsEur, sale.costEur, sale.feeEur, sale.profitEur, sale.holdingDays, sale.holdingPeriodMet === null ? "" : sale.holdingPeriodMet ? "ja" : "nein", sale.transactionId, sale.acquisitionTransactionId, sale.complete ? "ja" : "nein"]),
-      ...report.income.map((entry) => [entry.type, entry.asset, entry.amount, entry.receivedAt, "", entry.valueEur, "", "", "", "", "", entry.transactionId, "", entry.complete ? "ja" : "nein"]),
+      ["Kategorie", "Asset", "Menge", "Datum", "Anschaffungsdatum", "Erlös EUR", "Kosten EUR", "Gebühr EUR", "Gewinn EUR", "Haltedauer Tage", "Haltefrist erfüllt", "Transaktions-ID", "Anschaffungs-ID", "Vollständig"].map(key => t(key)),
+      ...report.sales.map((sale) => [t("Verkauf"), sale.asset, sale.amount, sale.soldAt, sale.acquiredAt, sale.proceedsEur, sale.costEur, sale.feeEur, sale.profitEur, sale.holdingDays, sale.holdingPeriodMet === null ? "" : sale.holdingPeriodMet ? t("ja") : t("nein"), sale.transactionId, sale.acquisitionTransactionId, sale.complete ? t("ja") : t("nein")]),
+      ...report.income.map((entry) => [PURPOSE_PRESETS.includes(entry.type) ? t(entry.type) : entry.type, entry.asset, entry.amount, entry.receivedAt, "", entry.valueEur, "", "", "", "", "", entry.transactionId, "", entry.complete ? t("ja") : t("nein")]),
     ];
     response
+      .set("Content-Language", language)
       .type("text/csv")
       .attachment(`cryptobuch-steuerreport-${report.year}.csv`)
       .send(rows.map((row) => row.map(csvCell).join(";")).join("\n"));

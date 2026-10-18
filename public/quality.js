@@ -31,9 +31,9 @@ function row(transaction, missingPrice) {
   const open = node("a", "text-button", window.CryptoBuchI18n.t("Coin öffnen"));
   open.href = "/asset.html?chain=" + encodeURIComponent(transaction.chain) + "&asset=" + encodeURIComponent(transaction.asset);
   actions.append(open);
-  const action = node("button", window.CryptoBuchI18n.t("text-button quality-action"), missingPrice ? window.CryptoBuchI18n.t("Kurs setzen") : window.CryptoBuchI18n.t("Zweck zuordnen"));
+  const action = node("button", "text-button quality-action", missingPrice ? window.CryptoBuchI18n.t("Kurs setzen") : window.CryptoBuchI18n.t("Zweck zuordnen"));
   action.addEventListener("click", () => missingPrice ? openPrice(transaction) : assignPurpose(transaction));
-  const documents = node("button", window.CryptoBuchI18n.t("text-button quality-action"), window.CryptoBuchI18n.t("Nachweise"));
+  const documents = node("button", "text-button quality-action", window.CryptoBuchI18n.t("Nachweise"));
   documents.addEventListener("click", () => openDocuments(transaction));
   actions.append(action, documents);
   tr.append(actions);
@@ -275,7 +275,7 @@ function historyCopy(history) {
     const markets = (history.unresolvedMarkets || []).join(", ");
     return window.CryptoBuchI18n.t("Unvollständig{p0}", { p0: markets ? window.CryptoBuchI18n.t(" · CSV für {p0} ergänzen", { p0: markets }) : history.warnings?.length ? ` · ${window.CryptoBuchI18n.message(history.warnings[0])}` : window.CryptoBuchI18n.t(" · historische Märkte ergänzen") });
   }
-  if (history.lastError) return window.CryptoBuchI18n.t("Angehalten: {p0}", { p0: history.lastError });
+  if (window.CryptoBuchI18n.message(history.lastError)) return window.CryptoBuchI18n.t("Angehalten: {p0}", { p0: window.CryptoBuchI18n.message(history.lastError) });
   if (history.status === "running") {
     const percent = history.progressTotal ? Math.min(100, Math.round((history.progressCurrent / history.progressTotal) * 100)) : 0;
     return window.CryptoBuchI18n.t("{p0} werden automatisch nachgeladen · {p1} %", { p0: history.phaseLabel, p1: percent });
@@ -332,7 +332,7 @@ function connectionCard(connection) {
     const copy = !connection.live.enabled ? window.CryptoBuchI18n.t("Deaktiviert")
       : connection.live.status === "connected" ? window.CryptoBuchI18n.t("Verbunden{p0}", { p0: connection.live.lastEventAt ? window.CryptoBuchI18n.t(" · letztes Ereignis {p0}", { p0: readableDateTime(connection.live.lastEventAt) }) : "" })
         : connection.live.status === "reconnecting" ? window.CryptoBuchI18n.t("Verbindung wird wiederhergestellt")
-          : connection.live.status === "error" ? window.CryptoBuchI18n.t("Prüfen: {p0}", { p0: connection.live.lastError || window.CryptoBuchI18n.t("Verbindung fehlgeschlagen") })
+          : connection.live.status === "error" ? window.CryptoBuchI18n.t("Prüfen: {p0}", { p0: window.CryptoBuchI18n.message(connection.live.lastError) || window.CryptoBuchI18n.t("Verbindung fehlgeschlagen") })
             : window.CryptoBuchI18n.t("Wird verbunden");
     live.append(node("dt", "", window.CryptoBuchI18n.t("Live-Updates")), node("dd", connection.live.status === "error" ? "history-error" : "", copy));
     details.append(live);
@@ -341,13 +341,13 @@ function connectionCard(connection) {
     const activation = node("div");
     const copy = tradeRepublic.status === "connected" ? window.CryptoBuchI18n.t("Web-Sitzung bestätigt{p0}", { p0: tradeRepublic.connectedAt ? ` · ${readableDateTime(tradeRepublic.connectedAt)}` : "" })
       : activationPending ? window.CryptoBuchI18n.t("App-Bestätigung steht aus")
-        : tradeRepublic.lastError ? window.CryptoBuchI18n.t("Anmeldung fehlgeschlagen: {p0}", { p0: tradeRepublic.lastError }) : window.CryptoBuchI18n.t("Web-Anmeldung noch nicht gestartet");
-    activation.append(node("dt", "", window.CryptoBuchI18n.t("Web-Anmeldung")), node("dd", tradeRepublic.lastError ? "history-error" : "", copy));
+        : window.CryptoBuchI18n.message(tradeRepublic.lastError) ? window.CryptoBuchI18n.t("Anmeldung fehlgeschlagen: {p0}", { p0: window.CryptoBuchI18n.message(tradeRepublic.lastError) }) : window.CryptoBuchI18n.t("Web-Anmeldung noch nicht gestartet");
+    activation.append(node("dt", "", window.CryptoBuchI18n.t("Web-Anmeldung")), node("dd", window.CryptoBuchI18n.message(tradeRepublic.lastError) ? "history-error" : "", copy));
     details.append(activation);
   }
   if (bsdexWeb) {
     const login = node("div");
-    login.append(node("dt", "", window.CryptoBuchI18n.t("Web-Sitzung")), node("dd", bsdexWeb.lastError ? "history-error" : "", bsdexWeb.lastError || (bsdexWeb.status === "connected" ? window.CryptoBuchI18n.t("Lokal verschlüsselt gespeichert") : window.CryptoBuchI18n.t("Anmeldung erforderlich"))));
+    login.append(node("dt", "", window.CryptoBuchI18n.t("Web-Sitzung")), node("dd", window.CryptoBuchI18n.message(bsdexWeb.lastError) ? "history-error" : "", window.CryptoBuchI18n.message(bsdexWeb.lastError) || (bsdexWeb.status === "connected" ? window.CryptoBuchI18n.t("Lokal verschlüsselt gespeichert") : window.CryptoBuchI18n.t("Anmeldung erforderlich"))));
     details.append(login);
   }
   const footer = node("div", "exchange-connection-card-footer");
@@ -372,7 +372,7 @@ function connectionCard(connection) {
     sync.textContent = window.CryptoBuchI18n.t("Sync gestartet …");
     try {
       const queued = await api("/api/exchange-connections/" + connection.id + "/sync", { method: "POST" });
-      toast(connection.history && connection.history.status !== "complete" ? window.CryptoBuchI18n.t("Aktuelle Daten und die Börsenhistorie werden automatisch nachgeladen.") : "Börsen-Sync als Job #" + queued.job.id + " gestartet. Der Abgleich folgt automatisch.");
+      toast(connection.history && connection.history.status !== "complete" ? window.CryptoBuchI18n.t("Aktuelle Daten und die Börsenhistorie werden automatisch nachgeladen.") : window.CryptoBuchI18n.t("Börsen-Sync als Job #{id} gestartet. Der Abgleich folgt automatisch.", { id: queued.job.id }));
       window.setTimeout(load, 800);
     } catch (error) {
       sync.disabled = false;
@@ -423,7 +423,7 @@ function connectionCard(connection) {
     });
     actions.append(liveToggle);
   }
-  const remove = node("button", window.CryptoBuchI18n.t("text-button exchange-remove"), window.CryptoBuchI18n.t("Verbindung entfernen"));
+  const remove = node("button", "text-button exchange-remove", window.CryptoBuchI18n.t("Verbindung entfernen"));
   remove.type = "button";
   remove.addEventListener("click", async () => {
     if (!confirm("Verbindung „" + (connection.label || connection.provider) + "“ entfernen?\n\nBereits importierte Buchungen bleiben erhalten.")) return;

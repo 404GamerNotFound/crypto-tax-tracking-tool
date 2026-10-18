@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Lokale Pipeline und Protokoll für historische Kursabrufe" />
+    <meta name="description" content="Lokale Pipeline und Protokoll für historische Kursabrufe" data-i18n-content="Lokale Pipeline und Protokoll für historische Kursabrufe" />
     <title data-i18n="CryptoBuch · Datenabrufe">CryptoBuch · Datenabrufe</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
@@ -21,8 +21,8 @@
       <main class="report-main price-fetch-main">
         <section class="page-hero compact-hero price-fetch-hero">
           <div>
-            <p class="eyebrow"><a href="/quality.html"><span data-i18n="DATENQUALITÄT">DATENQUALITÄT</span></a> / DATENABRUFE</p>
-            <h1><span data-i18n="Kurse">Kurse</span> <em>abrufen.</em></h1>
+            <p class="eyebrow"><a href="/quality.html"><span data-i18n="DATENQUALITÄT">DATENQUALITÄT</span></a> <span data-i18n="/ DATENABRUFE">/ DATENABRUFE</span></p>
+            <h1><span data-i18n="Kurse">Kurse</span> <em><span data-i18n="abrufen.">abrufen.</span></em></h1>
             <p><span data-i18n="Die lokale Pipeline zeigt, welche fehlenden historischen Kurse als Nächstes geprüft werden und dokumentiert jeden tatsächlichen Abruf ohne API-Keys oder Anfragedaten zu speichern.">Die lokale Pipeline zeigt, welche fehlenden historischen Kurse als Nächstes geprüft werden und dokumentiert jeden tatsächlichen Abruf ohne API-Keys oder Anfragedaten zu speichern.</span></p>
           </div>
           <div class="hero-actions"><a class="button button-secondary" href="/quality.html"><span data-i18n="Zur Datenqualität">Zur Datenqualität</span></a><button class="button button-primary" id="start-price-fetch"><span data-i18n="Jetzt prüfen">Jetzt prüfen</span></button><button class="button button-secondary" id="reload-price-fetches"><span data-i18n="Neu laden">Neu laden</span></button></div>
@@ -40,7 +40,7 @@
           </div>
           <div class="price-pipeline-metrics" aria-label="Status der Kurs-Pipeline" data-i18n-aria-label="Status der Kurs-Pipeline">
             <article><span><span data-i18n="Offene Kurse">Offene Kurse</span></span><strong id="pipeline-pending">—</strong><small><span data-i18n="ohne manuellen Kurs">ohne manuellen Kurs</span></small></article>
-            <article><span><span data-i18n="Im nächsten Batch">Im nächsten Batch</span></span><strong id="pipeline-due">—</strong><small>maximal <span id="pipeline-batch-size">—</span> <span data-i18n="Coin-/Tageskurse je Durchlauf">Coin-/Tageskurse je Durchlauf</span></small></article>
+            <article><span><span data-i18n="Im nächsten Batch">Im nächsten Batch</span></span><strong id="pipeline-due">—</strong><small><span data-i18n="maximal">maximal</span> <span id="pipeline-batch-size">—</span> <span data-i18n="Coin-/Tageskurse je Durchlauf">Coin-/Tageskurse je Durchlauf</span></small></article>
             <article><span><span data-i18n="Später eingeplant">Später eingeplant</span></span><strong id="pipeline-scheduled">—</strong><small><span data-i18n="abrufbare Buchungen">abrufbare Buchungen</span></small></article>
           </div>
           <p class="data-note" id="pipeline-blocked"></p>

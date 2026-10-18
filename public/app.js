@@ -342,9 +342,9 @@ function renderMarketCatalog() {
     availability.textContent = window.CryptoBuchI18n.message(asset.import.label);
     if (asset.import.chain) {
       availability.href = `/wallets.html?chain=${encodeURIComponent(asset.import.chain)}`;
-      availability.title = asset.import.detail;
+      availability.title = window.CryptoBuchI18n.message(asset.import.detail);
     } else {
-      availability.title = asset.import.detail;
+      availability.title = window.CryptoBuchI18n.message(asset.import.detail);
     }
     meta.append(cap, availability);
     item.append(rank, icon, identity, price, meta);
@@ -398,7 +398,7 @@ async function waitForJob(id) {
   for (let tries = 0; tries < 240; tries += 1) {
     const job = await api(`/api/jobs/${id}`);
     if (job.status === "success") return job.result || {};
-    if (job.status === "error") throw new Error(job.error_message || window.CryptoBuchI18n.t("Hintergrundjob fehlgeschlagen."));
+    if (job.status === "error") throw new Error(window.CryptoBuchI18n.message(job.error_message) || window.CryptoBuchI18n.t("Hintergrundjob fehlgeschlagen."));
     await new Promise((resolve) => setTimeout(resolve, 700));
   }
   throw new Error(window.CryptoBuchI18n.t("Hintergrundjob benötigt länger als erwartet."));
@@ -418,7 +418,7 @@ async function backfillHistoricalPrices() {
     if (result.remaining > 0) {
       summary += window.CryptoBuchI18n.t(" {p0} sind noch offen. Abrufbare Kurse werden weiter geprüft; fehlende Zuordnungen stehen unter Datenabrufe.", { p0: result.remaining.toLocaleString(window.CryptoBuchI18n.locale) });
     }
-    toast(result.hint ? `${summary} ${result.hint}` : summary, result.unresolved || result.blocked ? "error" : "success");
+    toast(window.CryptoBuchI18n.message(result.hint) ? `${summary} ${window.CryptoBuchI18n.message(result.hint)}` : summary, result.unresolved || result.blocked ? "error" : "success");
   } catch (error) {
     toast(error.message, "error");
   } finally {

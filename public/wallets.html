@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Crypto-Bestände, Wallets und Börsenverbindungen in CryptoBuch" />
+    <meta name="description" content="Crypto-Bestände, Wallets und Börsenverbindungen in CryptoBuch" data-i18n-content="Crypto-Bestände, Wallets und Börsenverbindungen in CryptoBuch" />
     <title data-i18n="CryptoBuch · Crypto-Bestände">CryptoBuch · Crypto-Bestände</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
@@ -92,13 +92,13 @@
             <select name="chain" id="wallet-chain" required></select>
           </label>
           <label>
-            <span><span data-i18n="Name">Name</span> <small>optional</small></span>
+            <span><span data-i18n="Name">Name</span> <small><span data-i18n="optional">optional</span></small></span>
             <input name="label" maxlength="80" placeholder="z. B. Ledger" data-i18n-placeholder="z. B. Ledger" />
           </label>
         </div>
         <div class="form-grid">
-          <label><span><span data-i18n="Gruppe">Gruppe</span> <small>optional</small></span><input name="groupName" maxlength="48" placeholder="z. B. Hardware-Wallet" data-i18n-placeholder="z. B. Hardware-Wallet" /></label>
-          <label><span><span data-i18n="Tags">Tags</span> <small>kommagetrennt</small></span><input name="tags" maxlength="160" placeholder="Langfristig, Privat" data-i18n-placeholder="Langfristig, Privat" /></label>
+          <label><span><span data-i18n="Gruppe">Gruppe</span> <small><span data-i18n="optional">optional</span></small></span><input name="groupName" maxlength="48" placeholder="z. B. Hardware-Wallet" data-i18n-placeholder="z. B. Hardware-Wallet" /></label>
+          <label><span><span data-i18n="Tags">Tags</span> <small><span data-i18n="kommagetrennt">kommagetrennt</span></small></span><input name="tags" maxlength="160" placeholder="Langfristig, Privat" data-i18n-placeholder="Langfristig, Privat" /></label>
         </div>
         <div class="form-grid" id="bitcoin-source-fields" hidden>
           <label>
@@ -135,7 +135,7 @@
           <input name="address" id="wallet-address" maxlength="120" required spellcheck="false" autocomplete="off" placeholder="bc1… oder tz1…" data-i18n-placeholder="bc1… oder tz1…" />
           <small id="address-hint"><span data-i18n="Bitcoin: Legacy-, SegWit- und Taproot-Adressen werden unterstützt.">Bitcoin: Legacy-, SegWit- und Taproot-Adressen werden unterstützt.</span></small>
         </label>
-        <p class="xpub-notice" id="xpub-notice" hidden><strong>Datenschutz-Hinweis:</strong> <span data-i18n="Ein xPub ist öffentlich, kann aber die gesamte Bitcoin-Adresshistorie dieser Wallet sichtbar machen. Füge niemals eine Seed-Phrase oder einen xPrv ein.">Ein xPub ist öffentlich, kann aber die gesamte Bitcoin-Adresshistorie dieser Wallet sichtbar machen. Füge niemals eine Seed-Phrase oder einen xPrv ein.</span></p>
+        <p class="xpub-notice" id="xpub-notice" hidden><strong><span data-i18n="Datenschutz-Hinweis:">Datenschutz-Hinweis:</span></strong> <span data-i18n="Ein xPub ist öffentlich, kann aber die gesamte Bitcoin-Adresshistorie dieser Wallet sichtbar machen. Füge niemals eine Seed-Phrase oder einen xPrv ein.">Ein xPub ist öffentlich, kann aber die gesamte Bitcoin-Adresshistorie dieser Wallet sichtbar machen. Füge niemals eine Seed-Phrase oder einen xPrv ein.</span></p>
         <p class="form-error" id="wallet-form-error" role="alert" hidden></p>
         <div class="modal-actions">
           <button type="button" class="button button-secondary" id="cancel-wallet"><span data-i18n="Abbrechen">Abbrechen</span></button>
@@ -152,7 +152,7 @@
           <button class="modal-close" type="button" id="close-ledger-modal" aria-label="Dialog schließen" data-i18n-aria-label="Dialog schließen">×</button>
         </div>
         <p class="modal-copy"><span data-i18n="CryptoBuch liest ausschließlich eine öffentliche Empfangsadresse direkt aus deinem Ledger. Die Adresse wird zur Kontrolle auf dem Gerät angezeigt. Es werden weder Seed-Phrase noch Private Keys gelesen, gespeichert oder zum Signieren verwendet.">CryptoBuch liest ausschließlich eine öffentliche Empfangsadresse direkt aus deinem Ledger. Die Adresse wird zur Kontrolle auf dem Gerät angezeigt. Es werden weder Seed-Phrase noch Private Keys gelesen, gespeichert oder zum Signieren verwendet.</span></p>
-        <p class="ledger-notice"><strong>Voraussetzungen:</strong> <span data-i18n="Chrome oder Chromium, eine aktuelle Ledger-Firmware sowie die geöffnete Bitcoin- bzw. Ethereum-App. Bei einer Portainer-Installation muss die Seite über HTTPS (oder lokal über">Chrome oder Chromium, eine aktuelle Ledger-Firmware sowie die geöffnete Bitcoin- bzw. Ethereum-App. Bei einer Portainer-Installation muss die Seite über HTTPS (oder lokal über</span> <code>localhost</code><span data-i18n=") geöffnet werden.">) geöffnet werden.</span></p>
+        <p class="ledger-notice"><strong><span data-i18n="Voraussetzungen:">Voraussetzungen:</span></strong> <span data-i18n="Chrome oder Chromium, eine aktuelle Ledger-Firmware sowie die geöffnete Bitcoin- bzw. Ethereum-App. Bei einer Portainer-Installation muss die Seite über HTTPS (oder lokal über">Chrome oder Chromium, eine aktuelle Ledger-Firmware sowie die geöffnete Bitcoin- bzw. Ethereum-App. Bei einer Portainer-Installation muss die Seite über HTTPS (oder lokal über</span> <code>localhost</code><span data-i18n=") geöffnet werden.">) geöffnet werden.</span></p>
         <div class="form-grid">
           <label><span><span data-i18n="Ledger-App / Zielnetzwerk">Ledger-App / Zielnetzwerk</span></span><select id="ledger-chain" name="chain"><option value="BTC">Bitcoin</option><option value="ETH">Ethereum</option><option value="BNB" data-i18n="BNB Smart Chain · Ethereum-App">BNB Smart Chain · Ethereum-App</option><option value="AVAX" data-i18n="Avalanche C-Chain · Ethereum-App">Avalanche C-Chain · Ethereum-App</option></select></label>
           <label><span><span data-i18n="Kontoindex">Kontoindex</span></span><input id="ledger-account-index" name="accountIndex" type="number" min="0" max="99" value="0" required /><small><span data-i18n="0 entspricht dem ersten Konto in Ledger Live.">0 entspricht dem ersten Konto in Ledger Live.</span></small></label>

@@ -22,17 +22,24 @@
     if (typeof value !== 'string' || language === 'de') return value;
     if (own(messages, value)) return t(value);
     if (value.length > 12000) return value;
-    patterns ||= Object.keys(fallback).filter(key => /\{p\d+\}/.test(key) && key.replace(/\{p\d+\}/g, '').trim().length >= 8).map(key => {
-      const names = [];
-      const pattern = key.split(/(\{p\d+\})/g).map(part => {
-        if (/^\{p\d+\}$/.test(part)) { names.push(part.slice(1, -1)); return '([\\s\\S]*?)'; }
-        return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      }).join('');
-      return { key, names, pattern: new RegExp('^' + pattern + '$') };
-    }).sort((a, b) => b.key.length - a.key.length);
-    for (const { key, names, pattern } of patterns) {
-      const match = pattern.exec(value);
-      if (match) return t(key, Object.fromEntries(names.map((name, i) => [name, match[i + 1]])));
+    // Match legacy server templates without regex backtracking. Dynamic values
+    // are opaque: never recursively translate user labels embedded in messages.
+    patterns ||= Object.keys(fallback).filter(key => /\{p\d+\}/.test(key) && key.replace(/\{p\d+\}/g, '').trim().length >= 8 && !/\{p\d+\}\s*\{p\d+\}/.test(key)).map(key => ({
+      key, names: [...key.matchAll(/\{(p\d+)\}/g)].map(match => match[1]), parts: key.split(/\{p\d+\}/g),
+    })).sort((a, b) => b.key.length - a.key.length);
+    for (const { key, names, parts } of patterns) {
+      if (!value.startsWith(parts[0])) continue;
+      const parameters = {};
+      let offset = parts[0].length, matched = true;
+      for (let i = 0; i < names.length; i++) {
+        const separator = parts[i + 1];
+        const last = i === names.length - 1;
+        const end = last ? (value.endsWith(separator) ? value.length - separator.length : -1) : value.indexOf(separator, offset);
+        if (end < offset) { matched = false; break; }
+        parameters[names[i]] = value.slice(offset, end);
+        offset = end + separator.length;
+      }
+      if (matched && offset === value.length) return t(key, parameters);
     }
     return value;
   }

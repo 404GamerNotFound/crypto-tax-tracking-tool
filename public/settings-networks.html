@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Lokale Konfiguration für CryptoBuch" />
+    <meta name="description" content="Lokale Konfiguration für CryptoBuch" data-i18n-content="Lokale Konfiguration für CryptoBuch" />
     <title data-i18n="CryptoBuch · Einstellungen · Netzwerke">CryptoBuch · Einstellungen · Netzwerke</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/images/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/brand/apple-touch-icon.png" />
@@ -46,12 +46,12 @@
             </label>
             <div class="form-grid settings-grid">
               <label>
-                <span>xPub-Gap-Limit</span>
+                <span><span data-i18n="xPub-Gap-Limit">xPub-Gap-Limit</span></span>
                 <input id="xpub-gap" name="xpubGapLimit" type="number" min="1" max="50" step="1" required />
                 <small><span data-i18n="Aufeinanderfolgende unbenutzte Adressen pro Zweig.">Aufeinanderfolgende unbenutzte Adressen pro Zweig.</span></small>
               </label>
               <label>
-                <span>xPub-Sicherheitsgrenze</span>
+                <span><span data-i18n="xPub-Sicherheitsgrenze">xPub-Sicherheitsgrenze</span></span>
                 <input id="xpub-maximum" name="xpubMaxDerivationsPerBranch" type="number" min="1" max="1000" step="1" required />
                 <small><span data-i18n="Maximal geprüfte Adressen je Zweig.">Maximal geprüfte Adressen je Zweig.</span></small>
               </label>
@@ -90,7 +90,7 @@
               <input id="trongrid-api" name="tronGridBaseUrl" type="url" inputmode="url" required />
             </label>
             <label>
-              <span><span data-i18n="TronGrid-API-Key">TronGrid-API-Key</span> <small>optional</small></span>
+              <span><span data-i18n="TronGrid-API-Key">TronGrid-API-Key</span> <small><span data-i18n="optional">optional</span></small></span>
               <input id="trongrid-key" name="tronGridApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den vorhandenen Key zu ersetzen" />
               <small id="trongrid-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
             </label>
@@ -138,7 +138,7 @@
               <small><span data-i18n="Standard: Etherscan API V2 für Ethereum Mainnet (Chain-ID 1).">Standard: Etherscan API V2 für Ethereum Mainnet (Chain-ID 1).</span></small>
             </label>
             <label>
-              <span><span data-i18n="Ethereum Read-only RPC">Ethereum Read-only RPC</span> <small>optional</small></span>
+              <span><span data-i18n="Ethereum Read-only RPC">Ethereum Read-only RPC</span> <small><span data-i18n="optional">optional</span></small></span>
               <input id="ethereum-rpc" name="ethereumRpcUrl" type="url" inputmode="url" required />
               <small><span data-i18n="Wird ausschließlich für ERC-20-Metadaten per Contract-Multicall verwendet; Transaktionen und Signaturen bleiben bei Etherscan bzw. vollständig read-only.">Wird ausschließlich für ERC-20-Metadaten per Contract-Multicall verwendet; Transaktionen und Signaturen bleiben bei Etherscan bzw. vollständig read-only.</span></small>
             </label>
@@ -237,7 +237,7 @@
                 <input id="tonapi-api" name="tonApiBaseUrl" type="url" inputmode="url" required />
               </label>
               <label>
-                <span><span data-i18n="TonAPI-Key">TonAPI-Key</span> <small>optional</small></span>
+                <span><span data-i18n="TonAPI-Key">TonAPI-Key</span> <small><span data-i18n="optional">optional</span></small></span>
                 <input id="tonapi-key" name="tonApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den Key zu ersetzen" />
                 <small id="tonapi-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
               </label>
@@ -247,7 +247,7 @@
                 <small><span data-i18n="Dogecoin und Litecoin werden über getrennte Netzwerkpfade dieser Quelle geladen.">Dogecoin und Litecoin werden über getrennte Netzwerkpfade dieser Quelle geladen.</span></small>
               </label>
               <label>
-                <span><span data-i18n="BlockCypher-Token">BlockCypher-Token</span> <small>optional</small></span>
+                <span><span data-i18n="BlockCypher-Token">BlockCypher-Token</span> <small><span data-i18n="optional">optional</span></small></span>
                 <input id="blockcypher-token" name="blockCypherApiToken" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Token zu ersetzen" data-i18n-placeholder="Nur eingeben, um den Token zu ersetzen" />
                 <small id="blockcypher-token-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
               </label>
@@ -262,7 +262,7 @@
                 <small><span data-i18n="Transparente Zcash-Adressen werden über einen eigenen Adapter abgefragt.">Transparente Zcash-Adressen werden über einen eigenen Adapter abgefragt.</span></small>
               </label>
               <label>
-                <span><span data-i18n="Blockchair-API-Key für Zcash">Blockchair-API-Key für Zcash</span> <small>optional</small></span>
+                <span><span data-i18n="Blockchair-API-Key für Zcash">Blockchair-API-Key für Zcash</span> <small><span data-i18n="optional">optional</span></small></span>
                 <input id="blockchair-key" name="blockchairApiKey" type="password" autocomplete="new-password" placeholder="Nur eingeben, um den Key zu ersetzen" data-i18n-placeholder="Nur eingeben, um den Key zu ersetzen" />
                 <small id="blockchair-key-status"><span data-i18n="Key-Status wird geladen …">Key-Status wird geladen …</span></small>
               </label>

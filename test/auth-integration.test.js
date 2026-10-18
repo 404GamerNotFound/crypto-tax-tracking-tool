@@ -32,3 +32,19 @@ test('der echte Server schützt Lesen, Schreiben, Exporte und Backups vor der Ro
   assert.equal(fs.readFileSync(path.join(directory, 'auth.json'), 'utf8'), record);
   assert.equal((await fetch(origin + '/api/v1')).status, 401);
 });
+
+test('liefert Sprachdateien auch vor Anmeldung und übersetzt Auth-Fehler ohne Freigabe der Daten', async () => {
+  const headers = { Cookie: 'cryptobuch_language=es' };
+  const catalog = await fetch(origin + '/locales/catalog.js', { headers });
+  assert.equal(catalog.status, 200);
+  assert.equal(catalog.headers.get('content-language'), 'es');
+  assert.match(catalog.headers.get('cache-control'), /no-store/);
+  assert.match(await catalog.text(), /"language":"es"/);
+  const response = await fetch(origin + '/api/portfolio', { headers });
+  assert.equal(response.status, 401);
+  assert.equal(response.headers.get('content-language'), 'es');
+  const body = await response.json();
+  assert.equal(body.error, require('../lib/i18n').translators.es.t('Anmeldung erforderlich. Bitte mit deinem CryptoBuch-Passwort anmelden.'));
+  assert.equal(body.holdings, undefined);
+  for (const asset of ['/i18n-core.js','/i18n.js']) assert.equal((await fetch(origin + asset)).status, 200);
+});

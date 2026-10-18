@@ -21,7 +21,7 @@
         <section class="page-hero compact-hero">
           <div>
             <p class="eyebrow"><span data-i18n="BETRIEB &amp; SICHERUNG">BETRIEB &amp; SICHERUNG</span></p>
-            <h1><span data-i18n="Status und">Status und</span> <em>Backups.</em></h1>
+            <h1><span data-i18n="Status und">Status und</span> <em><span data-i18n="Backups.">Backups.</span></em></h1>
             <p><span data-i18n="Überwache Wallet-Synchronisationen und sichere die lokale Datenbank im persistenten Docker-Volume.">Überwache Wallet-Synchronisationen und sichere die lokale Datenbank im persistenten Docker-Volume.</span></p>
           </div>
           <div class="hero-actions"><a class="button button-secondary" href="#automatische-laeufe"><span data-i18n="Automatische Läufe">Automatische Läufe</span></a><button class="button button-primary" id="create-backup"><span data-i18n="Backup erstellen">Backup erstellen</span></button><button class="button button-secondary" id="reload-status"><span data-i18n="Neu laden">Neu laden</span></button></div>
@@ -78,7 +78,7 @@
     <dialog id="data-reset-dialog" aria-labelledby="data-reset-title">
       <form id="data-reset-form">
         <div class="modal-head"><div><p class="eyebrow"><span data-i18n="NICHT RÜCKGÄNGIG ZU MACHEN">NICHT RÜCKGÄNGIG ZU MACHEN</span></p><h2 id="data-reset-title"><span data-i18n="Alle Daten löschen?">Alle Daten löschen?</span></h2></div><button class="modal-close" id="close-data-reset" type="button" aria-label="Dialog schließen" data-i18n-aria-label="Dialog schließen">×</button></div>
-        <p class="modal-copy"><span data-i18n="Die aktive lokale Datenbank wird geleert und der Container neu gestartet. Backups werden nicht gelöscht. Gib zur Bestätigung">Die aktive lokale Datenbank wird geleert und der Container neu gestartet. Backups werden nicht gelöscht. Gib zur Bestätigung</span> <strong><span data-i18n="ALLE DATEN LÖSCHEN">ALLE DATEN LÖSCHEN</span></strong> ein.</p>
+        <p class="modal-copy"><span data-i18n="Die aktive lokale Datenbank wird geleert und der Container neu gestartet. Backups werden nicht gelöscht. Gib zur Bestätigung">Die aktive lokale Datenbank wird geleert und der Container neu gestartet. Backups werden nicht gelöscht. Gib zur Bestätigung</span> <strong><span data-i18n="ALLE DATEN LÖSCHEN">ALLE DATEN LÖSCHEN</span></strong> <span data-i18n="ein.">ein.</span></p>
         <label><span><span data-i18n="Bestätigung">Bestätigung</span></span><input id="data-reset-confirmation" autocomplete="off" spellcheck="false" required /></label>
         <p id="data-reset-error" class="form-error" role="alert" hidden></p>
         <div class="modal-actions"><button id="cancel-data-reset" class="button button-secondary" type="button"><span data-i18n="Abbrechen">Abbrechen</span></button><button id="submit-data-reset" class="button button-danger" type="submit" disabled><span data-i18n="Endgültig zurücksetzen">Endgültig zurücksetzen</span></button></div>

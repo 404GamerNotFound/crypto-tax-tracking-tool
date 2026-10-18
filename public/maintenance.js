@@ -84,10 +84,10 @@ function renderAutomations(automations) {
       card.append(connections);
     }
     const firstError = schedule.connections?.find((connection) => connection.lastError)?.lastError || schedule.lastRun?.errorMessage;
-    if (firstError) {
+    if (window.CryptoBuchI18n.message(firstError)) {
       const error = document.createElement("p");
       error.className = "automation-error";
-      error.textContent = firstError;
+      error.textContent = window.CryptoBuchI18n.message(firstError);
       card.append(error);
     }
     return card;
@@ -109,8 +109,8 @@ function renderAutomations(automations) {
     }
     const status = document.createElement("td");
     status.append(automationState(job.status));
-    const finished = job.errorMessage
-      ? window.CryptoBuchI18n.t("Fehler: {p0}", { p0: job.errorMessage })
+    const finished = window.CryptoBuchI18n.message(job.errorMessage)
+      ? window.CryptoBuchI18n.t("Fehler: {p0}", { p0: window.CryptoBuchI18n.message(job.errorMessage) })
       : job.finishedAt ? readableDate(job.finishedAt)
         : job.progressTotal > 1 ? `${job.progressCurrent}/${job.progressTotal}` : "—";
     row.append(name, status, cell(readableDate(job.createdAt)), cell(readableDate(job.startedAt)), cell(finished));

@@ -616,7 +616,7 @@ async function loadHistoricPriceHistory(transaction) {
     const observation = history.transaction.price_observed_at ? window.CryptoBuchI18n.t(" Kurszeitpunkt: {p0}.", { p0: formatRecordedAt(history.transaction.price_observed_at) }) : window.CryptoBuchI18n.t(" Kurszeitpunkt nicht dokumentiert.");
     const latest = history.changes[0];
     const audit = latest
-      ? window.CryptoBuchI18n.t(" Letzte Änderung: {p0} · {p1}{p2}", { p0: latest.source === "manual" ? "manuell" : "automatisch", p1: formatRecordedAt(latest.changed_at), p2: latest.note ? ` · ${latest.note}` : "" })
+      ? window.CryptoBuchI18n.t(" Letzte Änderung: {p0} · {p1}{p2}", { p0: latest.source === "manual" ? window.CryptoBuchI18n.t("manuell") : window.CryptoBuchI18n.t("automatisch"), p1: formatRecordedAt(latest.changed_at), p2: latest.note ? ` · ${latest.note}` : "" })
       : "";
     el("historic-price-history").textContent = window.CryptoBuchI18n.t("Kursherkunft: {p0} · Datenqualität: {p1}.{p2}{p3}", { p0: provenance.provider, p1: provenance.quality, p2: observation, p3: audit });
     el("historic-price-history").hidden = false;
@@ -675,14 +675,14 @@ async function pollTransactionPrice(transaction) {
       el("historic-price-fetch-status").textContent = window.CryptoBuchI18n.t("Kursabruf #{p0}: {p1}.", { p0: entry.id, p1: job.status === "queued" ? window.CryptoBuchI18n.t("wartet auf einen freien Platz") : window.CryptoBuchI18n.t("wird ausgeführt") });
       if (job.status === "error") {
         state.priceFetchJobs.delete(transaction.id);
-        throw new Error(job.error_message || window.CryptoBuchI18n.t("Kursabruf fehlgeschlagen."));
+        throw new Error(window.CryptoBuchI18n.message(job.error_message) || window.CryptoBuchI18n.t("Kursabruf fehlgeschlagen."));
       }
       if (job.status === "success") {
         const fresh = await api(`/api/v1/transactions/${transaction.id}`);
         if (!visible()) return;
         Object.assign(transaction, fresh.data);
         el("historic-price-input").value = hasPrice(transaction.price_transaction_eur) ? String(transaction.price_transaction_eur) : "";
-        el("historic-price-fetch-status").textContent = job.result?.hint || window.CryptoBuchI18n.t("Kursabruf abgeschlossen.");
+        el("historic-price-fetch-status").textContent = window.CryptoBuchI18n.message(job.result?.hint) || window.CryptoBuchI18n.t("Kursabruf abgeschlossen.");
         state.priceFetchJobs.delete(transaction.id);
         await loadHistoricPriceHistory(transaction);
         await loadPortfolio({ quiet: true });

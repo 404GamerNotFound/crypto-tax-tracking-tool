@@ -206,12 +206,12 @@ function updateWalletFields() {
   el("xpub-format-wrap").hidden = !xpub;
   el("xpub-notice").hidden = !xpub;
   el("wallet-identifier-label").textContent = xpub ? window.CryptoBuchI18n.t("Bitcoin-xPub") : stake ? window.CryptoBuchI18n.t("Cardano Stake-Adresse") : window.CryptoBuchI18n.t("Öffentliche Wallet-Adresse");
-  el("wallet-address").placeholder = xpub ? "xpub6…" : stake ? "stake1…" : config.addressPlaceholder || window.CryptoBuchI18n.t("Öffentliche Adresse");
+  el("wallet-address").placeholder = xpub ? "xpub6…" : stake ? "stake1…" : window.CryptoBuchI18n.message(config.addressPlaceholder) || window.CryptoBuchI18n.t("Öffentliche Adresse");
   el("address-hint").textContent = xpub
     ? window.CryptoBuchI18n.t("xPub, yPub und zPub werden erkannt. Leerzeichen und Zeilenumbrüche aus dem Einfügen werden automatisch entfernt.")
     : stake
       ? window.CryptoBuchI18n.t("Die Stake-Adresse fasst die zugehörigen Cardano-Zahlungsadressen zusammen. Deren gesamte über Blockfrost sichtbare Transaktionshistorie wird importiert.")
-    : config.addressHint || window.CryptoBuchI18n.t("Öffentliche {p0}-Adresse eingeben.", { p0: config.name });
+    : window.CryptoBuchI18n.message(config.addressHint) || window.CryptoBuchI18n.t("Öffentliche {p0}-Adresse eingeben.", { p0: config.name });
 }
 
 async function loadPortfolio({ quiet = false } = {}) {
@@ -271,7 +271,7 @@ async function waitForJob(id) {
   for (let attempt = 0; attempt < 240; attempt += 1) {
     const job = await api(`/api/jobs/${id}`);
     if (job.status === "success") return job.result || {};
-    if (job.status === "error") throw new Error(job.error_message || window.CryptoBuchI18n.t("Synchronisierung fehlgeschlagen."));
+    if (job.status === "error") throw new Error(window.CryptoBuchI18n.message(job.error_message) || window.CryptoBuchI18n.t("Synchronisierung fehlgeschlagen."));
     await new Promise((resolve) => setTimeout(resolve, 700));
   }
   throw new Error(window.CryptoBuchI18n.t("Synchronisierung benötigt länger als erwartet."));

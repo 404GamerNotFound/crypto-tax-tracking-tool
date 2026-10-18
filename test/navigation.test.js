@@ -13,7 +13,7 @@ const pages = [
 test("bindet die zentrale Hauptnavigation auf jeder Oberfläche ein", () => {
   for (const page of pages) {
     const html = fs.readFileSync(path.join(publicDir, page), "utf8");
-    assert.match(html, /<nav class="topbar-nav" aria-label="Hauptnavigation" data-primary-navigation><\/nav>/, page);
+    assert.match(html, /<nav class="topbar-nav" aria-label="Hauptnavigation" data-i18n-aria-label="Hauptnavigation" data-primary-navigation><\/nav>/, page);
     assert.match(html, /<script src="\/navigation\.js\?v=20261010-settings-1" defer><\/script>/, page);
     assert.doesNotMatch(html, /<a class="topbar-link/, `${page} enthält keine kopierte Navigation mehr`);
   }
@@ -22,7 +22,7 @@ test("bindet die zentrale Hauptnavigation auf jeder Oberfläche ein", () => {
 test("definiert die Navigation und Detailseiten-Zuordnung zentral", () => {
   const source = fs.readFileSync(path.join(publicDir, "navigation.js"), "utf8");
   for (const label of ["Dashboard", "Crypto-Bestände", "Datenqualität", "Steuerzentrum", "Betrieb", "Einstellungen"]) {
-    assert.match(source, new RegExp(`label: "${label}"`));
+    assert.match(source, new RegExp(`label: window\\.CryptoBuchI18n\\.t\\("${label}"\\)`));
   }
   assert.match(source, /"\/asset\.html": "\/wallets\.html"/);
   assert.match(source, /"\/exchange\.html": "\/wallets\.html"/);
@@ -33,7 +33,7 @@ test("definiert die Navigation und Detailseiten-Zuordnung zentral", () => {
 test("definiert lokale Untermenüs zentral und bindet sie in die passenden Bereiche ein", () => {
   const source = fs.readFileSync(path.join(publicDir, "navigation.js"), "utf8");
   for (const label of ["Wallets", "Börsenkonten", "Kursdaten", "Transfers", "Planung", "Archiv & Exporte", "Daten zurücksetzen", "Preis- & API-Daten"]) {
-    assert.match(source, new RegExp(`label: "${label}"`));
+    assert.match(source, new RegExp(`label: window\\.CryptoBuchI18n\\.t\\("${label}"\\)`));
   }
   const pagesWithSectionNavigation = {
     "wallets.html": "wallets",
