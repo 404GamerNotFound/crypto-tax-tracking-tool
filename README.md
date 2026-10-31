@@ -95,7 +95,17 @@ Unter **Datenqualität** werden fehlende historische Kurse sowie Transaktionen o
 
 In der Coin-Detailansicht **Transaktion öffnen → Jetzt Kursdaten abrufen** wählen, um den historischen EUR-Kurs genau dieser Buchung erneut zu prüfen. Die native iOS-App bietet dieselbe Aktion in den Buchungsdetails. Der Auftrag läuft seriell auf dem Server, überspringt für diese Buchung den Kurscache und die Retry-Wartezeit und zeigt Status sowie Ergebnis an. Ein bereits aktiver Auftrag wird wiederverwendet. Fehlende Kurse bleiben sichtbar, vorhandene Werte werden bei erfolglosem Abruf erhalten und manuelle/importierte Kurse nicht überschrieben. Erfolgreiche Änderungen erscheinen mit Herkunft im Kurs-Audit. Tageskurse bleiben unverbindliche Schätzungen.
 
-Das **Steuerzentrum** ist eine lokale Buchungsübersicht, keine steuerliche Beratung. Es verwendet die als `Kauf` und `Verkauf` markierten Transaktionen in zeitlicher FIFO-Reihenfolge, weist Haltedauer und bewertbare Gebühren aus und zeigt nur vollständig bewertete Verkaufssegmente in den EUR-Summen. Fehlende Kauf-, Verkaufs- oder Gebührenkurse werden ausdrücklich als unvollständig gekennzeichnet. Staking-, Mining-, Airdrop-, Lending- und DeFi-Erträge werden zum historischen Empfangswert separat aufgelistet. Der CSV-Export enthält auch die lokalen Transaktions- und Anschaffungs-IDs; die Druckansicht lässt sich im Browser als PDF speichern.
+Das **Steuerzentrum** ist eine lokale Buchungsübersicht, keine steuerliche Beratung. Es führt Anschaffungsposten nach dem im Steuerprofil gewählten Verfahren (Standard: FIFO) fort, weist Haltedauer und bewertbare Gebühren aus und zeigt nur vollständig bewertete Verkaufssegmente in den EUR-Summen.
+
+Regeln für die Posten (gemeinsam für Steuerzentrum und Dashboard, `lib/cost-basis.js`):
+
+- `Kauf` und eingehender `DeFi Swap` bilden einen Anschaffungsposten. EUR-Kaufgebühren erhöhen die Anschaffungskosten.
+- Eingänge mit einer Ertragsart des Steuerprofils (z. B. `Staking Rewards`) bilden ebenfalls einen Posten. Einstandswert ist der Kurs bei Zufluss, die Haltefrist beginnt mit dem Zufluss.
+- `Verkauf` und ausgehender `DeFi Swap` sind Veräußerungen (Tausch = Veräußerung des hingegebenen Assets). Fehlt bei einem eindeutigen Swap-Paar (gleiche Wallet, gleicher Hash) auf einer Seite der Kurs, wird der Marktwert der Gegenseite als Tauschwert verwendet.
+- `Gebühr`-Abgänge und separat bezahlte On-Chain-Netzwerkgebühren verbrauchen Posten, gehen aber nicht als Verkauf in den Gewinn ein. Sie erscheinen im Report unter `feeConsumptions`.
+- Bei identischem Zeitstempel werden Zugänge vor Abgängen gebucht, danach entscheidet die Journal-ID.
+- Haltefristen in ganzen Jahren (z. B. 365 Tage) werden nach Kalenderdatum in Europe/Berlin gerechnet: Kauf am 15.01.2024 → steuerfrei erst ab 16.01.2025. Andere Fristen bleiben Tagesfristen.
+- EUR-Gebühren eines Verkaufs werden direkt bewertet und anteilig auf die Verkaufssegmente verteilt. Fehlende Kauf-, Verkaufs- oder Gebührenkurse werden ausdrücklich als unvollständig gekennzeichnet. Staking-, Mining-, Airdrop-, Lending- und DeFi-Erträge werden zum historischen Empfangswert separat aufgelistet. Der CSV-Export enthält auch die lokalen Transaktions- und Anschaffungs-IDs; die Druckansicht lässt sich im Browser als PDF speichern.
 
 Unter **Einstellungen → Steuerprofil** ist eine Deutschland-Startvorlage hinterlegt. Haltefrist, Freigrenze, Verlustverrechnung, einbezogene Ertragsarten sowie getrennte Schätzsätze für Veräußerungen und Erträge sind vollständig anpassbar und lassen sich damit als Organisationsprofil für andere Länder konfigurieren. Der Jahresreport berücksichtigt nur bekannte, vollständig bewertete Werte und zeigt die Steuerreserve ausdrücklich als unverbindliche Schätzung. Er ersetzt keine individuelle rechtliche oder steuerliche Prüfung.
 
@@ -325,7 +335,7 @@ Beim ersten Start lassen sich die entsprechenden Variablen in Portainer setzen, 
 
 ### Dashboard-Logik
 
-Das Dashboard trennt Bestände nach Coin. Als gekauft zählt ein Eingang, der mit `Kauf` markiert wurde. Ausgänge mit `Verkauf` reduzieren diese Kauf-Chargen in zeitlicher Reihenfolge (FIFO). Der dargestellte Gewinn ist der aktuelle Wert der verbleibenden Kauf-Chargen abzüglich ihrer historischen Kaufwerte. Fehlen nur einzelne noch gehaltene Kaufchargen, zeigt CryptoBuch den Gewinn der bepreisten Chargen mit dem Hinweis **teilweise**; fehlen alle Kaufkurse, bleibt der Wert `k. A.`. Staking-Ertrag zeigt die Summe der mit `Staking Rewards` markierten Eingänge sowie deren aktuellen Wert.
+Das Dashboard trennt Bestände nach Coin. Als gekauft zählt ein Eingang, der mit `Kauf` oder als eingehender `DeFi Swap` markiert wurde. Verkäufe, Swaps, Gebühren und Ertragsposten werden mit denselben Regeln und demselben Verfahren wie im Steuerzentrum fortgeschrieben (siehe oben). Separat bezahlte Netzwerkgebühren (z. B. ETH-Gas, auch bei ERC-20-Transfers) werden einmal pro Transaktion vom Wallet-Bestand abgezogen; bei Bitcoin, Bitcoin Cash, Litecoin, Dogecoin, Zcash und Cardano ist die Gebühr bereits im gebuchten Netto-Betrag enthalten. Der dargestellte Gewinn ist der aktuelle Wert der verbleibenden Kauf-Chargen abzüglich ihrer historischen Kaufwerte. Fehlen nur einzelne noch gehaltene Kaufchargen, zeigt CryptoBuch den Gewinn der bepreisten Chargen mit dem Hinweis **teilweise**; fehlen alle Kaufkurse, bleibt der Wert `k. A.`. Staking-Ertrag zeigt die Summe der mit `Staking Rewards` markierten Eingänge sowie deren aktuellen Wert.
 
 ### Weitere Netzwerke ergänzen
 

@@ -64,7 +64,11 @@ Bitcoin-xPubs sind öffentlich, aber datenschutzsensibel. Niemals private Extend
 - Tezos kann einen TzKT-Kurs am Blockzeitpunkt liefern. Andere native Assets nutzen CoinGecko mit Bitvavo-Tageskurs-Fallback; ERC-20 nutzt Contract-Kurse, soweit verfügbar.
 - Zwecke sind fachlich relevant: mindestens `Kauf`, `Verkauf`, `Staking Rewards`, `Transfer` und die vorhandenen Ertragsarten erhalten.
 - Manuelle Zweckzuordnungen (`purpose_origin = 'manual'`) nie beim Sync überschreiben.
-- Die Steuerlogik nutzt FIFO. Unvollständige Kurs-/Lotdaten bleiben sichtbar und werden nicht stillschweigend geschätzt.
+- Kaufposten, Veräußerungen und Verbräuche laufen für Steuerzentrum **und** Dashboard über `lib/cost-basis.js` mit dem Verfahren aus dem Steuerprofil (Standard FIFO). Keine zweite, abweichende Lot-Logik einführen.
+- Postenregeln: `Kauf`/eingehender `DeFi Swap` = Anschaffung (EUR-Gebühr erhöht Kosten); Ertragsarten des Profils = eigener Posten zum Zuflusswert; `Verkauf`/ausgehender `DeFi Swap` = Veräußerung; `Gebühr` und abgeleitete Netzwerkgebühren verbrauchen Posten ohne Gewinnrealisierung. Gleicher Zeitstempel: Zugänge vor Abgängen, dann ID.
+- Netzwerkgebühren: `lib/network-fees.js` leitet sie aus dem `fee`-Feld ab, einmal pro Wallet/Hash/Gebühren-Asset. UTXO-Chains und Cardano speichern Netto-Beträge inkl. Gebühr und sind ausgenommen (`FEE_INCLUDED_IN_AMOUNT_CHAINS`). Bei neuen Adaptern festlegen, ob der Betrag die Gebühr enthält.
+- Haltefristen in ganzen Jahren werden kalendarisch in Europe/Berlin gerechnet (`lib/holding-period.js`, frei ab dem Tag nach dem Jahrestag).
+- Unvollständige Kurs-/Lotdaten bleiben sichtbar und werden nicht stillschweigend geschätzt.
 - Das Steuerzentrum verwendet ein konfigurierbares Steuerprofil. Die Deutschland-Vorlage und frei anpassbare Länderprofile dürfen Haltefrist, Freigrenze, Verlustverrechnung, Ertragsarten sowie getrennte Schätzsätze abbilden; Ergebnisse bleiben stets **unverbindliche Schätzungen** und keine Steuerberatung.
 - Jahres-Snapshots enthalten Report, Profil und SHA-256-Prüfsumme. Sie sind lokal, nach dem Erzeugen unveränderbar und dienen nur als Dokumentationsstand.
 

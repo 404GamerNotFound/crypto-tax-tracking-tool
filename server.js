@@ -22,6 +22,7 @@ const { buildTopMarketCatalog } = require("./lib/market-catalog");
 const { calculateAssetAnalytics } = require("./lib/portfolio-analytics");
 const { buildBookValueHistory } = require("./lib/portfolio-history");
 const { calculateTaxReport } = require("./lib/tax-report");
+const { networkFeeRows } = require("./lib/network-fees");
 const { germanyProfile, normalizeTaxProfile } = require("./lib/tax-profile");
 const { buildTaxOptimizer, simulateSale } = require("./lib/tax-optimizer");
 const { classifyEvmTransaction, isLikelySpamAsset } = require("./lib/defi");
@@ -3505,6 +3506,13 @@ async function portfolioResponse() {
       holdings[transaction.asset] = Number(holdings[transaction.asset] || 0) + delta;
     }
   }
+  // Separat bezahlte On-Chain-Gebühren (z. B. ETH-Gas) verlassen die Wallet
+  // zusätzlich zum gebuchten Betrag. Börsenkonten sind ausgenommen.
+  for (const fee of networkFeeRows(transactions)) {
+    if (!journalByWallet.has(fee.wallet_id)) journalByWallet.set(fee.wallet_id, new Map());
+    addHolding(journalByWallet.get(fee.wallet_id), fee.asset, -fee.amount);
+    holdings[fee.asset] = Number(holdings[fee.asset] || 0) - fee.amount;
+  }
   const exchangeWallets = db.prepare(`
     SELECT w.id, w.label, c.id AS connection_id, c.provider, c.label AS connection_label
     FROM wallets w
@@ -3558,7 +3566,8 @@ async function portfolioResponse() {
     0,
   );
   const sourceBalances = buildSourceBalances(balanceSources);
-  const assetAnalytics = calculateAssetAnalytics(enriched, pricesByAsset, holdings, assets, sourceBalances);
+  const settings = runtimeSettings();
+  const assetAnalytics = calculateAssetAnalytics(enriched, pricesByAsset, holdings, assets, sourceBalances, settings);
   const visibleAnalytics = Object.fromEntries(Object.entries(assetAnalytics).filter(([asset]) => !hidden.has(asset)));
   const visibleTransactions = enriched.filter((transaction) => !hidden.has(transaction.asset));
   const allocation = Object.entries(visibleAnalytics)
@@ -3568,7 +3577,7 @@ async function portfolioResponse() {
   const valueHistory = buildBookValueHistory(visibleTransactions);
   const unrealizedProfitEur = Object.values(visibleAnalytics).reduce((sum, report) => sum + Number(report.purchases?.profitEur || 0), 0);
   const remainingPurchaseCostEur = Object.values(visibleAnalytics).filter(report => report.purchases?.profitEur != null).reduce((sum, report) => sum + Number(report.purchases?.remainingCostEur || 0), 0);
-  const realizedYear = calculateTaxReport(visibleTransactions, new Date().getFullYear(), runtimeSettings()).summary.realizedProfitEur;
+  const realizedYear = calculateTaxReport(visibleTransactions, new Date().getFullYear(), settings).summary.realizedProfitEur;
   const netInvestmentEur = visibleTransactions.reduce((sum, transaction) => {
     if (!positiveNumber(transaction.price_transaction_eur)) return sum;
     const value = Number(transaction.amount) * Number(transaction.price_transaction_eur);
@@ -4107,9 +4116,9 @@ function reportYear(value) {
 
 function taxReportResponse(year) {
   const transactions = db.prepare(`
-    SELECT t.*, w.label AS source_label, w.source_type
+    SELECT t.*, w.label AS source_label, w.source_type, w.chain
     FROM transactions t JOIN wallets w ON w.id = t.wallet_id
-    ORDER BY t.timestamp ASC
+    ORDER BY t.timestamp ASC, t.id ASC
   `).all();
   const report = calculateTaxReport(transactions, year, runtimeSettings());
   const availableYears = db.prepare(`

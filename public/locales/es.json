@@ -2429,5 +2429,8 @@
   "nein": "no",
   "manuell": "manual",
   "automatisch": "automático",
-  "Anschaffungs-ID": "ID de adquisición"
+  "Anschaffungs-ID": "ID de adquisición",
+  "{p0} · Tausch": "{p0} · permuta",
+  "{p0} · Ertrag": "{p0} · ingreso",
+  "{p0} Gebührenabgänge verbrauchen Posten ohne Verkauf": "{p0} salidas por comisiones consumen lotes sin contar como ventas"
 }

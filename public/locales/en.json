@@ -2429,5 +2429,8 @@
   "nein": "no",
   "manuell": "manual",
   "automatisch": "automatic",
-  "Anschaffungs-ID": "Acquisition ID"
+  "Anschaffungs-ID": "Acquisition ID",
+  "{p0} · Tausch": "{p0} · swap",
+  "{p0} · Ertrag": "{p0} · income",
+  "{p0} Gebührenabgänge verbrauchen Posten ohne Verkauf": "{p0} fee outflows consume lots without counting as sales"
 }
